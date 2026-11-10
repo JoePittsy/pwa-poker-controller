@@ -351,7 +351,7 @@ function renderActions() {
     const row = h('div', 'row');
     const defs = [
       ['fold', `${glyph('B')}Fold`, () => choose('fold'), false],
-      ['call', `${glyph('X')}<span>${L.canCheck ? 'Check' : `Call<small>${L.toCall}${prefs.coach ? ` &middot; need ${Math.round((L.toCall / (game.pot + L.toCall)) * 100)}%` : ''}</small>`}</span>`, () => choose('call'), false],
+      ['call', `${glyph('X')}<span>${L.canCheck ? 'Check' : `Call<small>${L.toCall}</small>`}</span>${prefs.coach && !L.canCheck ? `<em class="need">need ${Math.round((L.toCall / (game.pot + L.toCall)) * 100)}%</em>` : ''}`, () => choose('call'), false],
       ['raise', `${glyph('Y')}${game.currentBet ? 'Raise' : 'Bet'}`, openRaise, !L.canRaise],
     ];
     defs.forEach(([cls, html, fn, disabled], i) => {
