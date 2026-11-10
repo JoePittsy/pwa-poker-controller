@@ -96,3 +96,15 @@ export function rumble(strong = 0.5, weak = 0.5, ms = 120) {
     }
   } catch { /* unsupported */ }
 }
+
+// A big sticker that punches into the middle of the screen for a moment.
+export function banner(text) {
+  const e = spawn('bannerfx', text);
+  const at = 'translate(50vw, 42vh) translate(-50%, -50%)';
+  e.animate([
+    { transform: `${at} scale(3) rotate(-20deg)`, opacity: 0 },
+    { transform: `${at} scale(1) rotate(-6deg)`, opacity: 1, offset: 0.16, easing: SPRING },
+    { transform: `${at} scale(1.05) rotate(-5deg)`, opacity: 1, offset: 0.8 },
+    { transform: `${at} scale(.6) rotate(4deg)`, opacity: 0 },
+  ], { duration: calm ? 900 : 1300 }).onfinish = () => e.remove();
+}

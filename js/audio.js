@@ -147,6 +147,13 @@ export const allin = sfx(() => { // a run up the bars, then the stamp comes down
   tok(scale(10) + 12, { delay: 0.46, v: 0.4, d: 0.6, wet: 0.5 });
   tok(scale(7) + 12, { delay: 0.46, v: 0.3, d: 0.6, wet: 0.5 });
 });
+// the river of an all-in: a held breath, then the card slams down
+export const riverSlam = sfx(() => {
+  noise({ f: 300, f2: 2600, a: 0.8, d: 0.08, v: 0.22, q: 2.5 });
+  for (let i = 0; i < 6; i++) tok(scale(i * 2) + 12, { delay: 0.35 + i * 0.09, v: 0.08 + i * 0.02, d: 0.1 });
+  thud(0.98, 1);
+  noise({ delay: 0.98, f: 1800, f2: 5000, d: 0.06, v: 0.3 });
+});
 export const heartbeat = sfx(() => { thud(0, 0.7); thud(0.2, 0.5); });
 export const win = sfx((size = 1) => { // 0 = someone else won, 1..3 = our win by size
   if (!size) { tok(72, { v: 0.16 }); tok(76, { delay: 0.09, v: 0.16, d: 0.3 }); return; }

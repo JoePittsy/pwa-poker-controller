@@ -106,3 +106,25 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (pressure < 0.6 && rng() < 0.04 * aggr * bluffy) return raise(0.8, { bluff: true });
   return giveUp();
 }
+
+// Chance each hand wins when all hole cards are known (all-in run-out). Ties count as shares.
+export function runoutOdds(hands, board, sims = 700, rng = Math.random) {
+  const known = new Set([...hands.flat(), ...board]);
+  const deck = [];
+  for (let c = 0; c < 52; c++) if (!known.has(c)) deck.push(c);
+  const need = 5 - board.length;
+  const wins = hands.map(() => 0);
+  const n = need === 0 ? 1 : sims;
+  for (let s = 0; s < n; s++) {
+    for (let i = 0; i < need; i++) {
+      const j = i + Math.floor(rng() * (deck.length - i));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    const full = board.concat(deck.slice(0, need));
+    const scores = hands.map((h) => evaluate(h.concat(full)));
+    const best = Math.max(...scores);
+    const share = 1 / scores.filter((x) => x === best).length;
+    scores.forEach((x, k) => { if (x === best) wins[k] += share; });
+  }
+  return wins.map((w) => w / n);
+}
