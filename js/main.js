@@ -1,7 +1,7 @@
 import { Game } from './engine.js';
 import { decide, runoutOdds, equity } from './ai.js';
 import { startInput, upAmount } from './input.js';
-import { RANKS, SUITS, evaluate, describe } from './cards.js';
+import { RANKS, SUITS, describe, scoreHand, bestFiveOf } from './cards.js';
 import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
@@ -36,6 +36,14 @@ let bossMode = false; // true while playing the boss that follows table `table`
 // or sharper opponents and faster blinds.
 // Each table is a place, with its own cloth.
 const VENUES = [['The Kitchen Table', '#3050e0'], ['The Back Room', '#0e8a78'], ['The Club', '#6a3fd6'], ['High Rollers', '#c22f45'], ['The Vault', '#1f7a3d']];
+// Which poker is played. Hold'em everywhere, except some later tables and the quick-table menu.
+const VARIANTS = {
+  holdem: { name: "Hold'em", rules: '' },
+  short: { name: 'Short deck', rules: 'No cards below six. A flush beats a full house, and A-6-7-8-9 is a straight.' },
+  omaha: { name: 'Omaha', rules: 'Four hole cards each. Your hand must use exactly two of them with three from the board.' },
+};
+const variantFor = (n) => (n >= 5 && n % 2 === 1 ? (n % 4 === 1 ? 'short' : 'omaha') : 'holdem'); // Table 5 short deck, 7 Omaha, 9 short deck...
+function setVariantLook(v) { $('app').classList.toggle('omaha', v === 'omaha'); }
 // From the third table on, each table changes one rule.
 const BOUNTY = 200;
 const TWISTS = [
@@ -64,6 +72,7 @@ function tableConfig(n, boss = false) {
   const lap = Math.ceil(n / VENUES.length);
   const twist = n >= 3 ? TWISTS[(n - 3) % TWISTS.length] : null; // the first two tables are plain
   return {
+    variant: variantFor(n),
     names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
     handsPerLevel: twist?.key === 'turbo' ? 2 : Math.max(3, 7 - n),
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
@@ -153,7 +162,8 @@ function seatSingle(kind, cfg, hud, saved) {
   ME = 0; ui.hidden = false;
   mode = kind; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random;
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
-  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips, variant: cfg.variant || 'holdem' });
+  setVariantLook(game.variant);
   habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
   if (saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
@@ -178,6 +188,18 @@ function startDaily(saved) {
 
 // ---------- quick table: one sit-and-go, nothing saved, nothing at stake ----------
 const QUICK_CFG = { names: REGULARS, skill: 0.7, venue: 'Quick table', mat: '#2c7da0', handsPerLevel: 4, chips: 1000, music: 1 };
+let quickVariant = 'holdem';
+function startQuick(v = quickVariant) {
+  quickVariant = v;
+  seatSingle('quick', { ...QUICK_CFG, variant: v }, `<b>Quick table</b><br>${VARIANTS[v].name}`);
+}
+function quickMenu() {
+  showOverlay({
+    title: 'Quick <span>table</span>', closable: true, onClose: moreGames,
+    body: `<p>One six-player table, winner takes all.</p><p><b>Short deck:</b> ${VARIANTS.short.rules}</p><p><b>Omaha:</b> ${VARIANTS.omaha.rules}</p>`,
+    items: [[`${glyph('A')}Hold'em`, () => startQuick('holdem')], ['Short deck', () => startQuick('short')], ['Omaha', () => startQuick('omaha')], [`${glyph('B')}Back`, moreGames]],
+  });
+}
 function quickDone() {
   const me = game.players[ME];
   const place = game.players.filter((p) => p.chips > 0).length + (me.chips > 0 ? 0 : 1);
@@ -187,7 +209,7 @@ function quickDone() {
   showOverlay({
     title: place === 1 ? 'You <span>win!</span>' : `${ord} <span>place</span>`,
     body: `<p>${place === 1 ? `You took the whole table in ${game.handNo} hands.` : `Out in ${ord} of 6 after ${game.handNo} hands.`}</p>`,
-    items: [[`${glyph('A')}Play again`, () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], ['Done', startScreen]],
+    items: [[`${glyph('A')}Play again`, () => startQuick()], ['Done', startScreen]],
   });
 }
 // ---------- pass and play: two to four people share the device ----------
@@ -201,6 +223,7 @@ function startPass(humans) {
   const bots = ['Gus', 'Ivy'].slice(0, Math.max(0, 4 - humans)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
   cast = [...people, ...bots];
   game = new Game({ players: cast, handsPerLevel: 5, chips: 1000 });
+  setVariantLook('holdem');
   passHumans = humans;
   $('app').style.setProperty('--mat', '#8a4fbf');
   audio.setVenue(3);
@@ -250,7 +273,7 @@ function moreGames() {
   showOverlay({
     title: 'More <span>games</span>', closable: true, onClose: startScreen,
     body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p><p><b>Pass &amp; play:</b> two to four people on one device.</p>`,
-    items: [['Daily deal', dailyScreen], ['Quick table', () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], ['Pass & play', passMenu], [`${glyph('B')}Back`, startScreen]],
+    items: [['Daily deal', dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu], [`${glyph('B')}Back`, startScreen]],
   });
 }
 function dailyDone() {
@@ -387,16 +410,6 @@ function buildSeats(keepBoard = false) {
 
 const dealOrder = (seat) => (seat - game.dealer - 1 + game.players.length) % game.players.length;
 
-function bestFive(cards) {
-  const target = evaluate(cards);
-  for (let i = 0; i < cards.length; i++) {
-    for (let j = i + 1; j < cards.length; j++) {
-      const five = cards.filter((_, k) => k !== i && k !== j);
-      if (evaluate(five) === target) return five;
-    }
-  }
-  return cards;
-}
 
 function render() {
   const g = game;
@@ -458,7 +471,7 @@ function render() {
               return e;
             }));
             audio.flip(); audio.flip(0.16);
-          }, delay(1) + 380);
+          }, delay(p.cards.length - 1) + 380);
         }
       }
     }
@@ -476,7 +489,7 @@ function render() {
     }
     let hand = '';
     const known = !mine(p) || ui.squeezed; // don't name a hand you haven't looked at yet
-    if (!p.folded && face && known && g.board.length >= 3) hand = describe(evaluate([...p.cards, ...g.board]));
+    if (!p.folded && face && known && g.board.length >= 3) hand = describe(scoreHand(p.cards, g.board, g.variant), g.variant === 'short');
     const handEl = el.querySelector('.hand');
     if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
     else if (odds && odds[i] !== undefined) { // all-in: show each player's chance of winning
@@ -523,7 +536,7 @@ function render() {
   // highlight the winning five at showdown
   const hl = new Set();
   if (over && g.result.showdown) {
-    for (const s of g.result.winners) for (const c of bestFive([...g.players[s].cards, ...g.board])) hl.add(`${s}:${c}`).add(`b:${c}`);
+    for (const s of g.result.winners) for (const c of bestFiveOf(g.players[s].cards, g.board, g.variant)) hl.add(`${s}:${c}`).add(`b:${c}`);
   }
   const mark = (el, key) => {
     el.classList.toggle('hl', hl.has(key));
@@ -544,7 +557,7 @@ function render() {
   $('hud').innerHTML = mode === 'daily'
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
     : mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
-    : mode === 'quick' ? `<b>Quick</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
+    : mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   if (replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
@@ -565,7 +578,7 @@ let coachCache = { key: '', pct: 0 };
 function coachOdds(g) {
   const opp = g.players.filter((p) => !mine(p) && !p.folded).length;
   const key = `${table}:${g.handNo}:${g.board.length}:${opp}`;
-  if (coachCache.key !== key) coachCache = { key, pct: Math.round(equity(g.players[ME].cards, g.board, Math.max(1, opp), 400) * 100) };
+  if (coachCache.key !== key) coachCache = { key, pct: Math.round(equity(g.players[ME].cards, g.board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant) * 100) };
   return coachCache.pct;
 }
 
@@ -668,7 +681,7 @@ function oddsFor(g) {
   const key = `${g.handNo}:${g.board.length}`;
   if (oddsCache.key !== key) {
     const live = g.players.filter((p) => !p.folded);
-    const res = runoutOdds(live.map((p) => p.cards), g.board);
+    const res = runoutOdds(live.map((p) => p.cards), g.board, g.variant === 'omaha' ? 250 : 700, Math.random, g.variant);
     const odds = {};
     live.forEach((p, k) => { odds[p.seat] = res[k]; });
     oddsCache = { key, odds };
@@ -981,7 +994,8 @@ async function replayHand(log, done) {
   closeOverlay();
   toggleEmotes(false);
   cast = log.cast.map(castFor);
-  game = new Game({ players: cast, handsPerLevel: log.before.per });
+  game = new Game({ players: cast, handsPerLevel: log.before.per, variant: log.variant || 'holdem' });
+  setVariantLook(game.variant);
   game.players.forEach((p, i) => { p.chips = log.before.chips[i]; });
   game.dealer = log.before.dealer; game.handNo = log.before.handNo;
   game.nextDeck = [...log.deck];
@@ -994,7 +1008,7 @@ async function replayHand(log, done) {
   g.startHand();
   fx.shuffle($('deck')); audio.shuffle();
   render();
-  await tick(SHUFFLE_MS + 2 * g.players.length * DEAL_GAP + 700);
+  await tick(SHUFFLE_MS + (g.variant === 'omaha' ? 4 : 2) * g.players.length * DEAL_GAP + 700);
   const streets = async () => {
     while (!replayStop && g.stage === 'streetEnd') { await collectBets(tick); await tick(300); g.nextStreet(); render(); await tick(g.stage === 'handOver' ? 300 : 900); }
   };
@@ -1019,6 +1033,7 @@ async function replayHand(log, done) {
   peekSeat = live.peek; settled = live.settled;
   Object.assign(ui, { mode: live.mode, resolve: live.resolve, squeezed: live.squeezed, hidden: live.hidden });
   $('app').style.setProperty('--mat', live.mat);
+  setVariantLook(game.variant);
   ui.noAnim = true; buildSeats(); render(); ui.noAnim = false;
   replaying = false;
   done();
@@ -1071,7 +1086,7 @@ function ranksScreen(back) {
   const rows = RANKS_REF.map(([name, ex], i) => `<div><i>${i + 1}</i><b>${name}</b><span>${cardsText(parse(ex))}</span></div>`).join('');
   showOverlay({
     title: 'Hand ranks', closable: true, onClose: back, wide: true,
-    body: `<p>Best at the top. Your hand is the best five cards from your two plus the board.</p><div class="ranks">${rows}</div>`,
+    body: `<p>Best at the top. Your hand is the best five cards from your two plus the board. At short-deck tables a flush beats a full house; in Omaha you must use exactly two of your four.</p><div class="ranks">${rows}</div>`,
     items: [[`${glyph('B')}Back`, back]],
   });
 }
@@ -1115,7 +1130,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.${prefs.difficulty !== 'Standard' ? ` Difficulty: ${prefs.difficulty}.` : ''}</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.${prefs.difficulty !== 'Standard' ? ` Difficulty: ${prefs.difficulty}.` : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -1411,14 +1426,15 @@ function checkHandStickers(g, kos) {
   feats.winStreak = won ? feats.winStreak + 1 : 0;
   feats.foldStreak = me.folded ? feats.foldStreak + 1 : 0;
   if (won) award('first_win');
-  if (won && ranks[0] === 0 && ranks[1] === 5) award('seven_two');
-  if (ranks[0] === 12 && ranks[1] === 12) { if (won) award('rockets'); else if (sd) award('cracked'); }
+  const two = me.cards.length === 2, hn = sd ? me.handName : '';
+  if (two && won && ranks[0] === 0 && ranks[1] === 5) award('seven_two');
+  if (two && ranks[0] === 12 && ranks[1] === 12) { if (won) award('rockets'); else if (sd) award('cracked'); }
   if (won && !g.result.showdown && g.street === 'river') award('stone_cold');
   if (won && sd && cat <= 1 && feats.lastAct?.type === 'call' && feats.lastAct.street === 'river') award('soul_read');
-  if (won && cat === 5) award('flushed');
-  if (won && cat === 6) award('full_boat');
-  if (cat === 7) award('quads');
-  if (cat === 8) award('unicorn');
+  if (won && hn.startsWith('Flush')) award('flushed'); // by name: short deck ranks these two the other way round
+  if (won && hn.startsWith('Full House')) award('full_boat');
+  if (hn.startsWith('Four')) award('quads');
+  if (hn.startsWith('Straight Flush') || hn.startsWith('Royal')) award('unicorn');
   if (me.won >= 2000) award('whale_hunter');
   if (won && me.allIn) award('fearless');
   if (won && me.allIn && sd && feats.turnOdds < 0.3) award('river_rat');
@@ -1454,7 +1470,7 @@ function logStart(g, before) {
     no: g.handNo, table, where: mode === 'daily' ? 'Daily deal' : mode === 'quick' ? 'Quick table' : bossMode ? 'Boss' : `Table ${table}`,
     blinds: `${g.sb}/${g.bb}`, hole: [...g.players[ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
     // enough to play the hand back exactly: who sat where, the stacks, the shuffled deck and every action
-    cast: g.players.map((p) => p.name), before, deck: g.dealt, actions: [], mine: [], net: 0, mat: getComputedStyle($('app')).getPropertyValue('--mat'),
+    cast: g.players.map((p) => p.name), before, deck: g.dealt, variant: g.variant, actions: [], mine: [], net: 0, mat: getComputedStyle($('app')).getPropertyValue('--mat'),
   };
 }
 function logAction(p, a) {
@@ -1642,7 +1658,8 @@ function startTable(n, saved) {
     if (grudge(name)) st.aggr = Math.min(0.95, st.aggr + 0.12 * grudge(name)); // out for revenge
     return { name, ...info(name), style: st };
   })];
-  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips });
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips, variant: cfg.variant || 'holdem' });
+  setVariantLook(game.variant);
   game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
   if (cfg.boss?.chips) game.players[1].chips = cfg.chips * cfg.boss.chips;
   if (DIFFICULTY[prefs.difficulty].stack !== 1) for (const p of game.players) if (!p.isHuman) p.chips = Math.round(p.chips * DIFFICULTY[prefs.difficulty].stack);
@@ -1706,10 +1723,11 @@ async function run() {
     if (g.handNo === 1 && mode === 'run') { const again = g.players.find((p) => !p.isHuman && grudge(p.name)); if (again) setTimeout(() => say(again, 'again'), 1600); }
     render();
     const n = g.players.length;
-    for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((SHUFFLE_MS + (dealOrder(p.seat) + k * n) * DEAL_GAP) / 1000);
+    const holeCards = g.variant === 'omaha' ? [0, 1, 2, 3] : [0, 1];
+    for (const p of g.players) if (!p.out) for (const k of holeCards) audio.card((SHUFFLE_MS + (dealOrder(p.seat) + k * n) * DEAL_GAP) / 1000);
     audio.chips(2, 0.1, 0);
-    if (!me.out) for (const k of [0, 1]) setTimeout(() => fx.haptic('deal'), SHUFFLE_MS + (dealOrder(ME) + k * n) * DEAL_GAP + 450); // feel your cards land
-    await rawSleep(SHUFFLE_MS + 2 * n * DEAL_GAP + 500); // the shuffle and deal play at their own speed
+    if (!me.out) for (const k of holeCards) setTimeout(() => fx.haptic('deal'), SHUFFLE_MS + (dealOrder(ME) + k * n) * DEAL_GAP + 450); // feel your cards land
+    await rawSleep(SHUFFLE_MS + holeCards.length * n * DEAL_GAP + 500); // the shuffle and deal play at their own speed
     await sleep(350);
     while (g.stage !== 'handOver') {
       if (id !== runId) return;
@@ -1754,7 +1772,7 @@ async function run() {
           handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
             to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
-            eq: equity(g.players[ME].cards, g.board, Math.max(1, opp), 250), need: L.toCall / (g.pot + L.toCall),
+            eq: equity(g.players[ME].cards, g.board, Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), need: L.toCall / (g.pot + L.toCall),
           });
         }
         feats.lastAct = { type: a.type === 'call' && g.legal(ME).canCheck ? 'check' : a.type, street: g.street };

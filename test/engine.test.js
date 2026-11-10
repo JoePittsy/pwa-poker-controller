@@ -95,3 +95,46 @@ test('AI self-play conserves chips and always terminates', () => {
     assert.equal(g.players.filter((p) => p.chips > 0).length, 1);
   }
 });
+
+import { scoreHand, bestFiveOf } from '../js/cards.js';
+
+test('short deck: flush beats full house, and A-6-7-8-9 is a straight', () => {
+  const flush = evaluate(C('As Js 9s 8s 6s Kd Kc'), true), boat = evaluate(C('Ks Kh Kd 7c 7s 9d Tc'), true);
+  assert.ok(flush > boat, 'flush outranks full house');
+  assert.ok(evaluate(C('As Js 9s 8s 6s Kd Kc')) < evaluate(C('Ks Kh Kd 7c 7s 9d Tc')), 'but not in a full deck');
+  assert.equal(describe(flush, true), 'Flush, Ace high');
+  assert.equal(describe(boat, true), 'Full House, Kings over Sevens');
+  assert.equal(describe(evaluate(C('Ah 6s 7d 8c 9s Kd Kc'), true), true), 'Straight, Nine high');
+  assert.equal(describe(evaluate(C('Ah 6s 7d 8c 9s Kd Kc'))), 'Pair of Kings', 'not a straight in a full deck');
+});
+
+test('omaha: exactly two hole cards must play', () => {
+  assert.equal(describe(scoreHand(C('As Ad Ac Kd'), C('Ah 2s 3d 9c Jh'), 'omaha')), 'Three Aces', 'three aces in hand cannot make quads');
+  assert.equal(describe(scoreHand(C('As 2d 3c 4d'), C('Ks Qs Js Ts 7h'), 'omaha')), 'Ace high', 'one spade in hand is not a flush');
+  assert.equal(describe(scoreHand(C('As 9s 3c 4d'), C('Ks Qs Js 2h 7h'), 'omaha')), 'Flush, Ace high');
+  const five = bestFiveOf(C('As 9s 3c 4d'), C('Ks Qs Js 2h 7h'), 'omaha');
+  assert.equal(five.filter((c) => C('As 9s 3c 4d').includes(c)).length, 2);
+});
+
+test('variants: self-play conserves chips and terminates', () => {
+  for (const variant of ['short', 'omaha']) {
+    for (let seed = 1; seed <= 4; seed++) {
+      const r = rng(seed * 31);
+      const g = new Game({ players: Array.from({ length: 6 }, (_, i) => ({ name: 'P' + i, style: { loose: 0.5, aggr: 0.5 } })), rng: r, handsPerLevel: 4, variant });
+      let hands = 0;
+      while (g.startHand()) {
+        assert.equal(g.players.find((p) => p.cards.length).cards.length, variant === 'omaha' ? 4 : 2);
+        if (variant === 'short') assert.ok(g.dealt.every((c) => (c >> 2) >= 4) && g.dealt.length === 36);
+        let steps = 0;
+        while (g.stage !== 'handOver') {
+          assert.ok(++steps < 500);
+          if (g.stage === 'streetEnd') { g.nextStreet(); continue; }
+          const a = decide(g, g.toAct, r);
+          g.act(a.type, a.amount);
+        }
+        assert.equal(g.players.reduce((s, p) => s + p.chips, 0), 6000, `${variant} seed ${seed} hand ${g.handNo}`);
+        assert.ok(++hands < 3000);
+      }
+    }
+  }
+});
