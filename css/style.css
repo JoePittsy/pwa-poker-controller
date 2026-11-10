@@ -448,6 +448,24 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .cal i { display: block; font-style: normal; font-size: 1rem; font-weight: 500; opacity: .75; }
 .cal b { font-size: 1.35rem; }
 .dialog p b { color: var(--yellow); }
+.stickers { display: grid; grid-template-columns: repeat(8, 5.9rem); gap: .7rem .4rem; margin-top: .7rem; }
+.stickers div { text-align: center; font-size: .95rem; font-weight: 500; line-height: 1.1; color: #6c68a8; }
+.stickers b {
+  display: block; width: 3.3rem; height: 3.3rem; margin: 0 auto .2rem; border-radius: 50%; line-height: 3rem; font-size: 1.5rem; font-weight: 800;
+  border: .18rem dashed #3a3670; color: #3a3670;
+}
+.stickers div.got { color: var(--paper); }
+.stickers div.got b { border: .2rem solid var(--ink); color: var(--ink); box-shadow: .2rem .2rem 0 var(--ink), 0 0 0 .18rem var(--paper); rotate: -6deg; }
+.k0 { background: var(--yellow); } .k1 { background: var(--mint); } .k2 { background: var(--pink); } .k3 { background: var(--sky); }
+.stickers div:not(.got) b { background: none; }
+.stickerfx {
+  display: flex; align-items: center; gap: .9rem; padding: .5rem 1.2rem .5rem .6rem; border-radius: 1.1rem; white-space: nowrap;
+  background: var(--paper); color: var(--ink); border: .25rem solid var(--ink); box-shadow: .45rem .45rem 0 var(--ink);
+}
+.stickerfx b { width: 3.6rem; height: 3.6rem; border-radius: 50%; border: .2rem solid var(--ink); line-height: 3.2rem; text-align: center; font-size: 1.6rem; font-weight: 800; rotate: -8deg; }
+.stickerfx span { font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
+.stickerfx i { display: block; font-style: normal; font-size: 1rem; letter-spacing: .1em; text-transform: uppercase; color: var(--red); }
+.stickerfx small { display: block; font-size: 1.1rem; font-weight: 500; }
 .dialog.compact { gap: 3rem; }
 .dialog.compact .items { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.2rem; }
 .dialog.compact .btn { min-width: 15rem; height: 4rem; font-size: 1.45rem; }

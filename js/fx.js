@@ -172,3 +172,15 @@ export function haptic(name) {
     t += ms + gap;
   }
 }
+
+// A sticker slapped onto the top of the screen when an achievement is earned.
+export function sticker(icon, name, text, kind = 0) {
+  const e = spawn('stickerfx', `<b class="k${kind}">${icon}</b><span><i>Sticker earned</i>${name}<small>${text}</small></span>`);
+  const at = 'translate(50vw, 1.2rem) translateX(-50%)';
+  e.animate([
+    { transform: `${at} translateY(-140%) rotate(-6deg)`, opacity: 0 },
+    { transform: `${at} translateY(0) rotate(-1.5deg)`, opacity: 1, offset: 0.1, easing: SPRING },
+    { transform: `${at} translateY(0) rotate(-1.5deg)`, opacity: 1, offset: 0.88 },
+    { transform: `${at} translateY(-140%) rotate(3deg)`, opacity: 0 },
+  ], { duration: 3400 }).onfinish = () => e.remove();
+}
