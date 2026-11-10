@@ -128,3 +128,17 @@ export function shuffle(deck) {
     ], { duration: 780, easing: 'ease-in-out' });
   });
 }
+
+// Chips tumbling down the whole screen.
+export function chipRain(n = 40) {
+  if (calm) return;
+  const w = innerWidth, hgt = innerHeight;
+  for (let i = 0; i < n; i++) {
+    const c = spawn('chipfx c' + (i % 3));
+    const x = rnd(0, w), drift = rnd(-0.08, 0.08) * w, size = rnd(0.9, 1.7);
+    c.animate([
+      { transform: `translate(${x}px, ${-0.1 * hgt}px) scale(${size}) rotate(0deg)` },
+      { transform: `translate(${x + drift}px, ${1.1 * hgt}px) scale(${size}) rotate(${rnd(-540, 540)}deg)` },
+    ], { duration: rnd(1100, 2100), delay: rnd(0, 1100), easing: 'cubic-bezier(.4, 0, .9, .6)', fill: 'both' }).onfinish = () => c.remove();
+  }
+}

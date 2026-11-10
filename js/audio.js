@@ -183,6 +183,21 @@ export const talk = sfx((seat = 1) => {
   const base = [0, 67, 76, 55, 81, 62, 72, 48, 43][seat] ?? 67;
   [0, 3, -2].forEach((n, i) => tone({ delay: i * 0.07, f: midi(base + n), type: 'triangle', d: 0.06, v: 0.13 }));
 });
+// clearing a table: a run up the bars, two big chords and a shower of chips
+export const fanfare = sfx(() => {
+  for (let i = 0; i < 10; i++) tok(scale(i) + 12, { delay: i * 0.055, v: 0.2 + i * 0.012, d: 0.16, wet: 0.3 });
+  for (const [delay, notes] of [[0.62, [60, 67, 72, 76]], [1.0, [60, 64, 67, 72, 79, 84]]]) {
+    for (const m of notes) tok(m + 12, { delay, v: 0.26, d: 1.1, wet: 0.6 });
+    thud(delay, 0.8);
+  }
+  for (let i = 0; i < 16; i++) tok(scale(5 + (i * 3) % 9) + 24, { delay: 1.2 + i * 0.07, v: 0.07, d: 0.08 });
+});
+// a new venue sliding in
+export const arrive = sfx(() => {
+  noise({ f: 400, f2: 2200, a: 0.25, d: 0.2, v: 0.14, q: 1.2 });
+  thud(0.42, 0.45);
+  tok(scale(2) + 12, { delay: 0.45, v: 0.2, d: 0.3, wet: 0.3 });
+});
 export const lose = sfx(() => { // a little "wah-wah"
   tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
   tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });

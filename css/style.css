@@ -274,6 +274,14 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 
 /* opponents sit in a row along the top */
 .seat.ai { top: 5.65rem; --bx: 0rem; --by: 6.9rem; --dy: 12rem; }
+.seat.toppled { animation: topple .8s cubic-bezier(.5, 0, .8, .5) forwards; }
+@keyframes topple { 30% { rotate: -7deg; } to { rotate: 24deg; translate: 0 3.5rem; opacity: .25; filter: grayscale(1); } }
+/* a fresh table: the cloth slides in and the players drop into their seats */
+.arrive #mat { animation: matIn .65s var(--spring) both; }
+@keyframes matIn { from { translate: 70vw 0; rotate: 5deg; } }
+.arrive .seat.ai { animation: seatIn .5s var(--spring) both; animation-delay: calc(var(--i, 1) * 70ms + 150ms); }
+@keyframes seatIn { from { translate: 0 -12rem; opacity: 0; } }
+.arrive #deck { animation: seatIn .5s var(--spring) .5s both; }
 /* opponents get a bigger face so their expressions read at phone size */
 .seat.ai .ava { width: 4.2rem; height: 4.2rem; border-radius: .8rem; }
 .seat.ai .plate { min-width: 12rem; }
