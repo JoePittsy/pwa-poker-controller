@@ -182,6 +182,7 @@ function buildSeats() {
       const left = n === 1 ? 50 : 13 + (p.seat - 1) * (74 / (n - 1));
       el.style.left = `${left}%`;
       el.style.setProperty('--pc', c.color);
+      el.style.setProperty('--i', p.seat);
       el.style.setProperty('--dx', `${(50 - left) * 0.8}vw`);
     }
     $('seats').append(el);
@@ -694,9 +695,24 @@ function tableIntro(start) {
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
-function tableCleared() {
+// The moment you take the last chip: the losers' tiles topple, chips rain, a fanfare plays,
+// and only then does the result screen come up.
+async function tableCleared() {
+  const id = runId;
   audio.musicLevel(0);
-  audio.win(3); fx.burst($('center'), 60);
+  ui.mode = 'wait'; renderActions();
+  seatEls.forEach((el, i) => { if (i !== ME) setTimeout(() => el.classList.add('toppled'), 150 + i * 130); });
+  setMood(ME, 'happy');
+  audio.fanfare();
+  fx.banner(bossMode ? 'Boss beaten!' : 'Table cleared!', 'info');
+  fx.chipRain(46);
+  fx.burst(seatEls[ME].querySelector('.cards'), 50);
+  setTimeout(() => { fx.shake(7, 500); fx.rumble(1, 1, 400); fx.burst($('center'), 50); }, 620);
+  await tick(2600);
+  if (id !== runId) return;
+  showCleared();
+}
+function showCleared() {
   if (bossMode) { // beat the boss: on to the next table
     stats.bosses = (stats.bosses || 0) + 1; saveStats();
     writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
@@ -1019,6 +1035,13 @@ async function run() {
   const id = ++runId;
   const g = game;
   const me = g.players[ME];
+  if (g.handNo === 0) { // a fresh table: the new venue slides in
+    const app = $('app');
+    app.classList.remove('arrive'); void app.offsetWidth; app.classList.add('arrive');
+    audio.arrive();
+    await rawSleep(750);
+    if (id !== runId) return;
+  }
   while (g.startHand()) {
     audio.tension(false);
     audio.newHand();
