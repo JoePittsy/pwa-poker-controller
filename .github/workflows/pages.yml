@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/relaxed-mccarthy-pv6yzq]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
