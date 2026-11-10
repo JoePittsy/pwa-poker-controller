@@ -137,6 +137,11 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .card.burn { position: absolute; left: 0; top: 0; animation: burn .38s ease-out both; filter: brightness(.8); }
 @keyframes burn { from { rotate: 0deg; transform: translate(-4.74em, -.12em) scale(1.36); filter: brightness(1); } }
 .card { position: relative; }
+/* squeeze: the back is clipped away from the bottom as you peel, showing the suit first, then the rank */
+.in.cover.sq { animation: none; clip-path: inset(0 0 calc(var(--peel, 0) * 100%) 0); transition: opacity .18s; }
+.cards.revealed .in.cover.sq { opacity: 0; }
+.seat.me .cards { scale: calc(1 + var(--peel, 0) * .07); touch-action: none; }
+.cards.revealed { --peel: 0; }
 .in.cover { position: absolute; inset: 0; z-index: 1; animation: uncover .62s linear both; }
 @keyframes uncover { 0%, 64% { opacity: 1; } 65%, 100% { opacity: 0; } }
 #pot {

@@ -1,6 +1,6 @@
 import { Game } from './engine.js';
 import { decide, runoutOdds, equity } from './ai.js';
-import { startInput } from './input.js';
+import { startInput, upAmount } from './input.js';
 import { RANKS, SUITS, evaluate, describe } from './cards.js';
 import * as audio from './audio.js';
 import * as fx from './fx.js';
@@ -109,7 +109,7 @@ const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch w
 // ---------- player preferences ----------
 const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false, squeeze: true };
 // Card backs, and how many tables your best run must have cleared to unlock each.
 const BACKS = { Spade: 0, Lattice: 1, Sunburst: 2, Ruby: 3, Gold: 5 };
 const bestRun = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
@@ -131,7 +131,7 @@ let game = null;
 let runId = 0;
 let seatEls = [];
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false };
+const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true };
 let settled = false; // false between the last action of a hand and the moment the result is shown
 let overlay = null; // { items, focus, closable }
 
@@ -238,7 +238,12 @@ function render() {
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         // every card starts exactly on top of the deck, at the deck's size, and slides off it
-        const els = p.cards.map((c, k) => cardEl(c, seen(k) && !p.isHuman));
+        const sq = p.isHuman && prefs.squeeze; // your cards stay face down until you squeeze them
+        const els = p.cards.map((c, k) => {
+          const e = cardEl(c, sq || (seen(k) && !p.isHuman), '', sq);
+          if (sq) e.firstChild.classList.add('sq');
+          return e;
+        });
         cards.replaceChildren(...els);
         els.forEach((e, k) => {
           const r = e.getBoundingClientRect();
@@ -248,7 +253,8 @@ function render() {
           e.style.animationDelay = `${delay(k)}ms`;
           e.classList.add('deal');
         });
-        if (p.isHuman) { // your cards land face down, then you get to look
+        if (sq) startSqueeze(cards, sig);
+        if (p.isHuman && !sq) { // your cards land face down, then turn over by themselves
           setTimeout(() => {
             if (cards.dataset.sig !== sig) return;
             cards.replaceChildren(...p.cards.map((c, k) => {
@@ -274,14 +280,15 @@ function render() {
         : {});
     }
     let hand = '';
-    if (!p.folded && face && g.board.length >= 3) hand = describe(evaluate([...p.cards, ...g.board]));
+    const known = !p.isHuman || ui.squeezed; // don't name a hand you haven't looked at yet
+    if (!p.folded && face && known && g.board.length >= 3) hand = describe(evaluate([...p.cards, ...g.board]));
     const handEl = el.querySelector('.hand');
     if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
     else if (odds && odds[i] !== undefined) { // all-in: show each player's chance of winning
       const pct = `${Math.round(odds[i] * 100)}%`;
       const html = `${hand ? `${hand} ` : ''}<b>${pct}</b>`;
       if (handEl.innerHTML !== html) { handEl.innerHTML = html; fx.pop(handEl, 1.3); }
-    } else if (p.isHuman && prefs.coach && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
+    } else if (p.isHuman && prefs.coach && known && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
       const html = `${hand ? `${hand} ` : ''}<b>${coachOdds(g)}%</b>`; // coach: rough chance your hand is best
       if (handEl.innerHTML !== html) handEl.innerHTML = html;
     } else if (handEl.textContent !== hand || handEl.children.length) handEl.textContent = hand;
@@ -361,6 +368,58 @@ function coachOdds(g) {
   return coachCache.pct;
 }
 
+// ---------- squeezing your cards ----------
+// Your hole cards land face down. Hold up on the stick (or D-pad, or drag the cards upward)
+// to peel the backs away from the bottom; let go and they settle back. Peel all the way,
+// or press A, and they are yours to see. Nothing else waits on it until it is your turn.
+let squeeze = null; // { el, sig, peel, drag, done }
+function startSqueeze(el, sig) {
+  ui.squeezed = false;
+  el.classList.remove('revealed');
+  el.style.setProperty('--peel', 0);
+  squeeze = { el, sig, peel: 0, drag: 0, done: null, ticked: 0 };
+  const sq = squeeze;
+  const loop = () => {
+    if (squeeze !== sq || ui.squeezed) return;
+    if (el.dataset.sig !== sig) { squeeze = null; ui.squeezed = true; return; } // the hand is gone
+    const target = overlay ? 0 : Math.max(upAmount(), sq.drag);
+    sq.peel += (target - sq.peel) * (target > sq.peel ? 0.045 : 0.16);
+    el.style.setProperty('--peel', sq.peel.toFixed(3));
+    const step = Math.floor(sq.peel * 6);
+    if (step !== sq.ticked) { sq.ticked = step; if (target > sq.peel) { audio.slider(sq.peel); fx.rumble(0.1, 0.25, 30); } }
+    if (sq.peel >= 0.9) return finishSqueeze();
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+function finishSqueeze() {
+  if (ui.squeezed) return;
+  ui.squeezed = true;
+  const sq = squeeze; squeeze = null;
+  sq?.el.classList.add('revealed');
+  sq?.el.style.setProperty('--peel', 0);
+  audio.flip(); fx.rumble(0.3, 0.6, 80);
+  if (ui.mode === 'squeeze') ui.mode = 'wait';
+  if (game && game.stage !== 'idle') render();
+  sq?.done?.();
+}
+// Called when it is your turn: you have to look before you act.
+function waitForSqueeze() {
+  if (ui.squeezed || !squeeze) return Promise.resolve();
+  ui.mode = 'squeeze';
+  renderActions();
+  return new Promise((r) => { squeeze.done = r; });
+}
+{ // drag the cards upward with a finger or mouse
+  let y0 = null;
+  addEventListener('pointerdown', (e) => { if (squeeze && e.target.closest?.('.seat.me .cards')) y0 = e.clientY; });
+  addEventListener('pointermove', (e) => {
+    if (y0 === null || !squeeze) return;
+    squeeze.drag = Math.max(0, Math.min(1, (y0 - e.clientY) / (squeeze.el.offsetHeight * 0.7)));
+  });
+  for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { y0 = null; if (squeeze) squeeze.drag = 0; });
+}
+
 // Win chances while an all-in is run out; worked out once per street.
 let oddsCache = { key: '', odds: null };
 function oddsFor(g) {
@@ -431,6 +490,10 @@ function renderActions() {
     panel.append(row);
     bar.append(panel);
     setRaise(ui.raiseTo, true, true);
+  } else if (ui.mode === 'squeeze') {
+    const b = h('button', 'btn focus', `${glyph('A')}<span>Flip cards<small>or hold &uarr; to squeeze</small></span>`);
+    b.onclick = finishSqueeze;
+    bar.append(b);
   } else if (ui.mode === 'skip') {
     const b = h('button', 'btn focus', `${glyph('A')}Skip hand`);
     b.onclick = skipHand;
@@ -674,6 +737,7 @@ function settingsMenu(back) {
         if (mine.length === 1 && next) toast(`Clear ${tables(BACKS[next])} in a run to unlock ${next}`);
       }), true],
       [() => `Deck: ${prefs.fourColour ? '4-colour' : '2-colour'}`, set(() => { prefs.fourColour = !prefs.fourColour; }), true],
+      [() => `Squeeze cards: ${onOff(prefs.squeeze)}`, set(() => { prefs.squeeze = !prefs.squeeze; }), true],
       [() => `Coach: ${onOff(prefs.coach)}`, set(() => { prefs.coach = !prefs.coach; if (game && game.stage !== 'idle') render(); }), true],
       [`${glyph('B')}Back`, back],
     ],
@@ -798,6 +862,8 @@ function onButton(b) {
     else if (b === 'rb') setRaise(ps.find((v) => v > ui.raiseTo) ?? L.maxTo);
     else if (b === 'a' || b === 'y') confirmRaise();
     else if (b === 'b') closeRaise();
+  } else if (ui.mode === 'squeeze') {
+    if (b === 'a' || b === 'x') finishSqueeze();
   } else if (ui.mode === 'skip') {
     if (b === 'a' || b === 'x') skipHand();
   } else if (ui.mode === 'continue') {
@@ -1025,7 +1091,7 @@ function startTable(n, saved) {
   $('pot').hidden = true;
   $('hud').innerHTML = bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${table}</b><br>${cfg.venue}`;
   ui.mode = 'wait'; ui.resolve = null;
-  lastBB = 0; fast = false; audio.hush(false);
+  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
   runId++; // stop any game loop still running from the previous table
   renderActions();
   if (saved?.chips) run(); else tableIntro(run);
@@ -1093,6 +1159,8 @@ async function run() {
       let a;
       if (p.isHuman) {
         audio.turn(); fx.rumble(0.2, 0.5, 70);
+        await waitForSqueeze();
+        if (id !== runId) return;
         a = await prompt('actions');
         noteHumanAction(a, g.legal(ME));
       } else {
@@ -1113,6 +1181,7 @@ async function run() {
       actionFx(p, potBefore);
     }
     audio.tension(false);
+    if (!ui.squeezed) finishSqueeze(); // the hand ended before you looked
     if (ui.mode === 'skip') { ui.mode = 'wait'; renderActions(); }
     if (fast) { fast = false; audio.hush(false); await rawSleep(350); }
     // let everyone turn their cards over before the result lands
