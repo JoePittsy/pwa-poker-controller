@@ -5,6 +5,7 @@ import { RANKS, SUITS, evaluate, describe } from './cards.js';
 import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
+import { face } from './faces.js';
 
 const YOU = { name: 'You', isHuman: true };
 const CHARACTERS = {
@@ -78,7 +79,7 @@ function buildSeats() {
   seatEls = game.players.map((p) => {
     const el = h('div', `seat ${p.isHuman ? 's0 me' : 'ai'}`,
       `<div class="cards"></div><div class="badge"></div>
-       <div class="plate"><div class="ava">${p.name[0]}</div>
+       <div class="plate"><div class="ava" data-mood="idle">${p.isHuman ? p.name[0] : face(p.name)}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
        <div class="bet" hidden><span></span></div><div class="say"></div>`);
     const c = cast[p.seat];
@@ -589,6 +590,7 @@ function actionFx(p, potBefore) {
   fx.pop($('pot'), 1.12);
   if (allIn) {
     if (!p.isHuman && Math.random() < 0.7) setTimeout(() => say(p, 'allin'), 500);
+    for (const q of game.players) if (q !== p && !q.folded && !q.out) setTimeout(() => setMood(q.seat, 'shock', 1500), 450);
     audio.allin();
     setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); fx.banner('All in!'); }, 450);
   } else {
@@ -609,6 +611,11 @@ async function collectBets() {
 
 function handOverFx() {
   const g = game, me = g.players[ME];
+  for (const p of g.players) {
+    if (p.out) continue;
+    if (p.won > 0) setMood(p.seat, 'happy');
+    else if (p.chips === 0 || (g.result.showdown && !p.folded)) setMood(p.seat, 'sad');
+  }
   const total = g.players.reduce((s, p) => s + p.won, 0);
   for (const s of g.result.winners) {
     const p = g.players[s], plate = seatEls[s].querySelector('.plate');
@@ -669,6 +676,14 @@ function recordHand(g) {
 }
 
 // ---------- opponent character ----------
+// Faces: idle | think | happy | sad | shock. A mood lasts `ms`, or until changed if ms is 0.
+function setMood(seat, mood, ms = 0) {
+  const ava = seatEls[seat]?.querySelector('.ava');
+  if (!ava || game.players[seat].isHuman) return;
+  ava.dataset.mood = mood;
+  clearTimeout(ava._t);
+  if (ms) ava._t = setTimeout(() => { ava.dataset.mood = 'idle'; }, ms);
+}
 const bluffers = new Set(); // seats that have bluff-raised this hand
 // How the human has been playing; the AI adapts to it (see ai.js).
 let habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
@@ -692,6 +707,7 @@ function thinkTime(p, a) {
   return t;
 }
 function showThinking(seat) {
+  setMood(seat, 'think');
   const badge = seatEls[seat].querySelector('.badge');
   badge.textContent = '\u2022 \u2022 \u2022';
   badge.className = 'badge think';
@@ -777,6 +793,7 @@ async function run() {
     audio.tension(false);
     audio.newHand();
     bluffers.clear();
+    g.players.forEach((p) => setMood(p.seat, 'idle'));
     audio.musicLevel(1);
     settled = false;
     logStart(g);
@@ -832,6 +849,7 @@ async function run() {
       if (id !== runId) return;
       const potBefore = g.pot;
       g.act(a.type, a.amount);
+      setMood(p.seat, 'idle');
       logAction(p);
       render();
       actionFx(p, potBefore);
