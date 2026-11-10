@@ -40,6 +40,8 @@ first button press.
 - `js/main.js` – rendering, action bar, menus, game loop.
 - `js/audio.js` – all sound effects and the background music, synthesised with WebAudio (no audio files).
 - `js/fx.js` – pops, screen shake, flying chips, particles, rolling numbers, rumble.
+- `css/style.css` – flat print-poster look: paper, ink, spot colours, hard shadows.
+- `fonts/` – Bricolage Grotesque (SIL Open Font License), bundled so it works offline.
 - `sw.js`, `manifest.webmanifest` – offline + install.
 
 ## Roadmap
