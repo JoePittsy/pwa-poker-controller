@@ -143,6 +143,7 @@ export class Game {
     this.aggressor = -1;
     if (this.street === 'river') return this._showdown();
     const n = this.street === 'preflop' ? 3 : 1;
+    this.deck.pop(); // burn a card before each street, as a real dealer does
     for (let i = 0; i < n; i++) this.board.push(this.deck.pop());
     this.street = { preflop: 'flop', flop: 'turn', turn: 'river' }[this.street];
     if (this.runout) return; // everyone all-in: stay in 'streetEnd', UI keeps dealing

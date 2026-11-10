@@ -111,3 +111,20 @@ export function banner(text) {
     { transform: `${at} scale(.6) rotate(4deg)`, opacity: 0 },
   ], { duration: calm ? 900 : 1300 }).onfinish = () => e.remove();
 }
+
+// Riffle shuffle: the two halves of the deck split, interleave twice, then square up.
+export function shuffle(deck) {
+  if (calm) return;
+  [...deck.children].forEach((half, i) => {
+    const d = i ? 1 : -1;
+    half.animate([
+      { translate: '0 0', rotate: '0deg' },
+      { translate: `${d * 1.8}em -.2em`, rotate: `${d * 12}deg`, offset: 0.18 },
+      { translate: `${d * 0.25}em 0`, rotate: `${d * 2}deg`, offset: 0.42 },
+      { translate: `${d * 1.7}em -.2em`, rotate: `${d * 11}deg`, offset: 0.58 },
+      { translate: '0 0', rotate: '0deg', offset: 0.84 },
+      { translate: '0 .14em', rotate: '0deg', offset: 0.92 },
+      { translate: '0 0', rotate: '0deg' },
+    ], { duration: 780, easing: 'ease-in-out' });
+  });
+}

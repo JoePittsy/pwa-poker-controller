@@ -23,7 +23,8 @@ function tableConfig(n) {
 let table = 1;
 let cast = []; // cast[seat] = character info for the current table
 const ME = 0;
-const DEAL_GAP = 55; // ms between dealt cards
+const DEAL_GAP = 90; // ms between dealt cards
+const SHUFFLE_MS = 800; // the shuffle before each deal
 const REVEAL_GAP = 320; // ms between players turning their cards over
 
 const $ = (id) => document.getElementById(id);
@@ -59,8 +60,10 @@ let settled = false; // false between the last action of a hand and the moment t
 let overlay = null; // { items, focus, closable }
 
 // ---------- rendering ----------
-function cardEl(c, face, cls = '') {
+// cover: the card arrives face down and turns over at the end of its entry animation
+function cardEl(c, face, cls = '', cover = false) {
   const el = h('div', `card ${cls}`);
+  if (cover) el.append(h('div', 'in back cover'));
   if (!face) { el.append(h('div', 'in back')); return el; }
   const r = RANKS[c >> 2], s = c & 3;
   el.dataset.c = c;
@@ -123,7 +126,7 @@ function render() {
       cards.dataset.sig = sig;
       if (!sig) { // folded: toss the cards away
         for (const c of cards.children) c.classList.add('toss');
-        setTimeout(() => { if (!cards.dataset.sig) cards.replaceChildren(); }, 260);
+        setTimeout(() => { if (!cards.dataset.sig) cards.replaceChildren(); }, 340);
       } else if (old === 'x,x') { // turn them over, one player after another
         const wait = reveals++ * REVEAL_GAP;
         cards.replaceChildren(...p.cards.map((c, k) => {
@@ -133,7 +136,11 @@ function render() {
         }));
         audio.flip(wait / 1000);
       } else {
-        const delay = (k) => (dealOrder(i) + k * n) * DEAL_GAP;
+        const delay = (k) => SHUFFLE_MS + (dealOrder(i) + k * n) * DEAL_GAP;
+        // cards fly from the deck, and go back towards it when folded
+        const dr = $('deck').getBoundingClientRect(), cr = cards.getBoundingClientRect();
+        cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
+        cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         cards.replaceChildren(...p.cards.map((c, k) => {
           const e = cardEl(c, face && !p.isHuman, 'deal');
           e.style.animationDelay = `${delay(k)}ms`;
@@ -189,14 +196,19 @@ function render() {
   });
 
   const board = $('board');
-  if (board.children.length > g.board.length) board.innerHTML = '';
+  if (board.children.length > g.board.length) { board.innerHTML = ''; $('burn').innerHTML = ''; }
   const fresh = g.board.length - board.children.length;
+  if (fresh > 0) burnCard();
   for (let i = board.children.length, k = 0; i < g.board.length; i++, k++) {
     const slow = ui.slowRiver && i === 4;
-    const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop');
-    e.style.animationDelay = `${k * 130}ms`;
+    const wait = BURN_MS + k * 170;
+    const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop', !slow);
+    // each board card slides out from the deck, which sits just right of the fifth slot
+    e.style.setProperty('--dx', `${17.59 - i * 3.382}em`);
+    e.style.animationDelay = `${wait}ms`;
+    if (!slow) e.firstChild.style.animationDelay = `${wait}ms`;
     board.append(e);
-    if (!slow) audio.card(k * 0.13);
+    if (!slow) { audio.card(wait / 1000); audio.flip(wait / 1000 + 0.3); }
   }
   if (fresh && !g.players[ME].folded) fx.pop(seatEls[ME].querySelector('.hand'), 1.3);
 
@@ -223,6 +235,15 @@ function render() {
   $('hud').innerHTML = `Table <b>${table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   renderActions();
+}
+
+const BURN_MS = 300;
+function burnCard() {
+  const e = h('div', 'card burn');
+  e.append(h('div', 'in back'));
+  e.style.rotate = `${Math.round(Math.random() * 28 - 14)}deg`;
+  $('burn').append(e);
+  audio.card();
 }
 
 // Win chances while an all-in is run out; worked out once per street.
@@ -753,11 +774,13 @@ async function run() {
     audio.musicLevel(1);
     settled = false;
     logStart(g);
+    fx.shuffle($('deck')); audio.shuffle();
     render();
     const n = g.players.length;
-    for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((dealOrder(p.seat) + k * n) * DEAL_GAP / 1000);
+    for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((SHUFFLE_MS + (dealOrder(p.seat) + k * n) * DEAL_GAP) / 1000);
     audio.chips(2, 0.1, 0);
-    await sleep(2 * n * DEAL_GAP + 850);
+    await rawSleep(SHUFFLE_MS + 2 * n * DEAL_GAP + 500); // the shuffle and deal play at their own speed
+    await sleep(350);
     while (g.stage !== 'handOver') {
       if (id !== runId) return;
       if (g.stage === 'streetEnd') {
@@ -778,6 +801,7 @@ async function run() {
         audio.musicLevel(2);
         render();
         if (ui.slowRiver && g.board.length === 5) {
+          await rawSleep(BURN_MS);
           audio.riverSlam();
           await rawSleep(1000); // matches the slam animation and sound, whatever the speed setting
           fx.shake(8, 400); fx.rumble(1, 1, 250);
