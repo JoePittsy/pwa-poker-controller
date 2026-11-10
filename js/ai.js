@@ -2,7 +2,7 @@
 // shaded by a per-player style { loose: 0..1, aggr: 0..1, tell } and by how the human
 // has been playing. Each decision also reports how hard it was (`think`, 0..1) and
 // whether it is a `bluff` or a `strong` hand, which the UI turns into timing tells.
-import { evaluate } from './cards.js';
+import { scoreHand } from './cards.js';
 
 export function chen([a, b]) {
   let hi = a >> 2, lo = b >> 2;
@@ -17,11 +17,20 @@ export function chen([a, b]) {
   return s;
 }
 
-export function equity(hole, board, nOpp, sims = 200, rng = Math.random) {
+// Preflop strength: Chen points for two cards; for Omaha's four, the best pair of them, marked down.
+function strength(cards) {
+  if (cards.length === 2) return chen(cards);
+  let best = 0;
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) best = Math.max(best, chen([cards[i], cards[j]]));
+  return best - 1;
+}
+
+export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant = 'holdem') {
   const known = new Set([...hole, ...board]);
   const deck = [];
-  for (let c = 0; c < 52; c++) if (!known.has(c)) deck.push(c);
-  const need = 5 - board.length + 2 * nOpp;
+  for (let c = variant === 'short' ? 16 : 0; c < 52; c++) if (!known.has(c)) deck.push(c);
+  const hc = hole.length;
+  const need = 5 - board.length + hc * nOpp;
   let win = 0;
   for (let s = 0; s < sims; s++) {
     for (let i = 0; i < need; i++) {
@@ -29,9 +38,9 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random) {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
     const full = board.concat(deck.slice(0, 5 - board.length));
-    const mine = evaluate(hole.concat(full));
+    const mine = scoreHand(hole, full, variant);
     let best = 0, k = 5 - board.length;
-    for (let o = 0; o < nOpp; o++, k += 2) best = Math.max(best, evaluate([deck[k], deck[k + 1], ...full]));
+    for (let o = 0; o < nOpp; o++, k += hc) best = Math.max(best, scoreHand(deck.slice(k, k + hc), full, variant));
     win += mine > best ? 1 : mine === best ? 0.5 : 0;
   }
   return win / sims;
@@ -45,12 +54,13 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const sloppy = 1 - skill; // weaker players see their hands less clearly and call too much
   const { foldToBet = 0.4, aggression = 0.3 } = human;
   const pot = g.pot, toCall = L.toCall, bb = g.bb;
+  const variant = g.variant || 'holdem';
   const opp = g.players.filter((q) => !q.folded && q !== p).length;
   const hero = g.players.find((q) => q.isHuman && !q.folded && q !== p);
   // bluff more at a human who folds a lot, call lighter against one who bets a lot
   const bluffy = noBluff ? 0 : hero ? 0.5 + foldToBet * 1.6 : 1;
   // a cheating boss half-knows the human's cards: blend in the true odds against them
-  const truth = cheat && hero && hero.cards.length ? runoutOdds([p.cards, hero.cards], g.board, 120, rng)[0] : null;
+  const truth = cheat && hero && hero.cards.length ? runoutOdds([p.cards, hero.cards], g.board, variant === 'omaha' ? 60 : 120, rng, variant)[0] : null;
   const lighter = hero && g.aggressor === hero.seat ? (aggression - 0.3) * 0.2 : 0;
   let think = 0.1 + rng() * 0.25;
 
@@ -68,7 +78,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
     const position = behind <= 1 ? 1 : behind >= 4 ? -0.7 : 0; // looser late, tighter early
-    const s = chen(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
+    const s = strength(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const shove = toCall >= p.chips; // calling puts us all-in
@@ -89,7 +99,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     return giveUp();
   }
 
-  let e = equity(p.cards, g.board, Math.min(opp, 3), 200, rng) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
+  let e = equity(p.cards, g.board, Math.min(opp, 3), variant === 'omaha' ? 90 : 200, rng, variant) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
   if (truth !== null) e = e * (1 - cheat) + truth * cheat;
   const strong = e > 0.75;
   if (toCall === 0) {
@@ -112,10 +122,10 @@ export function decide(g, seat, rng = Math.random, human = {}) {
 }
 
 // Chance each hand wins when all hole cards are known (all-in run-out). Ties count as shares.
-export function runoutOdds(hands, board, sims = 700, rng = Math.random) {
+export function runoutOdds(hands, board, sims = 700, rng = Math.random, variant = 'holdem') {
   const known = new Set([...hands.flat(), ...board]);
   const deck = [];
-  for (let c = 0; c < 52; c++) if (!known.has(c)) deck.push(c);
+  for (let c = variant === 'short' ? 16 : 0; c < 52; c++) if (!known.has(c)) deck.push(c);
   const need = 5 - board.length;
   const wins = hands.map(() => 0);
   const n = need === 0 ? 1 : sims;
@@ -125,7 +135,7 @@ export function runoutOdds(hands, board, sims = 700, rng = Math.random) {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
     const full = board.concat(deck.slice(0, need));
-    const scores = hands.map((h) => evaluate(h.concat(full)));
+    const scores = hands.map((h) => scoreHand(h, full, variant));
     const best = Math.max(...scores);
     const share = 1 / scores.filter((x) => x === best).length;
     scores.forEach((x, k) => { if (x === best) wins[k] += share; });

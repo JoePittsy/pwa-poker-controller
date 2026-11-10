@@ -319,6 +319,15 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .seat.me.folded { opacity: 1; filter: none; }
 .seat.me.folded .cards { opacity: .4; filter: grayscale(1); }
 
+/* Omaha: four hole cards, overlapped so they fit, with the rank and suit pushed to the visible left edge */
+.omaha .seat.ai .cards, .omaha .seat.me .cards { gap: 0; }
+.omaha .seat.ai .cards .card:not(:first-child) { margin-left: -1.35em; }
+.omaha .seat.me .cards { font-size: 1.9rem; }
+.omaha .seat.me .cards .card:not(:first-child) { margin-left: -1em; }
+.omaha .seat .cards .card { rotate: 0deg; }
+.omaha .seat .cards .in.face { align-items: flex-start; padding-left: .22em; }
+.omaha .seat .cards .in.back::after { font-size: 1.2em; }
+
 /* ---------- HUD ---------- */
 #menu-btn {
   position: absolute; left: 1rem; bottom: 1.3rem; width: 4.2rem; height: 4.2rem; border-radius: .9rem;

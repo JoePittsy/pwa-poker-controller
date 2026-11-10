@@ -61,3 +61,6 @@ first button press.
 - [x] Coach hints, hand-ranks reference, unlockable card backs
 - [x] Real pause, four-colour deck, chip stacks, table venues, how-to-play primer
 - [x] End-of-run summary, rule twists on later tables, bigger faces, per-venue music
+- [x] Perks, boss fights, table-clear celebration, card squeeze, haptic patterns, daily deal, stickers
+- [x] Opponent memory, five new opponents, share cards, quick table, pass-and-play, thrown chips
+- [x] Slow-motion showdowns, table talk, difficulty, notebook, hand history with replay, hand review, short deck and Omaha

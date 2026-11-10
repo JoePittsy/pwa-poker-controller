@@ -1,12 +1,13 @@
 // No-limit Texas Hold'em engine. Pure state, no DOM, no timers: the UI drives it.
 //   startHand() -> stage 'betting' (toAct set) | 'streetEnd' | 'handOver'
 //   act(type, amount) while 'betting'; nextStreet() while 'streetEnd'.
-import { newDeck, evaluate, describe } from './cards.js';
+import { newDeck, scoreHand, describe } from './cards.js';
 
 export const BLIND_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [50, 100], [75, 150], [100, 200], [150, 300], [200, 400]];
 
 export class Game {
-  constructor({ players, chips = 1000, handsPerLevel = 8, rng = Math.random }) {
+  constructor({ players, chips = 1000, handsPerLevel = 8, rng = Math.random, variant = 'holdem' }) {
+    this.variant = variant; // 'holdem' | 'omaha' | 'short'
     this.rng = rng;
     this.handsPerLevel = handsPerLevel;
     this.players = players.map((p, seat) => ({
@@ -41,7 +42,7 @@ export class Game {
     const lvl = Math.min(Math.floor((this.handNo - 1) / this.handsPerLevel), BLIND_LEVELS.length - 1);
     [this.sb, this.bb] = BLIND_LEVELS[lvl];
     this.dealer = this.nextSeat(this.dealer, (p) => !p.out);
-    this.deck = this.nextDeck || newDeck(this.rng); // nextDeck: replay a recorded hand
+    this.deck = this.nextDeck || newDeck(this.rng, this.variant); // nextDeck: replay a recorded hand
     this.nextDeck = null;
     this.dealt = [...this.deck]; // the full shuffled deck, kept so the hand can be replayed
     this.board = [];
@@ -56,7 +57,8 @@ export class Game {
     const bbSeat = this.nextSeat(sbSeat, (p) => !p.out);
     this._put(this.players[sbSeat], this.sb); this.players[sbSeat].lastAction = 'SB';
     this._put(this.players[bbSeat], this.bb); this.players[bbSeat].lastAction = 'BB';
-    for (const p of alive) p.cards = [this.deck.pop(), this.deck.pop()];
+    const hole = this.variant === 'omaha' ? 4 : 2;
+    for (const p of alive) p.cards = Array.from({ length: hole }, () => this.deck.pop());
     this.currentBet = this.bb;
     this.lastRaise = this.bb;
     this.aggressor = -1; // seat of the last bet or raise this street
@@ -167,8 +169,8 @@ export class Game {
     this.showCards = true;
     const live = this.players.filter((p) => !p.folded);
     for (const p of live) {
-      p.score = evaluate([...p.cards, ...this.board]);
-      p.handName = describe(p.score);
+      p.score = scoreHand(p.cards, this.board, this.variant);
+      p.handName = describe(p.score, this.variant === 'short');
     }
     const levels = [...new Set(live.map((p) => p.total))].sort((a, b) => a - b);
     const pots = [];
