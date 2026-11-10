@@ -58,10 +58,11 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .in.face.red { color: var(--red); }
 .in .r { font-size: 1.7em; letter-spacing: -.06em; }
 .in .s { font-size: 1.4em; }
-.in.back {
-  background: radial-gradient(circle, var(--paper) 26%, transparent 28%) 0 0 / .62em .62em, var(--red);
-  box-shadow: inset 0 0 0 .22em var(--red), .14em .14em 0 var(--ink);
+.in.back { /* ink back, cream edge, thin yellow frame, one yellow spade */
+  background: var(--ink);
+  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--yellow), .14em .14em 0 var(--ink);
 }
+.in.back::after { content: "\2660\FE0E"; color: var(--yellow); font-size: 1.9em; line-height: 1; }
 .card.deal { animation: deal .55s cubic-bezier(.3, .7, .3, 1) both; }
 .card.drop { animation: drop .62s ease-out both; }
 .card.slam { animation: slam 1.25s cubic-bezier(.5, 0, .8, .4) both; z-index: 3; }
@@ -105,9 +106,9 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 /* five fixed slots, filled from the left, so cards never shuffle sideways as more arrive */
 #board { display: flex; gap: .65rem; font-size: 1.7rem; height: 4.2em; width: calc(15em + 2.6rem); }
 #deck { position: absolute; left: calc(100% + 1.8rem); top: 0; font-size: 1.7rem; width: 3em; height: 4.2em; }
-#deck .in { position: absolute; inset: 0; border-radius: .4em; border: .12em solid var(--ink); }
+#deck .in { position: absolute; inset: 0; border-radius: .4em; border: .12em solid var(--ink); display: flex; align-items: center; justify-content: center; }
 #deck .in:first-child { /* the stack's thickness */
-  box-shadow: inset 0 0 0 .22em var(--red), .09em .09em 0 var(--paper), .15em .15em 0 var(--ink),
+  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--yellow), .09em .09em 0 var(--paper), .15em .15em 0 var(--ink),
     .24em .24em 0 var(--paper), .3em .3em 0 var(--ink), .39em .39em 0 var(--paper), .45em .45em 0 var(--ink);
 }
 #burn { position: absolute; left: calc(100% + 1.8rem + 6.6rem); top: 1.1rem; font-size: 1.25rem; width: 3em; height: 4.2em; }
