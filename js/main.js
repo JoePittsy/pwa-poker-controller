@@ -285,12 +285,14 @@ const h = (tag, cls = '', html = '') => {
   return e;
 };
 const glyph = (g) => `<span class="glyph ${g.length > 1 ? 'wide' : g.toLowerCase()}">${g}</span>`;
+let replaying = false; // true while a recorded hand is being shown on the table; the live game waits
+let replayStop = false; // asks the replay to finish early
 let fast = false; // true while skipping the rest of a hand you've folded
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 // Every pause in the game goes through here, so opening a menu really does pause play.
 const rawSleep = async (ms) => {
   await tick(fast ? 0 : ms);
-  while (overlay) await tick(120);
+  while (overlay || replaying) await tick(120);
 };
 const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch with the speed setting
 
@@ -431,7 +433,7 @@ function render() {
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         // every card starts exactly on top of the deck, at the deck's size, and slides off it
-        const sq = mine(p) && prefs.squeeze && mode !== 'pass' && !ui.noAnim; // your cards stay face down until you squeeze them
+        const sq = mine(p) && prefs.squeeze && mode !== 'pass' && !ui.noAnim && !replaying; // your cards stay face down until you squeeze them
         const els = p.cards.map((c, k) => {
           const e = cardEl(c, ui.noAnim ? seen(k) : sq || (seen(k) && !mine(p)), '', sq);
           if (sq) e.firstChild.classList.add('sq');
@@ -503,10 +505,11 @@ function render() {
   const board = $('board');
   if (board.children.length > g.board.length) { board.innerHTML = ''; $('burn').innerHTML = ''; }
   const fresh = g.board.length - board.children.length;
-  if (fresh > 0) burnCard();
+  if (fresh > 0 && !ui.noAnim) burnCard();
   for (let i = board.children.length, k = 0; i < g.board.length; i++, k++) {
     const slow = ui.slowRiver && i === 4;
     const wait = BURN_MS + k * 170;
+    if (ui.noAnim) { board.append(cardEl(g.board[i], true)); continue; } // putting a table back: no dealing, no sound
     const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop', !slow);
     // each board card slides out from the deck, which sits just right of the fifth slot
     e.style.setProperty('--dx', `${17.59 - i * 3.382}em`);
@@ -544,6 +547,7 @@ function render() {
     : mode === 'quick' ? `<b>Quick</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
+  if (replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
   renderActions();
 }
 
@@ -728,6 +732,10 @@ function renderActions() {
     panel.append(row);
     bar.append(panel);
     setRaise(ui.raiseTo, true, true);
+  } else if (ui.mode === 'replay' || ui.mode === 'replayEnd') {
+    const b = h('button', 'btn focus', `${glyph('A')}${ui.mode === 'replayEnd' ? 'Back to game' : 'Stop replay'}`);
+    b.onclick = stopReplay;
+    bar.append(b);
   } else if (ui.mode === 'squeeze') {
     const b = h('button', 'btn focus', `${glyph('A')}<span>Flip cards<small>or hold &uarr; to squeeze</small></span>`);
     b.onclick = finishSqueeze;
@@ -875,7 +883,7 @@ function pauseMenu() {
     title: TITLE, body: CONTROLS, closable: true,
     items: [
       ['Resume'],
-      ['Last hand', () => lastHandScreen(pauseMenu)],
+      ['Hands', () => handsScreen(pauseMenu)],
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
@@ -896,17 +904,85 @@ function statsScreen(back) {
     items: [[`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], ['Notebook', () => notebookScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],
   });
 }
-function lastHandScreen(back) {
-  const hnd = lastHand;
+function handsScreen(back, at = history.length - 1) {
+  const hnd = history[at];
   let body = '<p>No finished hand yet.</p>';
   if (hnd) {
     const rows = hnd.streets.filter((st) => st.acts.length || st.board.length).map((st) =>
       `<tr><td>${st.name}${st.board.length ? `<br>${cardsText(st.board)}` : ''}</td><td>${st.acts.join(', ') || '\u2013'}</td></tr>`);
     if (hnd.shown.length) rows.push(`<tr><td>Showdown</td><td>${hnd.shown.map((x) => `${x.name} ${cardsText(x.cards)} <i>${x.hand}</i>`).join('<br>')}</td></tr>`);
-    body = `<p>Table ${hnd.table}, hand ${hnd.no} &middot; blinds ${hnd.blinds} &middot; you held ${cardsText(hnd.hole)}</p>
+    body = `<p>${hnd.where}, hand ${hnd.no} &middot; blinds ${hnd.blinds} &middot; you held ${cardsText(hnd.hole)} &middot; <b>${at + 1} of ${history.length}</b></p>
       <table class="log">${rows.join('')}</table><p class="res">${hnd.result}</p>`;
   }
-  showOverlay({ title: 'Last hand', closable: true, onClose: back, wide: true, body, items: [[`${glyph('B')}Back`, back]] });
+  const items = [];
+  if (hnd) items.push([`${glyph('A')}Replay`, () => replayHand(hnd, () => handsScreen(back, at))]);
+  if (at > 0) items.push(['Older hand', () => handsScreen(back, at - 1)]);
+  if (at < history.length - 1) items.push(['Newer hand', () => handsScreen(back, at + 1)]);
+  items.push([`${glyph('B')}Back`, back]);
+  showOverlay({ title: 'Hands', closable: true, onClose: back, wide: true, body, items });
+}
+
+// ---------- replay: play a recorded hand back on the table ----------
+// The live game is frozen (see rawSleep) while a throwaway game is fed the recorded deck and
+// actions through the normal renderer, then everything is put back exactly as it was.
+function castFor(name) {
+  if (name === 'You') return YOU;
+  const b = BOSSES.find((x) => x.name === name);
+  return { name, ...(b || CHARACTERS[name] || {}) };
+}
+async function replayHand(log, done) {
+  const live = { game, cast, ME, mode: ui.mode, resolve: ui.resolve, squeezed: ui.squeezed, peek: peekSeat, settled, hidden: ui.hidden, mat: getComputedStyle($('app')).getPropertyValue('--mat') };
+  replaying = true; replayStop = false;
+  closeOverlay();
+  toggleEmotes(false);
+  cast = log.cast.map(castFor);
+  game = new Game({ players: cast, handsPerLevel: log.before.per });
+  game.players.forEach((p, i) => { p.chips = log.before.chips[i]; });
+  game.dealer = log.before.dealer; game.handNo = log.before.handNo;
+  game.nextDeck = [...log.deck];
+  ME = 0; peekSeat = -1; settled = false;
+  Object.assign(ui, { squeezed: true, hidden: false, mode: 'replay', resolve: null, slowRiver: false, scatter: 0 });
+  $('app').style.setProperty('--mat', log.mat);
+  buildSeats();
+  $('msg').textContent = ''; $('msg').classList.remove('show');
+  const g = game;
+  g.startHand();
+  fx.shuffle($('deck')); audio.shuffle();
+  render();
+  await tick(SHUFFLE_MS + 2 * g.players.length * DEAL_GAP + 700);
+  const streets = async () => {
+    while (!replayStop && g.stage === 'streetEnd') { await collectBets(tick); await tick(300); g.nextStreet(); render(); await tick(g.stage === 'handOver' ? 300 : 900); }
+  };
+  for (const a of log.actions) {
+    await streets();
+    if (replayStop || g.stage !== 'betting') break;
+    await tick(650);
+    if (replayStop) break;
+    const p = g.players[g.toAct], pot = g.pot;
+    g.act(a.type, a.amount);
+    render();
+    actionFx(p, pot);
+  }
+  await streets();
+  if (!replayStop) {
+    settled = true;
+    render();
+    await new Promise((res) => { ui.mode = 'replayEnd'; ui.resolve = res; renderActions(); });
+  }
+  // put the live game back
+  ({ game, cast, ME } = live);
+  peekSeat = live.peek; settled = live.settled;
+  Object.assign(ui, { mode: live.mode, resolve: live.resolve, squeezed: live.squeezed, hidden: live.hidden });
+  $('app').style.setProperty('--mat', live.mat);
+  ui.noAnim = true; buildSeats(); render(); ui.noAnim = false;
+  replaying = false;
+  done();
+}
+function stopReplay() {
+  if (!replaying) return;
+  audio.back();
+  replayStop = true; // the replay loop sees this, unwinds and puts the live table back
+  if (ui.mode === 'replayEnd') ui.resolve?.();
 }
 const RANKS_REF = [
   ['Royal Flush', 'As Ks Qs Js Ts'], ['Straight Flush', '9h 8h 7h 6h 5h'], ['Four of a Kind', 'Qs Qh Qd Qc 4s'],
@@ -1080,6 +1156,7 @@ function onButton(b) {
     else if ((b === 'b' || b === 'start') && overlay.closable) { const done = overlay.onClose; audio.back(); closeOverlay(); done?.(); }
     return;
   }
+  if (replaying) { if (['a', 'b', 'x', 'start'].includes(b)) stopReplay(); return; }
   if (!$('emotes').hidden) { // table talk is open: a direction says it, anything else closes it
     const e = EMOTES.find((x) => x[0] === b);
     if (e) sendEmote(e[3]); else toggleEmotes(false);
@@ -1156,13 +1233,13 @@ function actionFx(p, potBefore) {
   }
 }
 
-async function collectBets() {
+async function collectBets(wait = sleep) { // replays pass their own timer, since the game's is frozen during a replay
   if (fast) return;
   const bets = seatEls.map((el) => el.querySelector('.bet')).filter((b) => !b.hidden);
   if (!bets.length) return;
   for (const b of bets) { fx.flyChips(b, $('pot'), 2, { stagger: 30 }); b.classList.add('leaving'); }
   audio.chips(Math.min(5, bets.length + 1), 0.3, -3);
-  await sleep(420);
+  await wait(420);
   fx.pop($('pot'), 1.2);
 }
 
@@ -1323,14 +1400,22 @@ const RUN0 = { hands: 0, won: 0, biggest: 0, knockouts: 0, bestScore: 0, bestHan
 let runStats = { ...RUN0 }; // this run only; saved with the game
 let handLog = null; // the hand in progress
 let lastHand = null; // the most recent finished hand
+const history = []; // the last 40 finished hands this session, oldest first
 const cardText = (c) => `<span class="s${c & 3} ${(c & 3) === 1 || (c & 3) === 2 ? 'rd' : 'bk'}">${RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]}${SUITS[c & 3]}</span>`;
 const cardsText = (cs) => cs.map(cardText).join(' ');
 
-function logStart(g) {
-  handLog = { no: g.handNo, table, blinds: `${g.sb}/${g.bb}`, hole: [...g.players[ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '' };
+function logStart(g, before) {
+  handLog = {
+    no: g.handNo, table, where: mode === 'daily' ? 'Daily deal' : mode === 'quick' ? 'Quick table' : bossMode ? 'Boss' : `Table ${table}`,
+    blinds: `${g.sb}/${g.bb}`, hole: [...g.players[ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
+    // enough to play the hand back exactly: who sat where, the stacks, the shuffled deck and every action
+    cast: g.players.map((p) => p.name), before, deck: g.dealt, actions: [], mat: getComputedStyle($('app')).getPropertyValue('--mat'),
+  };
 }
-function logAction(p) {
-  handLog?.streets.at(-1).acts.push(`${p.name} ${p.lastAction.toLowerCase()}`);
+function logAction(p, a) {
+  if (!handLog) return;
+  handLog.streets.at(-1).acts.push(`${p.name} ${p.lastAction.toLowerCase()}`);
+  handLog.actions.push({ type: a.type, amount: a.amount });
 }
 function logStreet(g) {
   if (!handLog || g.stage === 'handOver') return;
@@ -1343,6 +1428,7 @@ function recordHand(g) {
     handLog.board = [...g.board];
     handLog.result = g.result.text;
     lastHand = handLog; handLog = null;
+    history.push(lastHand); if (history.length > 40) history.shift();
   }
   const kos = me.won > 0 ? g.players.filter((p) => !p.isHuman && !p.out && p.chips === 0 && p.total > 0).length : 0;
   for (const st of mode === 'run' ? [stats, runStats] : [stats]) {
@@ -1553,7 +1639,9 @@ async function run() {
     }
     return g.startHand();
   };
-  while (nextHand()) {
+  let before = null; // stacks and button just before each deal, for the hand history
+  const snap = () => { before = { chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, per: g.handsPerLevel }; return true; };
+  while (snap() && nextHand()) {
     audio.tension(false);
     audio.newHand();
     ui.scatter = 0; ui.throwPower = 0;
@@ -1565,7 +1653,7 @@ async function run() {
     feats.startChips = me.chips + me.total; feats.turnOdds = 1; feats.lastAct = null;
     const others = g.players.filter((p) => !p.isHuman && !p.out);
     peekSeat = perks.peek && others.length ? others[Math.floor(Math.random() * others.length)].seat : -1;
-    logStart(g);
+    logStart(g, before);
     if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); fx.haptic('blinds'); }
     lastBB = g.bb;
     fx.shuffle($('deck')); audio.shuffle();
@@ -1631,7 +1719,7 @@ async function run() {
       const potBefore = g.pot;
       g.act(a.type, a.amount);
       setMood(p.seat, 'idle');
-      logAction(p);
+      logAction(p, a);
       if (mode === 'pass' && p.isHuman && g.stage !== 'handOver') { // cards face down before the device moves on
         ui.hidden = true; ui.noAnim = true; render(); ui.noAnim = false;
       } else render();
