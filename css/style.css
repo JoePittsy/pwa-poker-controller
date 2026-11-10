@@ -152,6 +152,20 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   width: 3.1rem; height: 3.1rem; flex: none; border-radius: .6rem; border: var(--line);
   background: var(--pc, var(--sky)); font-size: 2rem; font-weight: 800; line-height: 2.6rem; text-align: center;
 }
+.ava svg { display: block; width: 100%; height: 100%; }
+.ava .e, .ava .m { display: none; }
+.ava[data-mood="idle"] .e-open, .ava[data-mood="idle"] .m-idle,
+.ava[data-mood="think"] .e-think, .ava[data-mood="think"] .m-think,
+.ava[data-mood="happy"] .e-happy, .ava[data-mood="happy"] .m-happy,
+.ava[data-mood="sad"] .e-sad, .ava[data-mood="sad"] .m-sad,
+.ava[data-mood="shock"] .e-shock, .ava[data-mood="shock"] .m-shock { display: inline; }
+.ava .eyes { transform-origin: 16px 14px; animation: blink 4.6s infinite; }
+.seat.ai:nth-child(odd) .ava .eyes { animation-delay: -1.9s; animation-duration: 5.7s; }
+@keyframes blink { 0%, 95%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+.ava[data-mood="happy"] { animation: nod .45s var(--spring); }
+.ava[data-mood="shock"] { animation: jolt .3s var(--spring); }
+@keyframes nod { 40% { translate: 0 -.35rem; rotate: -8deg; } }
+@keyframes jolt { 30% { scale: 1.25; } }
 .who { text-align: left; line-height: 1.1; }
 .plate .name { font-size: 1.15rem; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .plate .name i { font-style: normal; font-weight: 500; text-transform: none; letter-spacing: 0; opacity: .6; }
@@ -378,5 +392,5 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
   #rotate div { font-size: 20vw; color: var(--yellow); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #bg, .seat.me .card .in, .logo, .seat.active .plate { animation: none; }
+  .ava .eyes, #bg, .seat.me .card .in, .logo, .seat.active .plate { animation: none; }
 }
