@@ -1,6 +1,7 @@
 // What the opponents say. Keyed by player name, then by moment.
 export const LINES = {
   Mav: {
+    again: ['You again! Round two!', 'Missed me?'], revenge: ['Payback! Ha!', "That's for last time."],
     allin: ['YOLO!', 'All of it. Why not?', "Let's dance!"],
     win: ['Too easy!', 'Chaos pays.', 'Ha! Again!'],
     bluffed: ['Had nothing. Loved it.', 'You folded THAT?', 'Never had it.'],
@@ -10,6 +11,7 @@ export const LINES = {
     tank: ['Ooh, tempting…', 'Should I? I should.'],
   },
   Dot: {
+    again: ['I have adjusted my model of you.', 'I took notes.'], revenge: ['As revised.', 'I learned from last time.'],
     allin: ["I've done the maths.", "I'm sure this time.", 'Oh dear. All in.'],
     win: ['As calculated.', 'Patience pays.', 'Lovely.'],
     bluffed: ["…don't tell anyone.", 'My heart is racing.'],
@@ -19,6 +21,7 @@ export const LINES = {
     tank: ['Let me think…', 'One moment, please.'],
   },
   Rex: {
+    again: ["I don't forget.", 'You. Again.'], revenge: ['Now we are even.', 'Told you I would be back.'],
     allin: ['Pay up.', 'Your move.', 'All in. Scared?'],
     win: ['Like clockwork.', 'Feed me.', 'Next.'],
     bluffed: ['Smelled the fear.', 'You blinked.'],
@@ -28,6 +31,7 @@ export const LINES = {
     tank: ['Interesting…', 'What are you hiding?'],
   },
   Ivy: {
+    again: ["I'm not folding to you this time!", 'Hi again!'], revenge: ['Ha! Got you back!', 'See? I stuck around.'],
     allin: ["I can't fold this!", 'Okay okay, all in!', "I'm stuck to it."],
     win: ['I knew calling was right!', 'See? Never fold.', 'Yay!'],
     bluffed: ['Wait, that worked?'],
@@ -37,6 +41,7 @@ export const LINES = {
     tank: ['I kind of want to see…', "Hmm, it's only chips…"],
   },
   Gus: {
+    again: ['Good to see you again.', 'Round two, then.'], revenge: ['Fair is fair.', 'That squares it.'],
     allin: ['Seems right.', 'All in. No drama.', 'Here we go.'],
     win: ['Solid.', "That'll do.", 'Good hand.'],
     bluffed: ['Sometimes you gotta.'],
