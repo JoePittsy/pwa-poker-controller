@@ -38,6 +38,34 @@ function tableConfig(n) {
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
 }
+// ---------- perks: pick one after each table you clear; they last for the rest of the run ----------
+const PERKS = {
+  bigstack: { name: 'Big Stack', text: 'Start every table with 30% more chips.', stack: true },
+  lifeline: { name: 'Lifeline', text: 'The next time you bust, stay in with a short stack instead.', stack: true },
+  peek: { name: 'Peek', text: 'Each hand, one opponent shows you one of their cards.' },
+  hunter: { name: 'Head Hunter', text: 'Every knock-out you score pays 100 extra chips.', stack: true },
+  rakeback: { name: 'Rakeback', text: 'Every pot you win pays 10% extra.', stack: true },
+  slowblinds: { name: 'Slow Clock', text: 'Blinds take 2 more hands to rise.', stack: true },
+};
+let perks = {}; // key -> how many you hold
+let peekSeat = -1; // who is showing you a card this hand
+const perkSummary = () => Object.keys(perks).filter((k) => perks[k] > 0)
+  .map((k) => `<b>${PERKS[k].name}</b>${perks[k] > 1 ? ` &times;${perks[k]}` : ''}`).join(' &middot; ');
+function pickPerk(done) {
+  const pool = Object.keys(PERKS).filter((k) => PERKS[k].stack || !perks[k]);
+  const offer = [];
+  while (offer.length < 3 && pool.length) offer.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  showOverlay({
+    title: 'Pick a <span>perk</span>', perky: true,
+    body: `<p>Yours for the rest of this run.</p>${perkSummary() ? `<p class="who">You hold: ${perkSummary()}</p>` : ''}`,
+    items: offer.map((k, i) => [`${i === 0 ? glyph('A') : ''}<span>${PERKS[k].name}<small>${PERKS[k].text}</small></span>`, () => {
+      perks[k] = (perks[k] || 0) + 1;
+      audio.win(1);
+      done();
+    }]),
+  });
+}
+
 let table = 1;
 let twist = ''; // the current table's rule change, if any
 let lastBB = 0; // to announce when the blinds go up
@@ -170,7 +198,8 @@ function render() {
     const el = seatEls[i];
     const face = p.isHuman || (g.showCards && !p.folded);
     const show = p.cards.length && (!p.folded || p.isHuman);
-    const sig = show ? p.cards.map((c) => (face ? c : 'x')).join() : '';
+    const seen = (k) => face || (i === peekSeat && k === 0 && !p.folded); // Peek perk: one opponent shows a card
+    const sig = show ? p.cards.map((c, k) => (seen(k) ? c : 'x')).join() : '';
     const cards = el.querySelector('.cards');
     const old = cards.dataset.sig || '';
     if (old !== sig) {
@@ -178,7 +207,7 @@ function render() {
       if (!sig) { // folded: toss the cards away
         for (const c of cards.children) c.classList.add('toss');
         setTimeout(() => { if (!cards.dataset.sig) cards.replaceChildren(); }, 340);
-      } else if (old === 'x,x') { // turn them over, one player after another
+      } else if (old.includes('x') && !sig.includes('x')) { // turn them over, one player after another
         const wait = reveals++ * REVEAL_GAP;
         cards.replaceChildren(...p.cards.map((c, k) => {
           const e = cardEl(c, true, 'flip');
@@ -193,7 +222,7 @@ function render() {
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         // every card starts exactly on top of the deck, at the deck's size, and slides off it
-        const els = p.cards.map((c) => cardEl(c, face && !p.isHuman));
+        const els = p.cards.map((c, k) => cardEl(c, seen(k) && !p.isHuman));
         cards.replaceChildren(...els);
         els.forEach((e, k) => {
           const r = e.getBoundingClientRect();
@@ -470,12 +499,12 @@ const CONTROLS = `<table>
 <tr><td>Start / P</td><td>Menu</td></tr></table>`;
 
 // items: [label | () => label, fn, keepOpen]
-function showOverlay({ title, body, items, closable = false, compact = false, wide = false, onClose }) {
+function showOverlay({ title, body, items, closable = false, compact = false, wide = false, perky = false, onClose }) {
   overlay = { items, focus: 0, closable, onClose, cols: compact ? 2 : 1 };
   for (const e of document.querySelectorAll('.bannerfx')) e.remove(); // banners must not sit on top of a menu
   const el = $('overlay');
   el.innerHTML = '';
-  const d = h('div', 'dialog' + (compact ? ' compact' : '') + (wide ? ' wide' : ''));
+  const d = h('div', 'dialog' + (compact ? ' compact' : '') + (wide ? ' wide' : '') + (perky ? ' perky' : ''));
   d.append(h('div', '', `<h1>${title}</h1>${body}`));
   const list = h('div', 'items');
   const text = (l) => (typeof l === 'function' ? l() : l);
@@ -639,7 +668,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -649,7 +678,7 @@ function tableCleared() {
   const before = best();
   try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
-  writeSave({ table: table + 1, habits, run: runStats });
+  writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
   stats.tables++; saveStats();
   showOverlay({
     title: 'Table <span>cleared!</span>',
@@ -919,10 +948,14 @@ function writeSave(s) {
 
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 function startTable(n, saved) {
+  if (n === 1 && !saved) perks = {};
+  if (saved?.perks) perks = saved.perks;
+  if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks, owed: false })); // a perk is due for the table just cleared
   table = n;
   const cfg = tableConfig(n);
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
-  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips });
+  game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
   twist = cfg.twist?.key || '';
   if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best() }; }
   if (saved?.run) runStats = { ...RUN0, ...saved.run };
@@ -931,7 +964,7 @@ function startTable(n, saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-  } else writeSave({ table: n, habits, run: runStats });
+  } else writeSave({ table: n, habits, run: runStats, perks });
   $('app').style.setProperty('--mat', cfg.mat);
   audio.setVenue(n - 1);
   buildSeats();
@@ -956,6 +989,8 @@ async function run() {
     g.players.forEach((p) => setMood(p.seat, 'idle'));
     audio.musicLevel(1);
     settled = false;
+    const others = g.players.filter((p) => !p.isHuman && !p.out);
+    peekSeat = perks.peek && others.length ? others[Math.floor(Math.random() * others.length)].seat : -1;
     logStart(g);
     if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); }
     lastBB = g.bb;
@@ -1026,14 +1061,22 @@ async function run() {
     if (id !== runId) return;
     settled = true;
     const kos = recordHand(g);
-    if (twist === 'bounty' && kos > 0) { // paid from the house, on top of the pot
-      me.chips += BOUNTY * kos;
-      setTimeout(() => { fx.banner(`Bounty +${BOUNTY * kos}`, 'info'); audio.chips(5, 0, 4); }, 900);
+    // bonuses are paid by the house, on top of the pot
+    const bonus = (twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (perks.hunter || 0) * kos
+      + (me.won > 0 ? Math.round(me.won * 0.1 * (perks.rakeback || 0)) : 0);
+    if (bonus > 0) {
+      me.chips += bonus;
+      setTimeout(() => { fx.banner(`${kos ? 'Bounty' : 'Rakeback'} +${bonus}`, 'info'); audio.chips(5, 0, 4); }, 900);
+    }
+    if (me.chips === 0 && perks.lifeline > 0) { // one more chance
+      perks.lifeline--;
+      me.chips = Math.round(tableConfig(table).chips * 0.3);
+      setTimeout(() => { fx.banner('Lifeline!', 'info'); audio.win(1); }, 1200);
     }
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats });
+    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
