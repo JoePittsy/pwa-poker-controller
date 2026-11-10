@@ -19,13 +19,27 @@ const CHARACTERS = {
 // or sharper opponents and faster blinds.
 // Each table is a place, with its own cloth.
 const VENUES = [['The Kitchen Table', '#3050e0'], ['The Back Room', '#0e8a78'], ['The Club', '#6a3fd6'], ['High Rollers', '#c22f45'], ['The Vault', '#1f7a3d']];
+// From the third table on, each table changes one rule.
+const BOUNTY = 200;
+const TWISTS = [
+  { key: 'bounty', name: 'Bounty', text: `every knock-out you score pays you ${BOUNTY} extra chips.` },
+  { key: 'turbo', name: 'Turbo', text: 'the blinds go up every 2 hands.' },
+  { key: 'short', name: 'Short stacks', text: 'everyone starts with half the usual chips.' },
+  { key: 'deep', name: 'Deep stacks', text: 'everyone starts with double the usual chips.' },
+];
 function tableConfig(n) {
   const names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
   const [venue, mat] = VENUES[(n - 1) % VENUES.length];
   const lap = Math.ceil(n / VENUES.length);
-  return { names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), handsPerLevel: Math.max(3, 7 - n), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat };
+  const twist = n >= 3 ? TWISTS[(n - 3) % TWISTS.length] : null; // the first two tables are plain
+  return {
+    names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
+    handsPerLevel: twist?.key === 'turbo' ? 2 : Math.max(3, 7 - n),
+    chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
+  };
 }
 let table = 1;
+let twist = ''; // the current table's rule change, if any
 let lastBB = 0; // to announce when the blinds go up
 let cast = []; // cast[seat] = character info for the current table
 const ME = 0;
@@ -625,7 +639,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${STACKS[prefs.stack].toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -813,6 +827,7 @@ function recordHand(g) {
   if (g.result.showdown && !me.folded) { stats.showdowns++; if (me.won > 0) stats.showdownsWon++; }
   if (me.allIn) { stats.allins++; if (me.won > 0) stats.allinsWon++; }
   saveStats();
+  return kos;
 }
 
 // ---------- opponent character ----------
@@ -907,7 +922,8 @@ function startTable(n, saved) {
   table = n;
   const cfg = tableConfig(n);
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
-  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: STACKS[prefs.stack] });
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
+  twist = cfg.twist?.key || '';
   if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best() }; }
   if (saved?.run) runStats = { ...RUN0, ...saved.run };
   if (saved?.habits) habits = saved.habits;
@@ -1008,7 +1024,11 @@ async function run() {
     if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);
     if (id !== runId) return;
     settled = true;
-    recordHand(g);
+    const kos = recordHand(g);
+    if (twist === 'bounty' && kos > 0) { // paid from the house, on top of the pot
+      me.chips += BOUNTY * kos;
+      setTimeout(() => { fx.banner(`Bounty +${BOUNTY * kos}`, 'info'); audio.chips(5, 0, 4); }, 900);
+    }
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
