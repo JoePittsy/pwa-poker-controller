@@ -64,6 +64,14 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 }
 .card.deal { animation: deal .42s var(--spring) both; }
 .card.drop { animation: drop .5s var(--spring) both; }
+.card.slam { animation: slam 1.25s cubic-bezier(.5, 0, .8, .4) both; z-index: 3; }
+@keyframes slam { /* hangs over the table as an ink silhouette, then lands and shows its face */
+  from { opacity: 0; transform: translateY(-2.6em) rotate(-16deg) scale(2.2); filter: brightness(0); }
+  25% { opacity: 1; transform: translateY(-2.2em) rotate(8deg) scale(2); filter: brightness(0); }
+  78% { transform: translateY(-2em) rotate(-5deg) scale(2.1); filter: brightness(0); }
+  80% { transform: translateY(0) rotate(0deg) scale(.92); filter: brightness(1); }
+  90% { transform: scale(1.1); }
+}
 .card.flip { animation: flip .45s ease-out both; }
 .card.toss { animation: toss .26s ease-in both; }
 .card.hl { translate: 0 -.45em; scale: 1.08; z-index: 2; }
@@ -134,10 +142,13 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   background: var(--ink); color: var(--paper);
 }
 .plate .hand:empty { display: none; }
+.plate .hand b { color: var(--yellow); font-weight: 800; }
+.seat.me .plate .hand b { color: var(--red); }
 .seat.active .plate { background: var(--yellow); translate: -.2rem -.5rem; box-shadow: .6rem .7rem 0 var(--ink); animation: bob .5s ease-in-out infinite alternate; }
 @keyframes bob { to { translate: -.2rem -.8rem; box-shadow: .6rem 1rem 0 var(--ink); } }
 .seat.winner .plate { background: var(--mint); translate: -.2rem -.5rem; box-shadow: .6rem .7rem 0 var(--ink); }
 .seat.shown .plate { margin-top: -.1rem; }
+.seat.shown .badge { display: none; }
 .seat.folded { opacity: .5; filter: grayscale(1); }
 .seat.out { opacity: .55; }
 .seat.out .plate > * { opacity: .3; }
@@ -270,6 +281,11 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .chipfx { margin: -.8rem 0 0 -.8rem; }
 .chipfx.c1 { background: var(--red); box-shadow: inset 0 0 0 .22rem var(--red), inset 0 0 0 .34rem var(--ink); }
 .chipfx.c2 { background: var(--paper); box-shadow: inset 0 0 0 .22rem var(--paper), inset 0 0 0 .34rem var(--ink); }
+.bannerfx {
+  font-size: 5.5rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap;
+  padding: .4rem 1.6rem; border-radius: 1.2rem; background: var(--red); color: var(--paper);
+  border: .4rem solid var(--ink); box-shadow: .8rem .8rem 0 var(--ink);
+}
 .floatfx { font-size: 2rem; font-weight: 800; color: var(--paper); white-space: nowrap; text-shadow: .15rem .15rem 0 var(--ink), -.1rem -.1rem 0 var(--ink), .1rem -.1rem 0 var(--ink), -.1rem .1rem 0 var(--ink); }
 .floatfx.big { font-size: 3.6rem; color: var(--yellow); }
 .bitfx { width: 1.1rem; height: 1.1rem; margin: -.55rem; background: var(--yellow); border: .14rem solid var(--ink); }

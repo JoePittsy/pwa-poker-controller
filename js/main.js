@@ -1,5 +1,5 @@
 import { Game } from './engine.js';
-import { decide } from './ai.js';
+import { decide, runoutOdds } from './ai.js';
 import { startInput } from './input.js';
 import { RANKS, SUITS, evaluate, describe } from './cards.js';
 import * as audio from './audio.js';
@@ -24,6 +24,7 @@ let table = 1;
 let cast = []; // cast[seat] = character info for the current table
 const ME = 0;
 const DEAL_GAP = 55; // ms between dealt cards
+const REVEAL_GAP = 320; // ms between players turning their cards over
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, cls = '', html = '') => {
@@ -38,7 +39,8 @@ let game = null;
 let runId = 0;
 let seatEls = [];
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '' };
+const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false };
+let settled = false; // false between the last action of a hand and the moment the result is shown
 let overlay = null; // { items, focus, closable }
 
 // ---------- rendering ----------
@@ -90,8 +92,11 @@ function bestFive(cards) {
 
 function render() {
   const g = game;
-  const over = g.stage === 'handOver';
+  const over = g.stage === 'handOver' && settled;
+  const pending = g.stage === 'handOver' && !settled; // result known but not yet revealed
   const n = g.players.length;
+  let reveals = 0;
+  const odds = g.runout && g.board.length < 5 && g.stage !== 'handOver' ? oddsFor(g) : null;
   g.players.forEach((p, i) => {
     const el = seatEls[i];
     const face = p.isHuman || (g.showCards && !p.folded);
@@ -104,18 +109,32 @@ function render() {
       if (!sig) { // folded: toss the cards away
         for (const c of cards.children) c.classList.add('toss');
         setTimeout(() => { if (!cards.dataset.sig) cards.replaceChildren(); }, 260);
-      } else if (old === 'x,x') {
+      } else if (old === 'x,x') { // turn them over, one player after another
+        const wait = reveals++ * REVEAL_GAP;
         cards.replaceChildren(...p.cards.map((c, k) => {
           const e = cardEl(c, true, 'flip');
-          e.style.animationDelay = `${k * 90}ms`;
+          e.style.animationDelay = `${wait + k * 90}ms`;
           return e;
         }));
+        audio.flip(wait / 1000);
       } else {
+        const delay = (k) => (dealOrder(i) + k * n) * DEAL_GAP;
         cards.replaceChildren(...p.cards.map((c, k) => {
-          const e = cardEl(c, face, 'deal');
-          e.style.animationDelay = `${(dealOrder(i) + k * n) * DEAL_GAP}ms`;
+          const e = cardEl(c, face && !p.isHuman, 'deal');
+          e.style.animationDelay = `${delay(k)}ms`;
           return e;
         }));
+        if (p.isHuman) { // your cards land face down, then you get to look
+          setTimeout(() => {
+            if (cards.dataset.sig !== sig) return;
+            cards.replaceChildren(...p.cards.map((c, k) => {
+              const e = cardEl(c, true, 'flip');
+              e.style.animationDelay = `${k * 160}ms`;
+              return e;
+            }));
+            audio.flip(); audio.flip(0.16);
+          }, delay(1) + 380);
+        }
       }
     }
     el.classList.toggle('shown', !!sig && face && !p.isHuman);
@@ -126,13 +145,19 @@ function render() {
     const chips = el.querySelector('.chips');
     if (p.out) { chips.textContent = 'Out'; chips._cur = 0; }
     else {
-      fx.roll(chips, p.chips, over && p.won > 0
+      fx.roll(chips, pending ? p.chips - p.won : p.chips, over && p.won > 0
         ? { dur: 1100, onTick: p.isHuman ? audio.count : undefined }
         : {});
     }
     let hand = '';
     if (!p.folded && face && g.board.length >= 3) hand = describe(evaluate([...p.cards, ...g.board]));
-    el.querySelector('.hand').textContent = hand;
+    const handEl = el.querySelector('.hand');
+    if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
+    else if (odds && odds[i] !== undefined) { // all-in: show each player's chance of winning
+      const pct = `${Math.round(odds[i] * 100)}%`;
+      const html = `${hand ? `${hand} ` : ''}<b>${pct}</b>`;
+      if (handEl.innerHTML !== html) { handEl.innerHTML = html; fx.pop(handEl, 1.3); }
+    } else if (handEl.textContent !== hand || handEl.children.length) handEl.textContent = hand;
     const badge = el.querySelector('.badge');
     const a = over ? '' : p.lastAction;
     if (badge.textContent !== a) {
@@ -152,10 +177,11 @@ function render() {
   if (board.children.length > g.board.length) board.innerHTML = '';
   const fresh = g.board.length - board.children.length;
   for (let i = board.children.length, k = 0; i < g.board.length; i++, k++) {
-    const e = cardEl(g.board[i], true, 'drop');
+    const slow = ui.slowRiver && i === 4;
+    const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop');
     e.style.animationDelay = `${k * 130}ms`;
     board.append(e);
-    audio.card(k * 0.13);
+    if (!slow) audio.card(k * 0.13);
   }
   if (fresh && !g.players[ME].folded) fx.pop(seatEls[ME].querySelector('.hand'), 1.3);
 
@@ -180,7 +206,22 @@ function render() {
   }
   const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
   $('hud').innerHTML = `Table <b>${table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
+  ui.reveals = reveals;
   renderActions();
+}
+
+// Win chances while an all-in is run out; worked out once per street.
+let oddsCache = { key: '', odds: null };
+function oddsFor(g) {
+  const key = `${g.handNo}:${g.board.length}`;
+  if (oddsCache.key !== key) {
+    const live = g.players.filter((p) => !p.folded);
+    const res = runoutOdds(live.map((p) => p.cards), g.board);
+    const odds = {};
+    live.forEach((p, k) => { odds[p.seat] = res[k]; });
+    oddsCache = { key, odds };
+  }
+  return oddsCache.odds;
 }
 
 function presets(L) {
@@ -460,7 +501,7 @@ function actionFx(p, potBefore) {
   if (allIn) {
     if (!p.isHuman && Math.random() < 0.7) setTimeout(() => say(p, 'allin'), 500);
     audio.allin();
-    setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); }, 450);
+    setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); fx.banner('All in!'); }, 450);
   } else {
     if (a.startsWith('Call')) audio.chips(2, 0.05);
     else audio.raise(size > 0.6 ? 4 : 3);
@@ -607,26 +648,36 @@ async function run() {
     audio.newHand();
     bluffers.clear();
     audio.musicLevel(1);
+    settled = false;
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((dealOrder(p.seat) + k * n) * DEAL_GAP / 1000);
     audio.chips(2, 0.1, 0);
-    await sleep(2 * n * DEAL_GAP + 350);
+    await sleep(2 * n * DEAL_GAP + 850);
     while (g.stage !== 'handOver') {
       if (id !== runId) return;
       if (g.stage === 'streetEnd') {
         await collectBets();
+        ui.slowRiver = false;
         if (g.runout) {
           audio.tension(true);
           if (g.street !== 'river') { audio.heartbeat(); fx.rumble(0.8, 0.2, 120); }
-          await sleep(g.street === 'river' ? 700 : 1300);
+          // the river of a live all-in gets the full treatment
+          const o = g.street === 'turn' ? Object.values(oddsFor(g)) : [];
+          ui.slowRiver = o.some((x) => x > 0.02 && x < 0.98);
+          await sleep(g.street === 'river' ? 900 : ui.slowRiver ? 1700 : 1300);
+          if (ui.slowRiver) { audio.heartbeat(); fx.rumble(0.8, 0.2, 120); }
         } else await sleep(250);
         if (id !== runId) return;
-        const hidden = !g.showCards;
         g.nextStreet();
         audio.musicLevel(2);
-        if (g.stage === 'handOver' && hidden) audio.flip();
         render();
+        if (ui.slowRiver && g.board.length === 5) {
+          audio.riverSlam();
+          await sleep(1000);
+          fx.shake(8, 400); fx.rumble(1, 1, 250);
+          await sleep(500);
+        }
         continue;
       }
       const p = g.players[g.toAct];
@@ -644,13 +695,18 @@ async function run() {
         if (a.bluff && a.type === 'raise') bluffers.add(p.seat);
       }
       if (id !== runId) return;
-      const potBefore = g.pot, wasHidden = !g.showCards;
+      const potBefore = g.pot;
       g.act(a.type, a.amount);
       render();
       actionFx(p, potBefore);
-      if (wasHidden && g.showCards) audio.flip(0.3);
     }
     audio.tension(false);
+    // let everyone turn their cards over before the result lands
+    render();
+    if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);
+    if (id !== runId) return;
+    settled = true;
+    render();
     handOverFx();
     setTimeout(handOverBanter, 700);
     writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits });
