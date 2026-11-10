@@ -29,7 +29,8 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp -r index.html manifest.webmanifest sw.js css js icons _site/
+          cp -r index.html manifest.webmanifest sw.js css js icons fonts _site/
+          git rev-parse HEAD > _site/version.txt
       - uses: actions/configure-pages@v5
         with:
           enablement: true

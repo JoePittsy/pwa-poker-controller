@@ -48,5 +48,6 @@ first button press.
 
 - [x] Stage 1: playable game, AI, controller, PWA shell
 - [x] Stage 2: card/chip animations, synthesised sound and music, controller rumble
-- [ ] Stage 3: saved progress, settings (table size, speed, stacks), stats
+- [x] Saved progress between hands, automatic pick-up of new versions
+- [ ] Stage 3: settings (table size, speed, stacks), stats
 - [ ] Stage 4: stronger AI (position, ranges, bet-sizing tells)

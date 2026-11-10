@@ -327,10 +327,13 @@ function overlayFocus(d) {
 
 const TITLE = '<span class="logo">Pad <span>Poker</span></span>';
 function startScreen() {
+  const saved = loadSave();
   showOverlay({
     title: TITLE,
     body: `<p>No-limit Texas Hold'em against five AI players. Touch, keyboard or game controller.</p>${CONTROLS}`,
-    items: [[`${glyph('A')}Play`, newGame]],
+    items: saved
+      ? [[`${glyph('A')}Continue`, () => newGame(saved)], ['New game', () => newGame()]]
+      : [[`${glyph('A')}Play`, () => newGame()]],
   });
 }
 function pauseMenu() {
@@ -341,7 +344,7 @@ function pauseMenu() {
       ['Resume'],
       [() => `Sound: ${audio.settings.sfx ? 'On' : 'Off'}`, () => audio.setSfx(!audio.settings.sfx), true],
       [() => `Music: ${audio.settings.music ? 'On' : 'Off'}`, () => audio.setMusic(!audio.settings.music), true],
-      ['New game', newGame],
+      ['New game', () => newGame()],
     ],
   });
 }
@@ -350,7 +353,7 @@ function gameOver(won) {
   showOverlay({
     title: won ? 'You <span>win!</span>' : 'Busted',
     body: `<p>${won ? 'You took every chip on the table' : 'You ran out of chips'} after ${game.handNo} hands.</p>`,
-    items: [[`${glyph('A')}New game`, newGame]],
+    items: [[`${glyph('A')}New game`, () => newGame()]],
   });
 }
 
@@ -414,7 +417,8 @@ function actionFx(p, potBefore) {
     audio.allin();
     setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); }, 450);
   } else {
-    audio.chips(size > 0.6 ? 4 : 2, 0.05, a.startsWith('Call') ? 1 : 1.12);
+    if (a.startsWith('Call')) audio.chips(2, 0.05);
+    else audio.raise(size > 0.6 ? 4 : 3);
     if (/^(Bet|Raise)/.test(a) && size > 0.6) { fx.shake(3, 220); fx.rumble(0.4, 0.6, 90); }
   }
 }
@@ -423,7 +427,7 @@ async function collectBets() {
   const bets = seatEls.map((el) => el.querySelector('.bet')).filter((b) => !b.hidden);
   if (!bets.length) return;
   for (const b of bets) { fx.flyChips(b, $('pot'), 2, { stagger: 30 }); b.classList.add('leaving'); }
-  audio.chips(Math.min(6, bets.length * 2), 0.3, 0.85);
+  audio.chips(Math.min(5, bets.length + 1), 0.3, -3);
   await sleep(420);
   fx.pop($('pot'), 1.2);
 }
@@ -434,7 +438,7 @@ function handOverFx() {
   for (const s of g.result.winners) {
     const p = g.players[s], plate = seatEls[s].querySelector('.plate');
     const n = Math.max(4, Math.min(14, Math.round(p.won / g.bb / 2)));
-    fx.flyChips($('center'), plate, n, { stagger: 50, onLand: (i) => { if (i % 2 === 0) audio.chips(1, 0, 1 + i * 0.03); } });
+    fx.flyChips($('center'), plate, n, { stagger: 50, onLand: (i) => { if (i % 2 === 0) audio.chips(1, 0, i / 2); } });
     setTimeout(() => fx.floatText(plate, `+${p.won.toLocaleString()}`, p.isHuman ? 'big' : ''), 350);
   }
   if (me.won > 0) {
@@ -450,8 +454,25 @@ function handOverFx() {
 }
 
 // ---------- game loop ----------
-function newGame() {
+// Progress is saved between hands so a reload (new version, or iOS evicting the app) is harmless.
+const SAVE_KEY = 'padpoker.save';
+function loadSave() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    return s && s.chips.length === ROSTER.length && s.chips[ME] > 0 ? s : null;
+  } catch { return null; }
+}
+function writeSave(s) {
+  try { s ? localStorage.setItem(SAVE_KEY, JSON.stringify(s)) : localStorage.removeItem(SAVE_KEY); } catch { /* private mode */ }
+}
+
+function newGame(saved) {
   game = new Game({ players: ROSTER });
+  if (saved) {
+    game.players.forEach((p, i) => { p.chips = saved.chips[i]; });
+    game.dealer = saved.dealer;
+    game.handNo = saved.handNo;
+  } else writeSave(null);
   buildSeats();
   ui.mode = 'wait'; ui.resolve = null;
   run();
@@ -463,10 +484,11 @@ async function run() {
   const me = g.players[ME];
   while (g.startHand()) {
     audio.tension(false);
+    audio.newHand();
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((dealOrder(p.seat) + k * n) * DEAL_GAP / 1000);
-    audio.chips(3, 0.1);
+    audio.chips(2, 0.1, 0);
     await sleep(2 * n * DEAL_GAP + 350);
     while (g.stage !== 'handOver') {
       if (id !== runId) return;
@@ -502,13 +524,37 @@ async function run() {
     }
     audio.tension(false);
     handOverFx();
+    writeSave({ chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
-    if (me.chips === 0) return gameOver(false);
+    if (me.chips === 0) { writeSave(null); return gameOver(false); }
+    if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
+  writeSave(null);
   gameOver(me.chips > 0);
 }
+
+// ---------- new-version check ----------
+// The deploy writes the commit id to version.txt. If it changes while we're open,
+// reload at the next safe moment (title screen, or between hands).
+let version = null;
+let stale = false;
+async function checkVersion() {
+  try {
+    const r = await fetch('version.txt', { cache: 'no-store' });
+    if (!r.ok) return;
+    const v = (await r.text()).trim();
+    if (version === null) version = v;
+    else if (v !== version) {
+      stale = true;
+      if (!game || ui.mode === 'continue' || (overlay && !overlay.closable)) location.reload();
+    }
+  } catch { /* offline */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+addEventListener('pageshow', (e) => { if (e.persisted) checkVersion(); });
+checkVersion();
 
 // ---------- boot ----------
 $('menu-btn').onclick = () => { audio.unlock(); if (!overlay && game) pauseMenu(); };
