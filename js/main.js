@@ -6,14 +6,22 @@ import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
 
-const ROSTER = [
-  { name: 'You', isHuman: true },
-  { name: 'Mav', tag: 'Wild', style: { loose: 0.8, aggr: 0.8, tell: 'fastBluff' } },
-  { name: 'Dot', tag: 'Careful', style: { loose: 0.25, aggr: 0.3, tell: 'slowBluff' } },
-  { name: 'Rex', tag: 'Shark', style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
-  { name: 'Ivy', tag: 'Sticky', style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
-  { name: 'Gus', tag: 'Steady', style: { loose: 0.5, aggr: 0.55 } },
-];
+const YOU = { name: 'You', isHuman: true };
+const CHARACTERS = {
+  Mav: { tag: 'Wild', color: 'var(--red)', voice: 1, style: { loose: 0.8, aggr: 0.8, tell: 'fastBluff' } },
+  Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.25, aggr: 0.3, tell: 'slowBluff' } },
+  Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
+  Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
+  Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.5, aggr: 0.55 } },
+};
+// A run is a climb through tables: knock everyone out to move up. Each table has more
+// or sharper opponents and faster blinds.
+function tableConfig(n) {
+  const names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
+  return { names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), handsPerLevel: Math.max(3, 7 - n) };
+}
+let table = 1;
+let cast = []; // cast[seat] = character info for the current table
 const ME = 0;
 const DEAL_GAP = 55; // ms between dealt cards
 
@@ -48,12 +56,20 @@ function buildSeats() {
   $('seats').innerHTML = '';
   $('board').innerHTML = '';
   seatEls = game.players.map((p) => {
-    const el = h('div', `seat s${p.seat}${p.isHuman ? ' me' : ''}`,
+    const el = h('div', `seat ${p.isHuman ? 's0 me' : 'ai'}`,
       `<div class="cards"></div><div class="badge"></div>
        <div class="plate"><div class="ava">${p.name[0]}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
        <div class="bet" hidden><span></span></div><div class="say"></div>`);
-    el.querySelector('.name').innerHTML = `${p.name}${ROSTER[p.seat].tag ? ` <i>${ROSTER[p.seat].tag}</i>` : ''}`;
+    const c = cast[p.seat];
+    el.querySelector('.name').innerHTML = `${p.name}${c.tag ? ` <i>${c.tag}</i>` : ''}`;
+    if (!p.isHuman) { // spread the opponents evenly along the top
+      const n = game.players.length - 1;
+      const left = n === 1 ? 50 : 13 + (p.seat - 1) * (74 / (n - 1));
+      el.style.left = `${left}%`;
+      el.style.setProperty('--pc', c.color);
+      el.style.setProperty('--dx', `${(50 - left) * 0.8}vw`);
+    }
     $('seats').append(el);
     return el;
   });
@@ -162,7 +178,8 @@ function render() {
     $('msg').textContent = msg;
     $('msg').classList.toggle('show', !!msg);
   }
-  $('hud').innerHTML = `Blinds <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`;
+  const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
+  $('hud').innerHTML = `Table <b>${table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   renderActions();
 }
 
@@ -327,14 +344,17 @@ function overlayFocus(d) {
 }
 
 const TITLE = '<span class="logo">Pad <span>Poker</span></span>';
+const best = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
+const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 function startScreen() {
   const saved = loadSave();
+  const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
   showOverlay({
     title: TITLE,
-    body: `<p>No-limit Texas Hold'em against five AI players. Touch, keyboard or game controller.</p>${CONTROLS}`,
+    body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue`, () => newGame(saved)], ['New game', () => newGame()]]
-      : [[`${glyph('A')}Play`, () => newGame()]],
+      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)]]
+      : [[`${glyph('A')}Play`, () => startTable(1)]],
   });
 }
 function pauseMenu() {
@@ -345,17 +365,39 @@ function pauseMenu() {
       ['Resume'],
       [() => `Sound: ${audio.settings.sfx ? 'On' : 'Off'}`, () => audio.setSfx(!audio.settings.sfx), true],
       [() => `Music: ${audio.settings.music ? 'On' : 'Off'}`, () => audio.setMusic(!audio.settings.music), true],
-      ['New game', () => newGame()],
+      ['New run', () => startTable(1)],
     ],
   });
 }
-function gameOver(won) {
-  audio.musicLevel(0);
-  if (won) { audio.win(3); fx.burst($('center'), 60); } else audio.lose();
+function tableIntro(start) {
+  const cfg = tableConfig(table);
+  const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
-    title: won ? 'You <span>win!</span>' : 'Busted',
-    body: `<p>${won ? 'You took every chip on the table' : 'You ran out of chips'} after ${game.handNo} hands.</p>`,
-    items: [[`${glyph('A')}New game`, () => newGame()]],
+    title: `Table <span>${table}</span>`,
+    body: `<p>Knock out all ${cfg.names.length} to move up. Everyone starts with 1,000. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
+    items: [[`${glyph('A')}Deal me in`, start]],
+  });
+}
+function tableCleared() {
+  audio.musicLevel(0);
+  audio.win(3); fx.burst($('center'), 60);
+  try { localStorage.setItem('padpoker.best', Math.max(best(), table)); } catch { /* private mode */ }
+  writeSave({ table: table + 1, habits });
+  showOverlay({
+    title: 'Table <span>cleared!</span>',
+    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. The next table is tougher.</p>`,
+    items: [[`${glyph('A')}Table ${table + 1}`, () => startTable(table + 1)]],
+  });
+}
+function busted() {
+  audio.musicLevel(0);
+  audio.lose();
+  writeSave(null);
+  const cleared = table - 1;
+  showOverlay({
+    title: 'Busted',
+    body: `<p>Out at Table ${table} after ${game.handNo} hands, with ${tables(cleared)} cleared. Best run: ${tables(best())}.</p>`,
+    items: [[`${glyph('A')}New run`, () => startTable(1)]],
   });
 }
 
@@ -492,7 +534,7 @@ function say(p, moment) {
   el.classList.remove('show');
   void el.offsetWidth; // restart the pop animation
   el.classList.add('show');
-  audio.talk(p.seat);
+  audio.talk(cast[p.seat].voice);
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 2600);
 }
@@ -502,7 +544,13 @@ function handOverBanter() {
   const ais = g.players.filter((p) => !p.isHuman && !p.out);
   let said = 0;
   const maybe = (p, moment, chance) => { if (said < 2 && Math.random() < chance) { say(p, moment); said++; } };
-  for (const p of ais) if (p.chips === 0 && p.total > 0) { say(p, 'bust'); said++; }
+  for (const p of ais) {
+    if (p.chips === 0 && p.total > 0) {
+      say(p, 'bust'); said++;
+      const left = ais.filter((q) => q.chips > 0).length;
+      toast(left ? `${p.name} is out \u2014 ${left} to beat` : `${p.name} is out`);
+    }
+  }
   const big = g.players.reduce((s, p) => s + p.won, 0) > 20 * g.bb;
   for (const p of ais) {
     if (p.won > 0 && p.chips > 0) {
@@ -518,27 +566,36 @@ const SAVE_KEY = 'padpoker.save';
 function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    return s && s.chips.length === ROSTER.length && s.chips[ME] > 0 ? s : null;
+    if (!s || !(s.table >= 1)) return null;
+    if (s.chips && (s.chips.length !== tableConfig(s.table).names.length + 1 || !(s.chips[ME] > 0))) return null;
+    return s;
   } catch { return null; }
 }
 function writeSave(s) {
   try { s ? localStorage.setItem(SAVE_KEY, JSON.stringify(s)) : localStorage.removeItem(SAVE_KEY); } catch { /* private mode */ }
 }
 
-function newGame(saved) {
-  game = new Game({ players: ROSTER });
-  if (saved) {
-    game.players.forEach((p, i) => { p.chips = saved.chips[i]; });
+// Start (or resume) a table. `saved` may carry mid-table chip stacks.
+function startTable(n, saved) {
+  table = n;
+  const cfg = tableConfig(n);
+  cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel });
+  if (n === 1 && !saved) habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
+  if (saved?.habits) habits = saved.habits;
+  if (saved?.chips) {
+    game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-    if (saved.habits) habits = saved.habits;
-  } else {
-    writeSave(null);
-    habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
-  }
+  } else writeSave({ table: n, habits });
   buildSeats();
+  $('msg').textContent = ''; $('msg').classList.remove('show');
+  $('pot').hidden = true;
+  $('hud').innerHTML = `Table <b>${table}</b>`;
   ui.mode = 'wait'; ui.resolve = null;
-  run();
+  runId++; // stop any game loop still running from the previous table
+  renderActions();
+  if (saved?.chips) run(); else tableIntro(run);
 }
 
 async function run() {
@@ -596,15 +653,14 @@ async function run() {
     audio.tension(false);
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits });
+    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
-    if (me.chips === 0) { writeSave(null); return gameOver(false); }
+    if (me.chips === 0) return busted();
     if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
-  writeSave(null);
-  gameOver(me.chips > 0);
+  if (me.chips > 0) tableCleared(); else busted();
 }
 
 // ---------- new-version check ----------
