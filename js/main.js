@@ -91,16 +91,15 @@ function cardEl(c, face, cls = '', cover = false) {
   return el;
 }
 
-// Chips are drawn as side-on stacks whose height grows with the amount (roughly one chip per doubling).
+// Chips are drawn from above: discs laid in an overlapping pile. More chips means more
+// discs, and each disc can be a short stack (shown by its offset edge), up to three high.
 const chipCount = (amount, per, max) => Math.max(1, Math.min(max, Math.round(Math.log2(amount / game.bb + 1) * per)));
-const stackHtml = (n) => Array.from({ length: n }, (_, i) => `<i class="c${Math.min(2, i >> 1)}"></i>`).join('');
-function setStack(el, n) {
-  if (el.dataset.n === String(n)) return;
-  el.dataset.n = n;
-  // split into piles of at most six
+function setPile(el, chips) {
+  if (el.dataset.n === String(chips)) return;
+  el.dataset.n = chips;
   let html = '';
-  for (let left = n; left > 0; left -= 6) html += `<em class="stack">${stackHtml(Math.min(6, left))}</em>`;
-  el.innerHTML = el.classList.contains('stack') ? stackHtml(n) : html;
+  for (let d = 0, left = chips; left > 0; d++, left -= 3) html += `<i class="c${d % 3} h${Math.min(3, left)}"></i>`;
+  el.innerHTML = html;
 }
 
 function buildSeats() {
@@ -111,7 +110,7 @@ function buildSeats() {
       `<div class="cards"></div><div class="badge"></div>
        <div class="plate"><div class="ava" data-mood="idle">${p.isHuman ? p.name[0] : face(p.name)}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
-       <div class="bet" hidden><span></span><em class="stack"></em></div><div class="say"></div>`);
+       <div class="bet" hidden><span></span><em class="pile"></em></div><div class="say"></div>`);
     const c = cast[p.seat];
     el.querySelector('.name').innerHTML = `${p.name}${c.tag ? ` <i>${c.tag}</i>` : ''}`;
     if (!p.isHuman) { // spread the opponents evenly along the top
@@ -228,7 +227,7 @@ function render() {
       if (a) fx.pop(badge, 1.5);
     }
     const bet = el.querySelector('.bet');
-    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setStack(bet.lastChild, chipCount(p.bet, 1.25, 6)); }
+    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setPile(bet.lastChild, chipCount(p.bet, 1.5, 9)); }
     else { bet.hidden = true; bet.firstChild._cur = 0; }
     const d = el.querySelector('.dealer');
     if (g.dealer === i && !d) el.querySelector('.plate').append(h('div', 'dealer', 'D'));
@@ -266,7 +265,7 @@ function render() {
 
   $('pot').hidden = !g.pot || over;
   fx.roll($('pot-n'), over ? 0 : g.pot, { dur: 300 });
-  if (g.pot && !over) setStack($('pot-chips'), chipCount(g.pot, 2.4, 18));
+  if (g.pot && !over) setPile($('pot-chips'), chipCount(g.pot, 2.6, 21));
   const msg = over ? g.result.text : '';
   if ($('msg').textContent !== msg) {
     $('msg').textContent = msg;
