@@ -319,7 +319,7 @@ let game = null;
 let runId = 0;
 let seatEls = [];
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false, throwPower: 0, scatter: 0 };
+const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false, throwPower: 0, scatter: 0, revealGap: 0 };
 let settled = false; // false between the last action of a hand and the moment the result is shown
 let overlay = null; // { items, focus, closable }
 
@@ -414,7 +414,7 @@ function render() {
         for (const c of cards.children) c.classList.add('toss');
         setTimeout(() => { if (!cards.dataset.sig) cards.replaceChildren(); }, 340);
       } else if (old.includes('x') && !sig.includes('x')) { // turn them over, one player after another
-        const wait = reveals++ * REVEAL_GAP;
+        const wait = reveals++ * (ui.revealGap || REVEAL_GAP);
         cards.replaceChildren(...p.cards.map((c, k) => {
           const e = cardEl(c, true, 'flip');
           e.style.animationDelay = `${wait + k * 90}ms`;
@@ -1431,7 +1431,7 @@ function startTable(n, saved) {
   $('pot').hidden = true;
   $('hud').innerHTML = bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${table}</b><br>${cfg.venue}`;
   ui.mode = 'wait'; ui.resolve = null;
-  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
+  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true; $('app').classList.remove('zoom');
   runId++; // stop any game loop still running from the previous table
   renderActions();
   if (saved?.chips) run(); else tableIntro(run);
@@ -1544,9 +1544,23 @@ async function run() {
     if (fast) { fast = false; audio.hush(false); await rawSleep(350); }
     // let everyone turn their cards over before the result lands
     if (mode === 'pass') { ui.hidden = true; ui.noAnim = true; } // a winner who wasn't called doesn't have to show
+    // A big pot going to a showdown gets slow motion: the view pushes in, the music sinks,
+    // and the hands turn over one at a time with a heartbeat before the result lands.
+    const stake = g.players.reduce((sum, p) => sum + p.won, 0);
+    const slowmo = g.result.showdown && !g.runout && !fast && stake >= 20 * g.bb && (!me.folded || stake >= 40 * g.bb);
+    if (slowmo) {
+      $('app').classList.add('zoom');
+      audio.tension(true); audio.heartbeat(); fx.haptic('nudge');
+      ui.revealGap = 900;
+      await rawSleep(700);
+    }
     render();
     ui.noAnim = false;
-    if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);
+    const gap = ui.revealGap || REVEAL_GAP;
+    if (slowmo) for (let k = 0; k < ui.reveals; k++) setTimeout(() => { audio.heartbeat(); fx.haptic('nudge'); }, k * gap + gap - 260);
+    ui.revealGap = 0;
+    if (ui.reveals) await (slowmo ? rawSleep : sleep)(ui.reveals * gap + (slowmo ? 900 : 500));
+    if (slowmo) { $('app').classList.remove('zoom'); audio.tension(false); fx.shake(5, 300); }
     if (id !== runId) return;
     settled = true;
     const kos = mode === 'pass' ? 0 : recordHand(g);
