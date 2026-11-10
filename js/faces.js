@@ -20,6 +20,11 @@ const EXTRA = {
   Vera: '<g fill="none"><path d="M5 9.5 Q16 4 27 9.5"/><path d="M5 9.5 L27 9.5"/></g><circle cx="24" cy="20" r="0.9"/>', // dealer's visor and a beauty spot
   Otto: '<g fill="none"><circle cx="21" cy="14" r="4.6"/><path d="M25 17.5 L27 24"/></g>', // monocle on a chain
   Stone: '<path d="M6 10 L26 10" fill="none" stroke-width="2.6"/>', // one flat brow
+  Zed: '<path d="M12 6 L16 0.8 L20 6 Z"/>', // mohawk
+  Flo: '<circle cx="16" cy="4.6" r="3.2" fill="none"/>', // hair bun
+  Kit: '<g><path d="M6.5 11 L15 16.5" fill="none"/><rect x="7.6" y="11" width="6.8" height="5.8" rx="1.6"/></g>', // eye patch
+  Bea: '<g fill="none"><circle cx="5.4" cy="21" r="1.8"/><circle cx="26.6" cy="21" r="1.8"/></g>', // earrings
+  Sol: '<g><rect x="6.6" y="11" width="8.2" height="5.6" rx="1.8"/><rect x="17.2" y="11" width="8.2" height="5.6" rx="1.8"/><path d="M14.8 13 L17.2 13" fill="none"/></g>', // sunglasses
   Gus: '<path d="M9.5 19.5 Q12.5 16.5 16 19 Q19.5 16.5 22.5 19.5 Q19.5 21 16 19.6 Q12.5 21 9.5 19.5 Z"/>', // moustache
 };
 export function face(name) {
