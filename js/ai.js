@@ -41,14 +41,16 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random) {
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
-  const { loose = 0.5, aggr = 0.5, tell, skill = 1 } = p.style || {};
+  const { loose = 0.5, aggr = 0.5, tell, skill = 1, cheat = 0, noBluff = false } = p.style || {};
   const sloppy = 1 - skill; // weaker players see their hands less clearly and call too much
   const { foldToBet = 0.4, aggression = 0.3 } = human;
   const pot = g.pot, toCall = L.toCall, bb = g.bb;
   const opp = g.players.filter((q) => !q.folded && q !== p).length;
   const hero = g.players.find((q) => q.isHuman && !q.folded && q !== p);
   // bluff more at a human who folds a lot, call lighter against one who bets a lot
-  const bluffy = hero ? 0.5 + foldToBet * 1.6 : 1;
+  const bluffy = noBluff ? 0 : hero ? 0.5 + foldToBet * 1.6 : 1;
+  // a cheating boss half-knows the human's cards: blend in the true odds against them
+  const truth = cheat && hero && hero.cards.length ? runoutOdds([p.cards, hero.cards], g.board, 120, rng)[0] : null;
   const lighter = hero && g.aggressor === hero.seat ? (aggression - 0.3) * 0.2 : 0;
   let think = 0.1 + rng() * 0.25;
 
@@ -65,7 +67,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
     const position = behind <= 1 ? 1 : behind >= 4 ? -0.7 : 0; // looser late, tighter early
-    const s = chen(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2;
+    const s = chen(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const shove = toCall >= p.chips; // calling puts us all-in
@@ -86,7 +88,8 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     return giveUp();
   }
 
-  const e = equity(p.cards, g.board, Math.min(opp, 3), 200, rng) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
+  let e = equity(p.cards, g.board, Math.min(opp, 3), 200, rng) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
+  if (truth !== null) e = e * (1 - cheat) + truth * cheat;
   const strong = e > 0.75;
   if (toCall === 0) {
     if (e > 0.7) return rng() < 0.6 + 0.35 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });

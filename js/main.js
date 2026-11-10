@@ -15,6 +15,14 @@ const CHARACTERS = {
   Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
   Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.5, aggr: 0.55 } },
 };
+// Bosses: after every third table you play one of these heads-up. Each bends a rule.
+const BOSSES = [
+  { name: 'Vera', tag: 'The Dealer', color: '#b58cff', voice: 6, trick: 'She always seems to know roughly what you are holding.', style: { loose: 0.5, aggr: 0.7, cheat: 0.55 } },
+  { name: 'Otto', tag: 'The Whale', color: '#5fd0c5', voice: 7, trick: 'He sits down with three times your chips and loves to gamble.', chips: 3, style: { loose: 0.9, aggr: 0.75, tell: 'fastBluff' } },
+  { name: 'Stone', tag: 'The Rock', color: '#b9b2a3', voice: 8, trick: 'He never bluffs and only plays strong hands, but the blinds rise every 2 hands.', turbo: true, style: { loose: 0.05, aggr: 0.45, noBluff: true } },
+];
+const bossFor = (n) => BOSSES[(Math.floor(n / 3) - 1 + BOSSES.length * 99) % BOSSES.length];
+let bossMode = false; // true while playing the boss that follows table `table`
 // A run is a climb through tables: knock everyone out to move up. Each table has more
 // or sharper opponents and faster blinds.
 // Each table is a place, with its own cloth.
@@ -27,7 +35,14 @@ const TWISTS = [
   { key: 'short', name: 'Short stacks', text: 'everyone starts with half the usual chips.' },
   { key: 'deep', name: 'Deep stacks', text: 'everyone starts with double the usual chips.' },
 ];
-function tableConfig(n) {
+function tableConfig(n, boss = false) {
+  if (boss) {
+    const b = bossFor(n);
+    return {
+      names: [b.name], boss: b, skill: 1, venue: `${b.name}, ${b.tag}`, mat: '#3a3355', twist: null,
+      handsPerLevel: b.turbo ? 2 : 4, chips: STACKS[prefs.stack],
+    };
+  }
   const names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
   const [venue, mat] = VENUES[(n - 1) % VENUES.length];
   const lap = Math.ceil(n / VENUES.length);
@@ -322,7 +337,7 @@ function render() {
     $('msg').classList.toggle('show', !!msg);
   }
   const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
-  $('hud').innerHTML = `Table <b>${table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
+  $('hud').innerHTML = `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   renderActions();
 }
@@ -543,7 +558,7 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
+      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
       : [[`${glyph('A')}Play`, firstPlay], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
 }
@@ -664,7 +679,14 @@ function settingsMenu(back) {
   });
 }
 function tableIntro(start) {
-  const cfg = tableConfig(table);
+  const cfg = tableConfig(table, bossMode);
+  if (bossMode) {
+    return showOverlay({
+      title: 'Boss <span>fight</span>',
+      body: `<p class="venue">${cfg.venue}</p><p>One on one. Beat ${cfg.boss.name} to carry on; lose and the run is over.</p><p class="who"><b>${cfg.boss.tag}:</b> ${cfg.boss.trick}</p>${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
+      items: [[`${glyph('A')}Sit down`, start]],
+    });
+  }
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
@@ -675,15 +697,27 @@ function tableIntro(start) {
 function tableCleared() {
   audio.musicLevel(0);
   audio.win(3); fx.burst($('center'), 60);
+  if (bossMode) { // beat the boss: on to the next table
+    stats.bosses = (stats.bosses || 0) + 1; saveStats();
+    writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
+    const b = bossFor(table);
+    return showOverlay({
+      title: 'Boss <span>beaten!</span>',
+      body: `<p>${b.name} is out of chips after ${game.handNo} hands. Next up: ${tableConfig(table + 1).venue}.</p>`,
+      items: [[`${glyph('A')}Carry on`, () => startTable(table + 1, loadSave())]],
+    });
+  }
   const before = best();
   try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
-  writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
+  const bossNext = table % 3 === 0;
+  writeSave({ table: bossNext ? table : table + 1, boss: bossNext, habits, run: runStats, perks, owed: true });
   stats.tables++; saveStats();
+  const next = bossNext ? `a boss: ${bossFor(table).name}, ${bossFor(table).tag}` : `${tableConfig(table + 1).venue}, and it's tougher`;
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. Next up: ${tableConfig(table + 1).venue}, and it's tougher.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
-    items: [[`${glyph('A')}Table ${table + 1}`, () => startTable(table + 1)]],
+    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
+    items: [[`${glyph('A')}${bossNext ? 'Face the boss' : `Table ${table + 1}`}`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
   });
 }
 function busted() {
@@ -693,13 +727,13 @@ function busted() {
   bustSummary();
 }
 function bustSummary() {
-  const cleared = table - 1;
+  const cleared = bossMode ? table : table - 1;
   const r = runStats;
   const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
   const record = cleared > r.startBest ? '<p class="venue">New best run!</p>' : `<p>Best run: ${tables(best())} cleared.</p>`;
   showOverlay({
     title: 'Busted', wide: true,
-    body: `<p>Out at Table ${table}, ${tableConfig(table).venue}.</p>${record}<div class="stats">
+    body: `<p>${bossMode ? `Beaten by ${bossFor(table).name}, ${bossFor(table).tag}, after Table ${table}.` : `Out at Table ${table}, ${tableConfig(table).venue}.`}</p>${record}<div class="stats">
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
@@ -938,7 +972,7 @@ function loadSave() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (!s || !(s.table >= 1)) return null;
-    if (s.chips && (s.chips.length !== tableConfig(s.table).names.length + 1 || !(s.chips[ME] > 0))) return null;
+    if (s.chips && (s.chips.length !== tableConfig(s.table, !!s.boss).names.length + 1 || !(s.chips[ME] > 0))) return null;
     return s;
   } catch { return null; }
 }
@@ -952,10 +986,13 @@ function startTable(n, saved) {
   if (saved?.perks) perks = saved.perks;
   if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks, owed: false })); // a perk is due for the table just cleared
   table = n;
-  const cfg = tableConfig(n);
-  cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
+  bossMode = !!saved?.boss;
+  const cfg = tableConfig(n, bossMode);
+  const info = (name) => (cfg.boss ? cfg.boss : CHARACTERS[name]);
+  cast = [YOU, ...cfg.names.map((name) => ({ name, ...info(name), style: { ...info(name).style, skill: cfg.skill } }))];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips });
   game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
+  if (cfg.boss?.chips) game.players[1].chips = cfg.chips * cfg.boss.chips;
   twist = cfg.twist?.key || '';
   if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best() }; }
   if (saved?.run) runStats = { ...RUN0, ...saved.run };
@@ -964,13 +1001,13 @@ function startTable(n, saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-  } else writeSave({ table: n, habits, run: runStats, perks });
+  } else writeSave({ table: n, boss: bossMode, habits, run: runStats, perks });
   $('app').style.setProperty('--mat', cfg.mat);
   audio.setVenue(n - 1);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;
-  $('hud').innerHTML = `Table <b>${table}</b><br>${cfg.venue}`;
+  $('hud').innerHTML = bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${table}</b><br>${cfg.venue}`;
   ui.mode = 'wait'; ui.resolve = null;
   lastBB = 0; fast = false; audio.hush(false);
   runId++; // stop any game loop still running from the previous table
@@ -1070,13 +1107,13 @@ async function run() {
     }
     if (me.chips === 0 && perks.lifeline > 0) { // one more chance
       perks.lifeline--;
-      me.chips = Math.round(tableConfig(table).chips * 0.3);
+      me.chips = Math.round(tableConfig(table, bossMode).chips * 0.3);
       setTimeout(() => { fx.banner('Lifeline!', 'info'); audio.win(1); }, 1200);
     }
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks });
+    writeSave({ table, boss: bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
