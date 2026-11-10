@@ -5,7 +5,13 @@
   font-family: Bricolage; src: url(../fonts/bricolage.woff2) format("woff2");
   font-weight: 200 800; font-display: swap;
 }
-html { font-size: min(2.6vh, 1.3vw); font-size: min(2.6dvh, 1.3vw); }
+html {
+  font-size: min(2.6vh, 1.3vw);
+  /* size from the usable area: a notch and home bar take a real bite out of a phone in landscape */
+  font-size: min(
+    calc((100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * .026),
+    calc((100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) * .013));
+}
 :root {
   --ink: #14112b; --paper: #f6eedb; --bg: #17143a; --dot: #221d52;
   --blue: #3050e0; --red: #ff4f38; --yellow: #ffc21a; --mint: #22c998; --pink: #ff8fc7; --sky: #8fb4ff;
@@ -93,7 +99,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .card.toss { animation: toss .34s ease-in both; }
 .card.hl { translate: 0 -.45em; scale: 1.08; z-index: 2; }
 .card.hl .in { box-shadow: 0 0 0 .16em var(--yellow), .3em .3em 0 var(--ink); }
-.seat:not(.me) .card.hl { translate: 0 -.25em; scale: 1.04; }
+.seat:not(.me) .card.hl { translate: 0 0; scale: 1.04; } /* no lift: there is no room above the top row */
 .card.dim { filter: brightness(.5) saturate(.5); }
 @keyframes deal { /* waits invisibly on the deck, then flies to its seat */
   0% { opacity: 0; rotate: 0deg; transform: translate(var(--dx, 0), var(--dy, -6em)) scale(var(--ds, 1)); }
@@ -274,7 +280,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .seat.ai .plate .chips { font-size: 1.85rem; } /* left, colour and deal direction are set per seat in JS */
 
 /* the human seat: big cards that breathe, plate to the left */
-.seat.s0 { left: 46%; top: 86%; --dy: -14rem; }
+.seat.s0 { left: 40%; top: 86%; --dy: -14rem; }
 .seat.me { --bx: 0rem; --by: -7.4rem; }
 .seat.me .cards { font-size: 2.4rem; gap: .2em; transition: translate .3s var(--spring); }
 .seat.me.active .cards { translate: 0 -1rem; }
@@ -286,7 +292,10 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 }
 .seat.me .plate { position: absolute; right: 100%; bottom: .6rem; margin: 0 1.6rem 0 0; }
 .seat.me .ava { background: var(--blue); color: var(--paper); }
-.seat.me .plate .hand { top: auto; bottom: calc(100% + .5rem); font-size: 1.35rem; background: var(--paper); color: var(--ink); border: .18rem solid var(--ink); }
+.seat.me .plate .hand { /* long hand names wrap rather than spill over the cards or the status text */
+  top: auto; bottom: calc(100% + .5rem); font-size: 1.3rem; line-height: 1.15; background: var(--paper); color: var(--ink); border: .18rem solid var(--ink);
+  white-space: normal; text-align: center; width: max-content; max-width: 12rem;
+}
 .seat.me .badge { top: auto; bottom: 9.2rem; left: auto; right: 100%; margin-right: 1.6rem; transform: none; }
 .seat.me.folded { opacity: 1; filter: none; }
 .seat.me.folded .cards { opacity: .4; filter: grayscale(1); }
@@ -297,7 +306,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   background: var(--paper); color: var(--ink); border: var(--line); box-shadow: .3rem .3rem 0 var(--ink); font-size: 1.9rem;
 }
 #menu-btn:active { translate: .3rem .3rem; box-shadow: none; }
-#hud { position: absolute; left: 6.4rem; bottom: 1.3rem; font-size: 1.2rem; font-weight: 500; color: var(--sky); line-height: 1.35; }
+#hud { position: absolute; left: 1.1rem; bottom: 6.4rem; font-size: 1.2rem; font-weight: 500; color: var(--sky); line-height: 1.35; white-space: nowrap; }
 #hud b { color: var(--paper); font-weight: 800; }
 
 /* ---------- action bar ---------- */
@@ -314,6 +323,11 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   transition: translate .08s, box-shadow .08s, scale .2s var(--spring), rotate .2s var(--spring);
 }
 .btn small { display: block; font-size: 1.3rem; }
+.btn .need { /* coach: the win chance a call needs, as a sticker above the button */
+  position: absolute; left: 50%; bottom: calc(100% + .5rem); transform: translateX(-50%); rotate: -3deg;
+  font-style: normal; font-size: 1.15rem; white-space: nowrap; padding: 0 .6rem; border-radius: .5rem;
+  background: var(--paper); color: var(--red); border: .18rem solid var(--ink);
+}
 .btn.fold { --bg: var(--red); }
 .btn.call { --bg: var(--mint); }
 .btn.raise { --bg: var(--yellow); }
@@ -421,8 +435,8 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 /* left-handed: mirror the bottom row */
 .lefty #actions { right: auto; left: 1.2rem; align-items: flex-start; }
 .lefty #menu-btn { left: auto; right: 1rem; }
-.lefty #hud { left: auto; right: 6.4rem; text-align: right; }
-.lefty .seat.s0 { left: 54%; }
+.lefty #hud { left: auto; right: 1.1rem; text-align: right; }
+.lefty .seat.s0 { left: 60%; }
 .lefty .seat.me .plate { right: auto; left: 100%; margin: 0 0 0 1.6rem; }
 .lefty .seat.me .badge { right: auto; left: 100%; margin: 0 0 0 1.6rem; }
 
