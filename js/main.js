@@ -91,14 +91,21 @@ function cardEl(c, face, cls = '', cover = false) {
   return el;
 }
 
-// Chips are drawn from above: discs laid in an overlapping pile. More chips means more
-// discs, and each disc can be a short stack (shown by its offset edge), up to three high.
+// Chips are drawn from above as a heap: discs spiral out from the middle in x and y,
+// overlapping, with the middle of the heap on top. The layout is fixed for a given
+// count, so a pile grows outwards as chips are added rather than reshuffling.
 const chipCount = (amount, per, max) => Math.max(1, Math.min(max, Math.round(Math.log2(amount / game.bb + 1) * per)));
-function setPile(el, chips) {
-  if (el.dataset.n === String(chips)) return;
-  el.dataset.n = chips;
+function setPile(el, n) {
+  if (el.dataset.n === String(n)) return;
+  el.dataset.n = n;
+  const gap = 0.6, disc = 1.55; // em
+  const R = gap * Math.sqrt(Math.max(0, n - 1));
+  el.style.width = el.style.height = `${(2 * R + disc + 0.3).toFixed(2)}em`;
   let html = '';
-  for (let d = 0, left = chips; left > 0; d++, left -= 3) html += `<i class="c${d % 3} h${Math.min(3, left)}"></i>`;
+  for (let i = n - 1; i >= 0; i--) { // outer chips first, so they sit underneath
+    const a = i * 2.39996 + 0.7, r = gap * Math.sqrt(i); // golden-angle spiral
+    html += `<i class="c${i % 3} h${i % 4 === 0 ? 2 : 1}" style="left:${(R + r * Math.cos(a)).toFixed(2)}em;top:${(R + r * Math.sin(a)).toFixed(2)}em"></i>`;
+  }
   el.innerHTML = html;
 }
 
@@ -227,7 +234,7 @@ function render() {
       if (a) fx.pop(badge, 1.5);
     }
     const bet = el.querySelector('.bet');
-    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setPile(bet.lastChild, chipCount(p.bet, 1.5, 9)); }
+    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setPile(bet.lastChild, chipCount(p.bet, 1.7, 10)); }
     else { bet.hidden = true; bet.firstChild._cur = 0; }
     const d = el.querySelector('.dealer');
     if (g.dealer === i && !d) el.querySelector('.plate').append(h('div', 'dealer', 'D'));
@@ -265,7 +272,7 @@ function render() {
 
   $('pot').hidden = !g.pot || over;
   fx.roll($('pot-n'), over ? 0 : g.pot, { dur: 300 });
-  if (g.pot && !over) setPile($('pot-chips'), chipCount(g.pot, 2.6, 21));
+  if (g.pot && !over) setPile($('pot-chips'), chipCount(g.pot, 3, 16));
   const msg = over ? g.result.text : '';
   if ($('msg').textContent !== msg) {
     $('msg').textContent = msg;
