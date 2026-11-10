@@ -9,6 +9,22 @@ const KEYS = {
 const REPEATS = new Set(['up', 'down', 'left', 'right']);
 const FIRST = 380, NEXT = 90;
 
+// How hard "up" is being held right now, 0..1: either stick, the D-pad, or the up arrow.
+// Used for analogue gestures such as squeezing your cards.
+let upKey = false;
+addEventListener('keydown', (e) => { if (e.key === 'ArrowUp') upKey = true; });
+addEventListener('keyup', (e) => { if (e.key === 'ArrowUp') upKey = false; });
+addEventListener('blur', () => { upKey = false; });
+export function upAmount() {
+  let v = upKey ? 1 : 0;
+  for (const gp of navigator.getGamepads?.() ?? []) {
+    if (!gp) continue;
+    if (gp.buttons[12]?.pressed) v = 1;
+    for (const ax of [gp.axes[1], gp.axes[3]]) if (ax < -0.15) v = Math.max(v, Math.min(1, (-ax - 0.15) / 0.75));
+  }
+  return v;
+}
+
 export function startInput(onButton, onConnection) {
   const held = new Map(); // button -> time of next auto-repeat
   let connected = false;
