@@ -874,6 +874,11 @@ function onButton(b) {
 // ---------- effects tied to game events ----------
 function actionFx(p, potBefore) {
   if (fast) return;
+  { // your own actions each have their own feel; other players' bets are a faint nudge
+    const a0 = p.lastAction;
+    const kind = a0 === 'Fold' ? 'fold' : a0 === 'Check' ? 'check' : a0.startsWith('Call') ? 'call' : a0.startsWith('All-in') ? '' : 'raise';
+    if (p.isHuman) fx.haptic(kind); else if (kind === 'raise') fx.haptic('nudge');
+  }
   const el = seatEls[p.seat];
   const a = p.lastAction;
   const bet = el.querySelector('.bet');
@@ -888,11 +893,12 @@ function actionFx(p, potBefore) {
     if (!p.isHuman && Math.random() < 0.7) setTimeout(() => say(p, 'allin'), 500);
     for (const q of game.players) if (q !== p && !q.folded && !q.out) setTimeout(() => setMood(q.seat, 'shock', 1500), 450);
     audio.allin();
-    setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); fx.banner('All in!'); }, 450);
+    fx.haptic('allin');
+    setTimeout(() => { fx.shake(10, 500); fx.banner('All in!'); }, 450);
   } else {
     if (a.startsWith('Call')) audio.chips(2, 0.05);
     else audio.raise(size > 0.6 ? 4 : 3);
-    if (/^(Bet|Raise)/.test(a) && size > 0.6) { fx.shake(3, 220); fx.rumble(0.4, 0.6, 90); }
+    if (/^(Bet|Raise)/.test(a) && size > 0.6) fx.shake(3, 220);
   }
 }
 
@@ -926,9 +932,9 @@ function handOverFx() {
     setTimeout(() => {
       fx.burst(seatEls[ME].querySelector('.cards'), 14 + size * 14);
       if (size > 1) fx.shake(size * 3, 400);
-      fx.rumble(0.6, 1, 120 + size * 80);
+      fx.haptic(size >= 3 ? 'win3' : 'win1');
     }, 250);
-  } else if (!me.folded && g.result.showdown) audio.lose();
+  } else if (!me.folded && g.result.showdown) { audio.lose(); fx.haptic('lose'); }
   else audio.win(0);
 }
 
@@ -1118,13 +1124,14 @@ async function run() {
     const others = g.players.filter((p) => !p.isHuman && !p.out);
     peekSeat = perks.peek && others.length ? others[Math.floor(Math.random() * others.length)].seat : -1;
     logStart(g);
-    if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); }
+    if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); fx.haptic('blinds'); }
     lastBB = g.bb;
     fx.shuffle($('deck')); audio.shuffle();
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((SHUFFLE_MS + (dealOrder(p.seat) + k * n) * DEAL_GAP) / 1000);
     audio.chips(2, 0.1, 0);
+    if (!me.out) for (const k of [0, 1]) setTimeout(() => fx.haptic('deal'), SHUFFLE_MS + (dealOrder(ME) + k * n) * DEAL_GAP + 450); // feel your cards land
     await rawSleep(SHUFFLE_MS + 2 * n * DEAL_GAP + 500); // the shuffle and deal play at their own speed
     await sleep(350);
     while (g.stage !== 'handOver') {
@@ -1150,7 +1157,7 @@ async function run() {
           await rawSleep(BURN_MS);
           audio.riverSlam();
           await rawSleep(1000); // matches the slam animation and sound, whatever the speed setting
-          fx.shake(8, 400); fx.rumble(1, 1, 250);
+          fx.shake(8, 400); fx.haptic('slam');
           await sleep(500);
         }
         continue;
@@ -1158,7 +1165,7 @@ async function run() {
       const p = g.players[g.toAct];
       let a;
       if (p.isHuman) {
-        audio.turn(); fx.rumble(0.2, 0.5, 70);
+        audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== runId) return;
         a = await prompt('actions');
