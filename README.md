@@ -27,7 +27,8 @@ service worker / offline install. On iOS: open in Safari, Share → Add to Home 
 | LB / RB | Q / E | Jump between bet presets (min, ½ pot, pot, all-in) |
 | Start | P | Menu |
 
-Touch works everywhere too. iOS only exposes a controller to the page after its
+Touch works everywhere too. Sound starts after the first tap or key press (a browser rule);
+sound and music toggles are in the menu. iOS only exposes a controller to the page after its
 first button press.
 
 ## Layout
@@ -37,11 +38,13 @@ first button press.
 - `js/ai.js` – opponents: Chen-formula preflop, Monte Carlo equity vs pot odds postflop, per-player style.
 - `js/input.js` – gamepad polling + keyboard → semantic buttons.
 - `js/main.js` – rendering, action bar, menus, game loop.
+- `js/audio.js` – all sound effects and the background music, synthesised with WebAudio (no audio files).
+- `js/fx.js` – pops, screen shake, flying chips, particles, rolling numbers, rumble.
 - `sw.js`, `manifest.webmanifest` – offline + install.
 
 ## Roadmap
 
 - [x] Stage 1: playable game, AI, controller, PWA shell
-- [ ] Stage 2: chip/card animations, sound, haptics
+- [x] Stage 2: card/chip animations, synthesised sound and music, controller rumble
 - [ ] Stage 3: saved progress, settings (table size, speed, stacks), stats
 - [ ] Stage 4: stronger AI (position, ranges, bet-sizing tells)

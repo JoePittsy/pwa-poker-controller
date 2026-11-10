@@ -1,7 +1,7 @@
 // Network-first with cache fallback: always fresh when online, fully playable offline.
-const CACHE = 'pad-poker-v1';
+const CACHE = 'pad-poker-v2';
 const ASSETS = ['./', 'index.html', 'css/style.css', 'manifest.webmanifest',
-  'js/main.js', 'js/engine.js', 'js/cards.js', 'js/ai.js', 'js/input.js',
+  'js/main.js', 'js/engine.js', 'js/cards.js', 'js/ai.js', 'js/input.js', 'js/audio.js', 'js/fx.js',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
