@@ -933,6 +933,7 @@ function startTable(n, saved) {
     game.handNo = saved.handNo;
   } else writeSave({ table: n, habits, run: runStats });
   $('app').style.setProperty('--mat', cfg.mat);
+  audio.setVenue(n - 1);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;

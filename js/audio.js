@@ -10,6 +10,10 @@ const save = () => { try { localStorage.setItem('padpoker.audio', JSON.stringify
 
 let ctx, sfxBus, musicBus, musicFilter, verb, noiseBuf, musicTimer;
 let level = 0; // how much of the band is playing, see music.js
+// Each venue plays the music in its own key with its own arpeggio; pitched effects follow the key.
+const FLAVOURS = [{ key: 0, arp: 0 }, { key: -2, arp: 1 }, { key: 3, arp: 2 }, { key: -4, arp: 3 }, { key: 5, arp: 4 }];
+let flavour = FLAVOURS[0];
+export function setVenue(i) { flavour = FLAVOURS[((i % FLAVOURS.length) + FLAVOURS.length) % FLAVOURS.length]; }
 const MUSIC_VOL = 0.8;
 let heat = 0; // climbs with every bet/raise in a hand, so the table "heats up"
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -88,7 +92,7 @@ function noise({ delay = 0, a = 0.002, d = 0.1, v = 0.2, type = 'bandpass', f = 
 }
 // the house instrument: a wooden mallet "tok" (fundamental + the 4x partial a marimba bar has)
 function tok(note, { delay = 0, v = 0.3, d = 0.2, bus = sfxBus, wet = 0.15 } = {}) {
-  const f = midi(note);
+  const f = midi(note + (bus === musicBus ? 0 : flavour.key));
   tone({ delay, f, d, v, wet, bus });
   tone({ delay, f: f * 4, d: 0.045, v: v * 0.3, bus });
   noise({ delay, f: 2400, q: 0.6, d: 0.012, v: v * 0.3, bus });
@@ -199,7 +203,7 @@ function startMusic() {
   const schedule = () => {
     if (ctx.state !== 'running' || !settings.music) return;
     if (next < ctx.currentTime) next = ctx.currentTime + 0.15; // we were suspended: start a fresh bar
-    while (next < ctx.currentTime + 0.5) { music.scheduleBar(bar++, next, level); next += BAR; }
+    while (next < ctx.currentTime + 0.5) { music.scheduleBar(bar++, next, level, flavour); next += BAR; }
   };
   musicTimer = setInterval(schedule, 150);
   schedule();

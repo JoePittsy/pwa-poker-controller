@@ -60,3 +60,4 @@ first button press.
 - [x] Opponent faces with moods, skip-hand after folding, blinds-up banner
 - [x] Coach hints, hand-ranks reference, unlockable card backs
 - [x] Real pause, four-colour deck, chip stacks, table venues, how-to-play primer
+- [x] End-of-run summary, rule twists on later tables, bigger faces, per-venue music

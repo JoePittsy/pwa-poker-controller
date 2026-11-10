@@ -27,7 +27,7 @@ const SECTIONS = [
   [['Fmaj9', 'G6', 'Am9', 'Am9'], P3], [['Fmaj9', 'G6', 'Cmaj7', 'E7'], P4],
   [['Am9', 'Fmaj9', 'Dm9', 'Em7'], null], [['Am9', 'Fmaj9', 'Dm9', 'E7'], P2],
 ];
-const ARP = [0, 1, 2, 3, 2, 1, 2, 3];
+const ARPS = [[0, 1, 2, 3, 2, 1, 2, 3], [0, 2, 1, 3, 0, 2, 1, 3], [3, 2, 1, 0, 1, 2, 3, 2], [0, 3, 1, 3, 2, 3, 1, 3], [0, 1, 3, 2, 0, 1, 3, 2]];
 
 export function createMusic(ctx, dest) {
   // ---- signal chain ----
@@ -72,7 +72,7 @@ export function createMusic(ctx, dest) {
 
   // electric piano: two-operator FM whose brightness decays, like a struck tine
   function ep(note, t, dur, v) {
-    const f = midi(note), end = t + dur + 0.5;
+    const f = midi(note + key), end = t + dur + 0.5;
     const car = osc('sine', f, t, end), mod = osc('sine', f, t, end);
     const idx = ctx.createGain();
     idx.gain.setValueAtTime(f * 3.2, t);
@@ -87,7 +87,7 @@ export function createMusic(ctx, dest) {
     car.connect(g); g.connect(pump);
   }
   function bass(note, t, dur, v) {
-    const f = midi(note), end = t + dur + 0.15;
+    const f = midi(note + key), end = t + dur + 0.15;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(v, t + 0.015);
@@ -106,10 +106,10 @@ export function createMusic(ctx, dest) {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.5;
     lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(700, t + 0.25);
-    osc('triangle', midi(note), t, t + 0.35).connect(lp); lp.connect(g); g.connect(pump);
+    osc('triangle', midi(note + key), t, t + 0.35).connect(lp); lp.connect(g); g.connect(pump);
   }
   function lead(note, t, dur, v) {
-    const f = midi(note), end = t + dur + 0.4;
+    const f = midi(note + key), end = t + dur + 0.4;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(v, t + 0.03);
@@ -147,7 +147,11 @@ export function createMusic(ctx, dest) {
   }
 
   // level: 0 = keys and bass only, 1 = + drums and arpeggio, 2 = + melody
-  function scheduleBar(bar, t0, level) {
+  // flavour: { key: semitones to transpose, arp: which arpeggio shape } — each venue has its own
+  let key = 0;
+  function scheduleBar(bar, t0, level, flavour = {}) {
+    key = flavour.key || 0;
+    const ARP = ARPS[(flavour.arp || 0) % ARPS.length];
     const sec = SECTIONS[Math.floor(bar / 4) % SECTIONS.length];
     const inSec = bar % 4;
     const [root, voicing] = CH[sec[0][inSec]];
