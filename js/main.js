@@ -635,7 +635,7 @@ function tableCleared() {
   const before = best();
   try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
-  writeSave({ table: table + 1, habits });
+  writeSave({ table: table + 1, habits, run: runStats });
   stats.tables++; saveStats();
   showOverlay({
     title: 'Table <span>cleared!</span>',
@@ -647,11 +647,20 @@ function busted() {
   audio.musicLevel(0);
   audio.lose();
   writeSave(null);
+  bustSummary();
+}
+function bustSummary() {
   const cleared = table - 1;
+  const r = runStats;
+  const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
+  const record = cleared > r.startBest ? '<p class="venue">New best run!</p>' : `<p>Best run: ${tables(best())} cleared.</p>`;
   showOverlay({
-    title: 'Busted',
-    body: `<p>Out at Table ${table} after ${game.handNo} hands, with ${tables(cleared)} cleared. Best run: ${tables(best())}.</p>`,
-    items: [[`${glyph('A')}New run`, () => startTable(1)]],
+    title: 'Busted', wide: true,
+    body: `<p>Out at Table ${table}, ${tableConfig(table).venue}.</p>${record}<div class="stats">
+      ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
+      ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot')}${tile(r.bestHand || '\u2013', 'best hand')}
+    </div>`,
+    items: [[`${glyph('A')}New run`, () => startTable(1)], ['Stats', () => statsScreen(bustSummary)]],
   });
 }
 
@@ -769,6 +778,8 @@ const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, al
 const stats = { ...STATS0 };
 try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) || {}); } catch { /* private mode */ }
 const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };
+const RUN0 = { hands: 0, won: 0, biggest: 0, knockouts: 0, bestScore: 0, bestHand: '', startBest: 0 };
+let runStats = { ...RUN0 }; // this run only; saved with the game
 let handLog = null; // the hand in progress
 let lastHand = null; // the most recent finished hand
 const cardText = (c) => `<span class="s${c & 3} ${(c & 3) === 1 || (c & 3) === 2 ? 'rd' : 'bk'}">${RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]}${SUITS[c & 3]}</span>`;
@@ -792,15 +803,15 @@ function recordHand(g) {
     handLog.result = g.result.text;
     lastHand = handLog; handLog = null;
   }
-  stats.hands++;
-  if (me.won > 0) { stats.won++; stats.biggest = Math.max(stats.biggest, me.won); }
-  if (g.result.showdown && !me.folded) {
-    stats.showdowns++;
-    if (me.won > 0) stats.showdownsWon++;
-    if (me.score > stats.bestScore) { stats.bestScore = me.score; stats.bestHand = me.handName; }
+  const kos = me.won > 0 ? g.players.filter((p) => !p.isHuman && !p.out && p.chips === 0 && p.total > 0).length : 0;
+  for (const st of [stats, runStats]) {
+    st.hands++;
+    if (me.won > 0) { st.won++; st.biggest = Math.max(st.biggest, me.won); }
+    if (g.result.showdown && !me.folded && me.score > st.bestScore) { st.bestScore = me.score; st.bestHand = me.handName; }
+    st.knockouts += kos;
   }
+  if (g.result.showdown && !me.folded) { stats.showdowns++; if (me.won > 0) stats.showdownsWon++; }
   if (me.allIn) { stats.allins++; if (me.won > 0) stats.allinsWon++; }
-  if (me.won > 0) stats.knockouts += g.players.filter((p) => !p.isHuman && !p.out && p.chips === 0 && p.total > 0).length;
   saveStats();
 }
 
@@ -897,13 +908,14 @@ function startTable(n, saved) {
   const cfg = tableConfig(n);
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: STACKS[prefs.stack] });
-  if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); }
+  if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best() }; }
+  if (saved?.run) runStats = { ...RUN0, ...saved.run };
   if (saved?.habits) habits = saved.habits;
   if (saved?.chips) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-  } else writeSave({ table: n, habits });
+  } else writeSave({ table: n, habits, run: runStats });
   $('app').style.setProperty('--mat', cfg.mat);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
@@ -1000,7 +1012,7 @@ async function run() {
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits });
+    writeSave({ table, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
