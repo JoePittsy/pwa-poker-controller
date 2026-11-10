@@ -441,6 +441,13 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .rd { color: var(--red); } .bk { color: var(--ink); }
 .dialog.perky .btn { min-width: 30rem; height: 6rem; justify-content: flex-start; text-align: left; padding: 0 1.4rem; }
 .dialog.perky .btn small { font-weight: 500; font-size: 1.2rem; line-height: 1.2; margin-top: .15rem; }
+.cal { display: grid; grid-template-columns: repeat(7, 5.6rem); gap: .5rem; margin: .8rem 0 .4rem; }
+.cal div { background: var(--paper); color: var(--ink); border: .18rem solid var(--ink); border-radius: .6rem; padding: .2rem .5rem; line-height: 1.15; }
+.cal div.none { background: none; border-color: #3a3670; color: var(--sky); }
+.cal div.now { box-shadow: 0 0 0 .2rem var(--yellow); }
+.cal i { display: block; font-style: normal; font-size: 1rem; font-weight: 500; opacity: .75; }
+.cal b { font-size: 1.35rem; }
+.dialog p b { color: var(--yellow); }
 .dialog.compact { gap: 3rem; }
 .dialog.compact .items { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.2rem; }
 .dialog.compact .btn { min-width: 15rem; height: 4rem; font-size: 1.45rem; }
