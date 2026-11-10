@@ -92,6 +92,24 @@ export const LINES = {
   },
 };
 
+// Replies to the player's table talk: [to "Nice hand", to "Hurry up", to "Ouch", to "Ha!"]
+const REPLIES = {
+  Mav: ['I know, right?', 'Alright, alright!', 'Ha! That stung?', 'Laugh it up.'],
+  Dot: ['Thank you. It was correct.', 'Precision takes time.', 'Variance. It evens out.', 'I fail to see the joke.'],
+  Rex: ['Obviously.', 'I will take as long as I like.', 'Good.', 'Keep smiling.'],
+  Ivy: ['Aw, thanks!', 'Sorry! Thinking!', 'Oh no, are you okay?', 'Hee hee!'],
+  Gus: ['Kind of you.', 'Fair enough.', 'Tough break.', 'Good one.'],
+  Zed: ['YEAH IT WAS.', 'I AM hurrying!', 'Shake it off!', 'HA!'],
+  Flo: ['I waited for it.', 'No.', 'You should fold more.', 'Hmph.'],
+  Kit: ['Was it, though?', 'Or am I stalling?', 'Saw that coming.', 'Wink.'],
+  Bea: ['A sound return.', 'Time is money. Mine.', 'Losses happen.', 'Amusing.'],
+  Sol: ['Luck, baby!', 'Do not rush the dice.', 'Your luck will turn.', 'Ha! Love it.'],
+  Vera: ['Naturally.', 'The house sets the pace.', 'Predictable.', 'Charming.'],
+  Otto: ['Marvellous, was it not?', 'Patience, dear!', 'Have a canap\u00e9.', 'Ha ha ha!'],
+  Stone: ['Mm.', '\u2026', 'Mm.', '\u2026'],
+};
+for (const [name, [nice, hurry, ouch, ha]] of Object.entries(REPLIES)) Object.assign(LINES[name], { nice: [nice], hurry: [hurry], ouch: [ouch], ha: [ha] });
+
 const last = {};
 export function line(name, moment) {
   const opts = LINES[name]?.[moment];
