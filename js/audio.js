@@ -156,6 +156,11 @@ export const win = sfx((size = 1) => { // 0 = someone else won, 1..3 = our win b
   for (const m of [72, 76, 79, 84]) tok(m + (size > 1 ? 12 : 0), { delay: end, v: 0.24, d: 0.7, wet: 0.5 });
   thud(end, 0.5);
 });
+// each opponent "speaks" in their own register: three quick blips
+export const talk = sfx((seat = 1) => {
+  const base = [0, 67, 76, 55, 81, 62][seat] ?? 67;
+  [0, 3, -2].forEach((n, i) => tone({ delay: i * 0.07, f: midi(base + n), type: 'triangle', d: 0.06, v: 0.13 }));
+});
 export const lose = sfx(() => { // a little "wah-wah"
   tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
   tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });

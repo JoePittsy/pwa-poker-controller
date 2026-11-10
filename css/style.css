@@ -139,7 +139,8 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .seat.winner .plate { background: var(--mint); translate: -.2rem -.5rem; box-shadow: .6rem .7rem 0 var(--ink); }
 .seat.shown .plate { margin-top: -.1rem; }
 .seat.folded { opacity: .5; filter: grayscale(1); }
-.seat.out { opacity: .2; filter: grayscale(1); }
+.seat.out { opacity: .55; }
+.seat.out .plate > * { opacity: .3; }
 .badge {
   position: absolute; top: 1.3rem; left: 50%; transform: translateX(-50%); z-index: 2; rotate: -4deg;
   font-size: 1.2rem; font-weight: 800; padding: .05rem .7rem; border-radius: .6rem; white-space: nowrap;
@@ -150,6 +151,27 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .badge.raise { background: var(--yellow); }
 .badge.allin { background: var(--red); animation: throb .35s ease-in-out infinite alternate; }
 @keyframes throb { to { scale: 1.12; } }
+.badge.think { rotate: 0deg; letter-spacing: .1em; animation: think .7s ease-in-out infinite alternate; }
+@keyframes think { from { opacity: .45; translate: 0 .1rem; } to { opacity: 1; translate: 0 -.15rem; } }
+.say {
+  position: absolute; left: 50%; top: calc(100% + 2.3rem); z-index: 6; transform: translateX(-50%);
+  max-width: 17rem; width: max-content; padding: .3rem .8rem; border-radius: .9rem; text-align: center;
+  font-size: 1.25rem; line-height: 1.15; background: var(--paper); color: var(--ink);
+  border: .2rem solid var(--ink); box-shadow: .3rem .3rem 0 var(--ink);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.say::before { /* tail pointing up at the speaker */
+  content: ""; position: absolute; left: 50%; bottom: 100%; margin-left: -.5rem;
+  border: .5rem solid transparent; border-bottom-color: var(--ink);
+}
+.say.show { opacity: 1; animation: speak .35s var(--spring); }
+@keyframes speak { from { transform: translateX(-50%) scale(.4) rotate(-6deg); } }
+.seat.out .plate { rotate: 7deg; }
+.seat.out .plate::after {
+  content: "OUT"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-14deg);
+  font-size: 1.7rem; font-weight: 800; letter-spacing: .1em; color: var(--red);
+  border: .22rem solid var(--red); border-radius: .4rem; padding: 0 .5rem; background: rgba(246, 238, 219, .85);
+}
 .dealer {
   position: absolute; top: -1rem; right: -1rem; width: 2.1rem; height: 2.1rem; border-radius: 50%;
   background: var(--ink); color: var(--paper); border: .16rem solid var(--paper);
