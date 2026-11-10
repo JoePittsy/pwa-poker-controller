@@ -57,6 +57,7 @@ export class Game {
     for (const p of alive) p.cards = [this.deck.pop(), this.deck.pop()];
     this.currentBet = this.bb;
     this.lastRaise = this.bb;
+    this.aggressor = -1; // seat of the last bet or raise this street
     this.toAct = bbSeat;
     this._advance();
     return true;
@@ -104,6 +105,7 @@ export class Game {
         for (const q of this.players) q.acted = false;
       }
       this.currentBet = to;
+      this.aggressor = p.seat;
       p.lastAction = p.allIn ? `All-in ${to}` : `${opening ? 'Bet' : 'Raise'} ${to}`;
     } else throw new Error('unknown action ' + type);
     p.acted = true;
@@ -138,6 +140,7 @@ export class Game {
     for (const p of this.players) { p.bet = 0; p.acted = false; if (!p.folded) p.lastAction = p.allIn ? 'All-in' : ''; }
     this.currentBet = 0;
     this.lastRaise = this.bb;
+    this.aggressor = -1;
     if (this.street === 'river') return this._showdown();
     const n = this.street === 'preflop' ? 3 : 1;
     for (let i = 0; i < n; i++) this.board.push(this.deck.pop());

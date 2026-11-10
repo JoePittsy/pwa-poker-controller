@@ -4,13 +4,14 @@ import { startInput } from './input.js';
 import { RANKS, SUITS, evaluate, describe } from './cards.js';
 import * as audio from './audio.js';
 import * as fx from './fx.js';
+import { line } from './banter.js';
 
 const ROSTER = [
   { name: 'You', isHuman: true },
-  { name: 'Mav', tag: 'Wild', style: { loose: 0.8, aggr: 0.8 } },
-  { name: 'Dot', tag: 'Careful', style: { loose: 0.25, aggr: 0.3 } },
-  { name: 'Rex', tag: 'Shark', style: { loose: 0.35, aggr: 0.85 } },
-  { name: 'Ivy', tag: 'Sticky', style: { loose: 0.75, aggr: 0.3 } },
+  { name: 'Mav', tag: 'Wild', style: { loose: 0.8, aggr: 0.8, tell: 'fastBluff' } },
+  { name: 'Dot', tag: 'Careful', style: { loose: 0.25, aggr: 0.3, tell: 'slowBluff' } },
+  { name: 'Rex', tag: 'Shark', style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
+  { name: 'Ivy', tag: 'Sticky', style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
   { name: 'Gus', tag: 'Steady', style: { loose: 0.5, aggr: 0.55 } },
 ];
 const ME = 0;
@@ -51,7 +52,7 @@ function buildSeats() {
       `<div class="cards"></div><div class="badge"></div>
        <div class="plate"><div class="ava">${p.name[0]}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
-       <div class="bet" hidden><span></span></div>`);
+       <div class="bet" hidden><span></span></div><div class="say"></div>`);
     el.querySelector('.name').innerHTML = `${p.name}${ROSTER[p.seat].tag ? ` <i>${ROSTER[p.seat].tag}</i>` : ''}`;
     $('seats').append(el);
     return el;
@@ -415,6 +416,7 @@ function actionFx(p, potBefore) {
   fx.pop(bet, allIn ? 1.7 : 1.35);
   fx.pop($('pot'), 1.12);
   if (allIn) {
+    if (!p.isHuman && Math.random() < 0.7) setTimeout(() => say(p, 'allin'), 500);
     audio.allin();
     setTimeout(() => { fx.shake(10, 500); fx.rumble(1, 1, 350); }, 450);
   } else {
@@ -454,6 +456,62 @@ function handOverFx() {
   else audio.win(0);
 }
 
+// ---------- opponent character ----------
+const bluffers = new Set(); // seats that have bluff-raised this hand
+// How the human has been playing; the AI adapts to it (see ai.js).
+let habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
+function noteHumanAction(a, L) {
+  habits.acts++;
+  if (a.type === 'raise') habits.raises++;
+  if (L.toCall > 0) { habits.facing++; if (a.type === 'fold') habits.folds++; }
+}
+const humanProfile = () => ({
+  foldToBet: (habits.folds + 2) / (habits.facing + 5),
+  aggression: (habits.raises + 1.5) / (habits.acts + 5),
+});
+
+// Each opponent's pause before acting: longer for hard decisions, bent by their personal tell.
+function thinkTime(p, a) {
+  let t = 450 + a.think * 1900 + Math.random() * 300;
+  const tell = p.style?.tell;
+  if (tell === 'fastBluff' && a.bluff) t = 260;
+  if (tell === 'slowBluff' && a.bluff) t += 1800;
+  if (tell === 'slowStrong' && a.strong) t += 1400;
+  return t;
+}
+function showThinking(seat) {
+  const badge = seatEls[seat].querySelector('.badge');
+  badge.textContent = '\u2022 \u2022 \u2022';
+  badge.className = 'badge think';
+}
+function say(p, moment) {
+  const text = line(p.name, moment);
+  if (!text) return;
+  const el = seatEls[p.seat].querySelector('.say');
+  el.textContent = text;
+  el.classList.remove('show');
+  void el.offsetWidth; // restart the pop animation
+  el.classList.add('show');
+  audio.talk(p.seat);
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2600);
+}
+function handOverBanter() {
+  const g = game;
+  if (g.stage !== 'handOver') return; // the next hand has already started
+  const ais = g.players.filter((p) => !p.isHuman && !p.out);
+  let said = 0;
+  const maybe = (p, moment, chance) => { if (said < 2 && Math.random() < chance) { say(p, moment); said++; } };
+  for (const p of ais) if (p.chips === 0 && p.total > 0) { say(p, 'bust'); said++; }
+  const big = g.players.reduce((s, p) => s + p.won, 0) > 20 * g.bb;
+  for (const p of ais) {
+    if (p.won > 0 && p.chips > 0) {
+      if (g.result.showdown) maybe(p, 'win', big ? 0.75 : 0.35);
+      else maybe(p, bluffers.has(p.seat) ? 'bluffed' : 'steal', bluffers.has(p.seat) ? 0.6 : 0.2);
+    } else if (g.result.showdown && !p.folded && p.won === 0 && p.chips > 0 && p.total > 8 * g.bb) maybe(p, 'lose', 0.6);
+  }
+}
+
 // ---------- game loop ----------
 // Progress is saved between hands so a reload (new version, or iOS evicting the app) is harmless.
 const SAVE_KEY = 'padpoker.save';
@@ -473,7 +531,11 @@ function newGame(saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-  } else writeSave(null);
+    if (saved.habits) habits = saved.habits;
+  } else {
+    writeSave(null);
+    habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
+  }
   buildSeats();
   ui.mode = 'wait'; ui.resolve = null;
   run();
@@ -486,6 +548,7 @@ async function run() {
   while (g.startHand()) {
     audio.tension(false);
     audio.newHand();
+    bluffers.clear();
     audio.musicLevel(1);
     render();
     const n = g.players.length;
@@ -514,9 +577,14 @@ async function run() {
       if (p.isHuman) {
         audio.turn(); fx.rumble(0.2, 0.5, 70);
         a = await prompt('actions');
+        noteHumanAction(a, g.legal(ME));
       } else {
-        await sleep(me.folded ? 300 : 550 + Math.random() * 650);
-        a = decide(g, p.seat);
+        a = decide(g, p.seat, Math.random, humanProfile());
+        const wait = me.folded ? 300 : thinkTime(p, a);
+        if (wait > 1100) showThinking(p.seat);
+        if (wait > 2000 && Math.random() < 0.35) say(p, 'tank');
+        await sleep(wait);
+        if (a.bluff && a.type === 'raise') bluffers.add(p.seat);
       }
       if (id !== runId) return;
       const potBefore = g.pot, wasHidden = !g.showCards;
@@ -527,7 +595,8 @@ async function run() {
     }
     audio.tension(false);
     handOverFx();
-    writeSave({ chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo });
+    setTimeout(handOverBanter, 700);
+    writeSave({ chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
