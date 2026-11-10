@@ -81,6 +81,86 @@ function pickPerk(done) {
   });
 }
 
+// What is being played: 'run' (the climb) or 'daily' (today's fixed deal).
+let mode = 'run';
+let aiRng = Math.random; // opponents' dice; seeded in the daily deal so everyone faces the same game
+function mulberry(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- the daily deal: the same 20 hands for everyone, one attempt a day ----------
+const DAILY_HANDS = 20;
+const DAILY_KEY = 'padpoker.daily';
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function dailyData() { try { return JSON.parse(localStorage.getItem(DAILY_KEY)) || { scores: {} }; } catch { return { scores: {} }; } }
+function saveDaily(d) { try { localStorage.setItem(DAILY_KEY, JSON.stringify(d)); } catch { /* private mode */ } }
+function dailySeed(hand) { // one number per date and hand
+  let hsh = 2166136261;
+  for (const ch of `${today()}#${hand}`) hsh = Math.imul(hsh ^ ch.charCodeAt(0), 16777619);
+  return hsh | 0;
+}
+const DAILY_CFG = { names: ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'], skill: 0.75, venue: 'The Daily Deal', mat: '#b4551f', handsPerLevel: 4, chips: 1000 };
+function dailyCalendar() {
+  const d = dailyData();
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const sc = d.scores[key];
+    days.push(`<div class="${sc === undefined ? 'none' : ''}${i === 0 ? ' now' : ''}"><i>${dt.getDate()}/${dt.getMonth() + 1}</i><b>${sc === undefined ? '\u2013' : sc.toLocaleString()}</b></div>`);
+  }
+  const all = Object.values(d.scores);
+  return `<div class="cal">${days.join('')}</div><p>Days played: <b>${all.length}</b> &middot; Best: <b>${all.length ? Math.max(...all).toLocaleString() : '\u2013'}</b></p>`;
+}
+function dailyScreen() {
+  const d = dailyData(), t = today();
+  const done = d.scores[t] !== undefined;
+  const mid = d.game && d.game.date === t;
+  showOverlay({
+    title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: startScreen,
+    body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyCalendar()}`,
+    items: done ? [[`${glyph('B')}Back`, startScreen]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, startScreen]],
+  });
+}
+function startDaily(saved) {
+  mode = 'daily'; bossMode = false; twist = ''; perks = {}; table = 0;
+  const cfg = DAILY_CFG;
+  cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
+  habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
+  if (saved) {
+    game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
+    game.dealer = saved.dealer; game.handNo = saved.handNo;
+  } else { const d = dailyData(); d.game = { date: today(), chips: game.players.map((p) => p.chips), dealer: -1, handNo: 0 }; saveDaily(d); }
+  $('app').style.setProperty('--mat', cfg.mat);
+  audio.setVenue(2);
+  buildSeats();
+  $('msg').textContent = ''; $('msg').classList.remove('show');
+  $('pot').hidden = true;
+  $('hud').innerHTML = `<b>Daily deal</b><br>${today()}`;
+  ui.mode = 'wait'; ui.resolve = null;
+  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
+  runId++;
+  renderActions();
+  run();
+}
+function dailyDone() {
+  const me = game.players[ME], d = dailyData(), t = today();
+  d.scores[t] = me.chips; delete d.game; saveDaily(d);
+  audio.musicLevel(0);
+  if (me.chips > DAILY_CFG.chips) { audio.win(2); fx.burst($('center'), 40); } else audio.lose();
+  showOverlay({
+    title: 'Daily <span>deal</span>', wide: true,
+    body: `<p class="venue">You finished with ${me.chips.toLocaleString()} chips${me.chips === 0 ? '' : ` after ${game.handNo} hands`}.</p>${dailyCalendar()}`,
+    items: [[`${glyph('A')}Done`, startScreen]],
+  });
+}
+
 let table = 1;
 let twist = ''; // the current table's rule change, if any
 let lastBB = 0; // to announce when the blinds go up
@@ -345,7 +425,9 @@ function render() {
     $('msg').classList.toggle('show', !!msg);
   }
   const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
-  $('hud').innerHTML = `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
+  $('hud').innerHTML = mode === 'daily'
+    ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
+    : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   renderActions();
 }
@@ -622,8 +704,8 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
-      : [[`${glyph('A')}Play`, firstPlay], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
+      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Daily deal', dailyScreen], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
+      : [[`${glyph('A')}Play`, firstPlay], ['Daily deal', dailyScreen], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
 }
 function firstPlay() {
@@ -969,7 +1051,7 @@ function recordHand(g) {
     lastHand = handLog; handLog = null;
   }
   const kos = me.won > 0 ? g.players.filter((p) => !p.isHuman && !p.out && p.chips === 0 && p.total > 0).length : 0;
-  for (const st of [stats, runStats]) {
+  for (const st of mode === 'run' ? [stats, runStats] : [stats]) {
     st.hands++;
     if (me.won > 0) { st.won++; st.biggest = Math.max(st.biggest, me.won); }
     if (g.result.showdown && !me.folded && me.score > st.bestScore) { st.bestScore = me.score; st.bestHand = me.handName; }
@@ -1065,11 +1147,17 @@ function loadSave() {
   } catch { return null; }
 }
 function writeSave(s) {
+  if (mode === 'daily') { // the daily deal keeps its own progress and never touches the run
+    const d = dailyData();
+    if (s) d.game = { date: today(), chips: s.chips, dealer: s.dealer, handNo: s.handNo }; else delete d.game;
+    return saveDaily(d);
+  }
   try { s ? localStorage.setItem(SAVE_KEY, JSON.stringify(s)) : localStorage.removeItem(SAVE_KEY); } catch { /* private mode */ }
 }
 
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 function startTable(n, saved) {
+  mode = 'run'; aiRng = Math.random;
   if (n === 1 && !saved) perks = {};
   if (saved?.perks) perks = saved.perks;
   if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks, owed: false })); // a perk is due for the table just cleared
@@ -1114,7 +1202,15 @@ async function run() {
     await rawSleep(750);
     if (id !== runId) return;
   }
-  while (g.startHand()) {
+  const nextHand = () => {
+    if (mode === 'daily') { // every hand of the day is dealt, and played by the opponents, from a fixed seed
+      if (g.handNo >= DAILY_HANDS) return false;
+      g.rng = mulberry(dailySeed(g.handNo + 1));
+      aiRng = mulberry(dailySeed(g.handNo + 1) ^ 0x5bd1e995);
+    }
+    return g.startHand();
+  };
+  while (nextHand()) {
     audio.tension(false);
     audio.newHand();
     bluffers.clear();
@@ -1172,7 +1268,7 @@ async function run() {
         noteHumanAction(a, g.legal(ME));
       } else {
         if (me.folded && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
-        a = decide(g, p.seat, Math.random, humanProfile());
+        a = decide(g, p.seat, aiRng, humanProfile());
         const wait = me.folded ? 300 : thinkTime(p, a);
         if (wait > 1100 && !fast) showThinking(p.seat);
         if (wait > 2000 && !fast && Math.random() < 0.35) say(p, 'tank');
@@ -1216,10 +1312,10 @@ async function run() {
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
-    if (me.chips === 0) return busted();
+    if (me.chips === 0) return mode === 'daily' ? dailyDone() : busted();
     if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
-  if (me.chips > 0) tableCleared(); else busted();
+  if (mode === 'daily') dailyDone(); else if (me.chips > 0) tableCleared(); else busted();
 }
 
 // ---------- new-version check ----------
