@@ -113,6 +113,14 @@ export const card = sfx((delay = 0) => {
   noise({ delay, f: 1800 * p, f2: 5200 * p, d: 0.045, v: 0.3, q: 1.4 });
   noise({ delay: delay + 0.04, type: 'lowpass', f: 700, d: 0.025, v: 0.22 });
 });
+// two riffles and a tap on the table
+export const shuffle = sfx(() => {
+  for (const t0 of [0.1, 0.42]) {
+    for (let i = 0; i < 13; i++) noise({ delay: t0 + i * 0.017, f: 2400 + i * 150, d: 0.016, v: 0.1 + i * 0.008, q: 1.6 });
+    noise({ delay: t0 + 0.22, f: 900, f2: 3000, d: 0.07, v: 0.14 });
+  }
+  knock(0.72, 0.3, 420);
+});
 export const flip = sfx((delay = 0) => {
   noise({ delay, f: 1200, f2: 4800, d: 0.07, v: 0.28, q: 1.6 });
   tone({ delay: delay + 0.07, f: 420, f2: 980, d: 0.06, v: 0.22 }); // pop
