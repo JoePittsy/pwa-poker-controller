@@ -456,6 +456,13 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .dialog table.log { font-size: 1.2rem; margin-top: .5rem; border-spacing: 0 .35rem; max-width: 52rem; }
 .dialog table.log td { vertical-align: top; line-height: 1.25; }
 .dialog table.log td:first-child { color: var(--yellow); }
+.dialog table.review td:first-child { padding-right: .6rem; }
+.dialog table.review td:nth-child(2) { color: var(--yellow); white-space: nowrap; padding-right: 1rem; }
+.dialog table.review td:nth-child(2) b { color: var(--paper); }
+.dialog table.review td:nth-child(3) { color: var(--paper); font-weight: 500; }
+.mark { display: inline-block; width: 2rem; height: 2rem; border-radius: 50%; line-height: 1.75rem; text-align: center; font-weight: 800; color: var(--ink); border: .16rem solid var(--ink); background: var(--mint); }
+.mark.meh { background: var(--yellow); } .mark.bad { background: var(--red); } .mark.bluff { background: var(--pink); }
+.dialog p.note { font-size: 1rem; opacity: .75; margin-top: .5rem; }
 .dialog table.log i { font-style: normal; color: var(--paper); }
 .rd, .bk { display: inline-block; background: var(--paper); border-radius: .25rem; padding: 0 .25rem; font-weight: 800; }
 .rd { color: var(--red); } .bk { color: var(--ink); }

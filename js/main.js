@@ -916,11 +916,56 @@ function handsScreen(back, at = history.length - 1) {
   }
   const items = [];
   if (hnd) items.push([`${glyph('A')}Replay`, () => replayHand(hnd, () => handsScreen(back, at))]);
+  if (hnd) items.push(['Review', () => reviewScreen([hnd], 0, () => handsScreen(back, at))]);
   if (at > 0) items.push(['Older hand', () => handsScreen(back, at - 1)]);
   if (at < history.length - 1) items.push(['Newer hand', () => handsScreen(back, at + 1)]);
   items.push([`${glyph('B')}Back`, back]);
   showOverlay({ title: 'Hands', closable: true, onClose: back, wide: true, body, items });
 }
+
+// ---------- review: how did you play it? ----------
+// Judges each of your decisions in a hand from two numbers taken at the time: your rough
+// chance of winning (against random cards for everyone still in) and the price of a call.
+function judge(d) {
+  const e = Math.round(d.eq * 100), n = Math.round(d.need * 100);
+  if (d.type === 'fold') {
+    return d.eq > d.need + 0.1 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
+      : ['good', 'Fold', `A sound fold: about ${e}% to win against the ${n}% the call needed.`];
+  }
+  if (d.type === 'call') {
+    if (d.eq < d.need - 0.08) return ['bad', `Call ${d.toCall}`, `Too loose: about ${e}% to win, but the call needed ${n}%.`];
+    if (d.eq > 0.7) return ['meh', `Call ${d.toCall}`, `Fine, but at about ${e}% to win a raise would have built a bigger pot.`];
+    return ['good', `Call ${d.toCall}`, `A fair call: about ${e}% to win for a price that needed ${n}%.`];
+  }
+  if (d.type === 'check') {
+    return d.eq > 0.7 ? ['meh', 'Check', `Missed value: you were about ${e}% to have the best hand and bet nothing.`]
+      : ['good', 'Check', `Nothing to bet with at about ${e}%. ${d.street === 'river' ? 'Checking was fine.' : 'Taking a free card was fine.'}`];
+  }
+  const what = `${d.toCall ? 'Raise to' : 'Bet'} ${d.to}`;
+  if (d.eq < 0.35) return ['bluff', what, `A bluff: only about ${e}% to win if called, so it needed them to fold.`];
+  if (d.eq > 0.6) return ['good', what, `Betting for value at about ${e}% to win.`];
+  return ['meh', what, `A thin bet at about ${e}%: fine against few players, risky against many.`];
+}
+const MARK = { good: '\u2713', meh: '!', bad: '\u2717', bluff: '~' };
+// hands: a list to step through (most interesting first); back: where B goes
+function reviewScreen(hands, at, back) {
+  const hnd = hands[at];
+  const rows = hnd.mine.map((d) => {
+    const [kind, what, why] = judge(d);
+    return `<tr><td><span class="mark ${kind}">${MARK[kind]}</span></td><td>${d.street[0].toUpperCase() + d.street.slice(1)}<br><b>${what}</b></td><td>${why}</td></tr>`;
+  }).join('') || '<tr><td></td><td colspan="2">You were not in this hand long enough to make a decision.</td></tr>';
+  const items = [];
+  if (at < hands.length - 1) items.push([`${glyph('A')}Next hand`, () => reviewScreen(hands, at + 1, back)]);
+  if (hnd.deck) items.push(['Replay', () => replayHand(hnd, () => reviewScreen(hands, at, back))]);
+  items.push([`${glyph('B')}Back`, back]);
+  showOverlay({
+    title: 'Review', closable: true, onClose: back, wide: true, items,
+    body: `<p>${hnd.where}, hand ${hnd.no} &middot; you held ${cardsText(hnd.hole)}${hnd.board?.length ? ` &middot; board ${cardsText(hnd.board)}` : ''} &middot; <b>${hnd.net >= 0 ? '+' : ''}${hnd.net.toLocaleString()}</b>${hands.length > 1 ? ` &middot; ${at + 1} of ${hands.length}` : ''}</p>
+      <table class="log review">${rows}</table><p class="note">Chances are estimates that assume everyone else holds random cards, so they run high when someone is betting strongly.</p>`,
+  });
+}
+// The hands that mattered most: the biggest swings, losses first.
+const keyHands = () => [...history].filter((x) => x.mine.length).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).slice(0, 5).sort((a, b) => a.net - b.net);
 
 // ---------- replay: play a recorded hand back on the table ----------
 // The live game is frozen (see rawSleep) while a throwaway game is fed the recorded deck and
@@ -1137,7 +1182,7 @@ function bustSummary() {
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('A')}New run`, () => startTable(1)], ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)]],
+    items: [[`${glyph('A')}New run`, () => startTable(1)], ...(keyHands().length ? [['Review key hands', () => reviewScreen(keyHands(), 0, bustSummary)]] : []), ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)]],
   });
 }
 
@@ -1409,7 +1454,7 @@ function logStart(g, before) {
     no: g.handNo, table, where: mode === 'daily' ? 'Daily deal' : mode === 'quick' ? 'Quick table' : bossMode ? 'Boss' : `Table ${table}`,
     blinds: `${g.sb}/${g.bb}`, hole: [...g.players[ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
     // enough to play the hand back exactly: who sat where, the stacks, the shuffled deck and every action
-    cast: g.players.map((p) => p.name), before, deck: g.dealt, actions: [], mat: getComputedStyle($('app')).getPropertyValue('--mat'),
+    cast: g.players.map((p) => p.name), before, deck: g.dealt, actions: [], mine: [], net: 0, mat: getComputedStyle($('app')).getPropertyValue('--mat'),
   };
 }
 function logAction(p, a) {
@@ -1427,6 +1472,7 @@ function recordHand(g) {
     if (g.result.showdown) handLog.shown = g.players.filter((p) => !p.folded).map((p) => ({ name: p.name, cards: [...p.cards], hand: p.handName }));
     handLog.board = [...g.board];
     handLog.result = g.result.text;
+    handLog.net = me.chips - handLog.before.chips[ME];
     lastHand = handLog; handLog = null;
     history.push(lastHand); if (history.length > 40) history.shift();
   }
@@ -1703,6 +1749,14 @@ async function run() {
         if (id !== runId) return;
         a = await prompt('actions');
         noteHumanAction(a, g.legal(ME));
+        if (handLog && mode !== 'pass') { // what you knew when you chose: your rough chance to win and the price you were offered
+          const L = g.legal(ME), opp = g.players.filter((q) => !mine(q) && !q.folded).length;
+          handLog.mine.push({
+            street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
+            to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
+            eq: equity(g.players[ME].cards, g.board, Math.max(1, opp), 250), need: L.toCall / (g.pot + L.toCall),
+          });
+        }
         feats.lastAct = { type: a.type === 'call' && g.legal(ME).canCheck ? 'check' : a.type, street: g.street };
       } else {
         const watching = mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded;
