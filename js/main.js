@@ -17,9 +17,13 @@ const CHARACTERS = {
 };
 // A run is a climb through tables: knock everyone out to move up. Each table has more
 // or sharper opponents and faster blinds.
+// Each table is a place, with its own cloth.
+const VENUES = [['The Kitchen Table', '#3050e0'], ['The Back Room', '#0e8a78'], ['The Club', '#6a3fd6'], ['High Rollers', '#c22f45'], ['The Vault', '#1f7a3d']];
 function tableConfig(n) {
   const names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
-  return { names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), handsPerLevel: Math.max(3, 7 - n) };
+  const [venue, mat] = VENUES[(n - 1) % VENUES.length];
+  const lap = Math.ceil(n / VENUES.length);
+  return { names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), handsPerLevel: Math.max(3, 7 - n), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat };
 }
 let table = 1;
 let lastBB = 0; // to announce when the blinds go up
@@ -578,7 +582,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${STACKS[prefs.stack].toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${STACKS[prefs.stack].toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -592,7 +596,7 @@ function tableCleared() {
   stats.tables++; saveStats();
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. The next table is tougher.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
+    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. Next up: ${tableConfig(table + 1).venue}, and it's tougher.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
     items: [[`${glyph('A')}Table ${table + 1}`, () => startTable(table + 1)]],
   });
 }
@@ -857,10 +861,11 @@ function startTable(n, saved) {
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
   } else writeSave({ table: n, habits });
+  $('app').style.setProperty('--mat', cfg.mat);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;
-  $('hud').innerHTML = `Table <b>${table}</b>`;
+  $('hud').innerHTML = `Table <b>${table}</b><br>${cfg.venue}`;
   ui.mode = 'wait'; ui.resolve = null;
   lastBB = 0; fast = false; audio.hush(false);
   runId++; // stop any game loop still running from the previous table
