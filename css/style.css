@@ -58,11 +58,24 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .in.face.red { color: var(--red); }
 .in .r { font-size: 1.7em; letter-spacing: -.06em; }
 .in .s { font-size: 1.4em; }
-.in.back { /* ink back, cream edge, thin yellow frame, one yellow spade */
-  background: var(--ink);
-  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--yellow), .14em .14em 0 var(--ink);
+.in.back { /* default: ink back, cream edge, thin yellow frame, one yellow spade. Other backs override the variables. */
+  background: var(--back-bg, var(--ink));
+  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--back-frame, var(--yellow)), .14em .14em 0 var(--ink);
 }
-.in.back::after { content: "\2660\FE0E"; color: var(--yellow); font-size: 1.9em; line-height: 1; }
+.in.back::after { content: "\2660\FE0E"; color: var(--back-ink, var(--yellow)); font-size: 1.9em; line-height: 1; }
+.back-ruby { --back-bg: var(--red); --back-frame: var(--paper); --back-ink: var(--paper); }
+.back-gold { --back-bg: var(--yellow); --back-frame: var(--ink); --back-ink: var(--ink); }
+.back-lattice {
+  --back-frame: var(--ink);
+  --back-bg: repeating-linear-gradient(45deg, transparent 0 .34em, var(--yellow) .34em .42em),
+    repeating-linear-gradient(-45deg, transparent 0 .34em, var(--yellow) .34em .42em), var(--ink);
+}
+.back-lattice .in.back::after {
+  content: ""; width: 1.05em; height: 1.05em; rotate: 45deg; font-size: 1em;
+  background: var(--red); border: .12em solid var(--paper); outline: .1em solid var(--ink);
+}
+.back-sunburst { --back-frame: var(--ink); --back-bg: repeating-conic-gradient(from 0deg at 50% 50%, var(--red) 0 15deg, var(--yellow) 15deg 30deg); }
+.back-sunburst .in.back::after { content: ""; width: 1em; height: 1em; font-size: 1em; border-radius: 50%; background: var(--paper); border: .12em solid var(--ink); }
 .card.deal { animation: deal .55s cubic-bezier(.3, .7, .3, 1) both; }
 .card.drop { animation: drop .62s ease-out both; }
 .card.slam { animation: slam 1.25s cubic-bezier(.5, 0, .8, .4) both; z-index: 3; }
@@ -108,7 +121,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 #deck { position: absolute; left: calc(100% + 1.8rem); top: 0; font-size: 1.7rem; width: 3em; height: 4.2em; }
 #deck .in { position: absolute; inset: 0; border-radius: .4em; border: .12em solid var(--ink); display: flex; align-items: center; justify-content: center; }
 #deck .in:first-child { /* the stack's thickness */
-  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--yellow), .09em .09em 0 var(--paper), .15em .15em 0 var(--ink),
+  box-shadow: inset 0 0 0 .2em var(--paper), inset 0 0 0 .28em var(--ink), inset 0 0 0 .36em var(--back-frame, var(--yellow)), .09em .09em 0 var(--paper), .15em .15em 0 var(--ink),
     .24em .24em 0 var(--paper), .3em .3em 0 var(--ink), .39em .39em 0 var(--paper), .45em .45em 0 var(--ink);
 }
 #burn { position: absolute; left: calc(100% + 1.8rem + 6.6rem); top: 1.1rem; font-size: 1.25rem; width: 3em; height: 4.2em; }

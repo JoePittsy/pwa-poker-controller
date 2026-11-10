@@ -43,11 +43,17 @@ const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch w
 // ---------- player preferences ----------
 const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade' };
+// Card backs, and how many tables your best run must have cleared to unlock each.
+const BACKS = { Spade: 0, Lattice: 1, Sunburst: 2, Ruby: 3, Gold: 5 };
+const bestRun = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
+const unlockedBacks = () => Object.keys(BACKS).filter((k) => BACKS[k] <= bestRun());
 try { Object.assign(prefs, JSON.parse(localStorage.getItem('padpoker.prefs')) || {}); } catch { /* private mode */ }
 if (!PACE[prefs.speed]) prefs.speed = 'Normal';
 if (!STACKS[prefs.stack]) prefs.stack = 'Standard';
 function applyPrefs() {
+  if (!unlockedBacks().includes(prefs.back)) prefs.back = 'Spade';
+  for (const k of Object.keys(BACKS)) document.body.classList.toggle(`back-${k.toLowerCase()}`, k === prefs.back);
   document.body.classList.toggle('lefty', prefs.lefty);
   fx.setRumble(prefs.rumble);
   try { localStorage.setItem('padpoker.prefs', JSON.stringify(prefs)); } catch { /* private mode */ }
@@ -535,6 +541,12 @@ function settingsMenu(back) {
       [() => `Music: ${onOff(audio.settings.music)}`, () => audio.setMusic(!audio.settings.music), true],
       [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => { prefs.rumble = !prefs.rumble; if (prefs.rumble) setTimeout(() => fx.rumble(0.6, 0.6, 150), 30); }), true],
       [() => `Table talk: ${onOff(prefs.chatter)}`, set(() => { prefs.chatter = !prefs.chatter; }), true],
+      [() => `Card back: ${prefs.back}`, set(() => {
+        const mine = unlockedBacks();
+        prefs.back = mine[(mine.indexOf(prefs.back) + 1) % mine.length];
+        const next = Object.keys(BACKS).find((k) => BACKS[k] > bestRun());
+        if (mine.length === 1 && next) toast(`Clear ${tables(BACKS[next])} in a run to unlock ${next}`);
+      }), true],
       [() => `Coach: ${onOff(prefs.coach)}`, set(() => { prefs.coach = !prefs.coach; if (game && game.stage !== 'idle') render(); }), true],
       [`${glyph('B')}Back`, back],
     ],
@@ -552,12 +564,14 @@ function tableIntro(start) {
 function tableCleared() {
   audio.musicLevel(0);
   audio.win(3); fx.burst($('center'), 60);
-  try { localStorage.setItem('padpoker.best', Math.max(best(), table)); } catch { /* private mode */ }
+  const before = best();
+  try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
+  const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
   writeSave({ table: table + 1, habits });
   stats.tables++; saveStats();
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. The next table is tougher.</p>`,
+    body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. The next table is tougher.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
     items: [[`${glyph('A')}Table ${table + 1}`, () => startTable(table + 1)]],
   });
 }

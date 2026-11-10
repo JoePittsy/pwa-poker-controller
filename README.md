@@ -56,3 +56,6 @@ first button press.
 - [x] Big-moment hand feel: all-in odds, river slam, staged reveals
 - [x] Settings: speed, stack size, left-handed layout, rumble, table talk
 - [x] Lifetime stats and last-hand history
+- [x] Visible deck: shuffle, deal, burn cards
+- [x] Opponent faces with moods, skip-hand after folding, blinds-up banner
+- [x] Coach hints, hand-ranks reference, unlockable card backs
