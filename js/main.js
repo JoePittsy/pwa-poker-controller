@@ -1,5 +1,5 @@
 import { Game } from './engine.js';
-import { decide, runoutOdds } from './ai.js';
+import { decide, runoutOdds, equity } from './ai.js';
 import { startInput } from './input.js';
 import { RANKS, SUITS, evaluate, describe } from './cards.js';
 import * as audio from './audio.js';
@@ -43,7 +43,7 @@ const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch w
 // ---------- player preferences ----------
 const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false };
 try { Object.assign(prefs, JSON.parse(localStorage.getItem('padpoker.prefs')) || {}); } catch { /* private mode */ }
 if (!PACE[prefs.speed]) prefs.speed = 'Normal';
 if (!STACKS[prefs.stack]) prefs.stack = 'Standard';
@@ -188,6 +188,9 @@ function render() {
       const pct = `${Math.round(odds[i] * 100)}%`;
       const html = `${hand ? `${hand} ` : ''}<b>${pct}</b>`;
       if (handEl.innerHTML !== html) { handEl.innerHTML = html; fx.pop(handEl, 1.3); }
+    } else if (p.isHuman && prefs.coach && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
+      const html = `${hand ? `${hand} ` : ''}<b>${coachOdds(g)}%</b>`; // coach: rough chance your hand is best
+      if (handEl.innerHTML !== html) handEl.innerHTML = html;
     } else if (handEl.textContent !== hand || handEl.children.length) handEl.textContent = hand;
     const badge = el.querySelector('.badge');
     const a = over ? '' : p.lastAction;
@@ -255,6 +258,15 @@ function burnCard() {
   audio.card();
 }
 
+// Coach: your chance of winning against the opponents still in, assuming they hold random cards.
+let coachCache = { key: '', pct: 0 };
+function coachOdds(g) {
+  const opp = g.players.filter((p) => !p.isHuman && !p.folded).length;
+  const key = `${table}:${g.handNo}:${g.board.length}:${opp}`;
+  if (coachCache.key !== key) coachCache = { key, pct: Math.round(equity(g.players[ME].cards, g.board, Math.max(1, opp), 400) * 100) };
+  return coachCache.pct;
+}
+
 // Win chances while an all-in is run out; worked out once per street.
 let oddsCache = { key: '', odds: null };
 function oddsFor(g) {
@@ -290,7 +302,7 @@ function renderActions() {
     const row = h('div', 'row');
     const defs = [
       ['fold', `${glyph('B')}Fold`, () => choose('fold'), false],
-      ['call', `${glyph('X')}<span>${L.canCheck ? 'Check' : `Call<small>${L.toCall}</small>`}</span>`, () => choose('call'), false],
+      ['call', `${glyph('X')}<span>${L.canCheck ? 'Check' : `Call<small>${L.toCall}${prefs.coach ? ` &middot; need ${Math.round((L.toCall / (game.pot + L.toCall)) * 100)}%` : ''}</small>`}</span>`, () => choose('call'), false],
       ['raise', `${glyph('Y')}${game.currentBet ? 'Raise' : 'Bet'}`, openRaise, !L.canRaise],
     ];
     defs.forEach(([cls, html, fn, disabled], i) => {
@@ -464,6 +476,7 @@ function pauseMenu() {
       ['Resume'],
       ['Last hand', () => lastHandScreen(pauseMenu)],
       ['Stats', () => statsScreen(pauseMenu)],
+      ['Hand ranks', () => ranksScreen(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
       ['New run', () => startTable(1)],
     ],
@@ -494,12 +507,26 @@ function lastHandScreen(back) {
   }
   showOverlay({ title: 'Last hand', closable: true, onClose: back, wide: true, body, items: [[`${glyph('B')}Back`, back]] });
 }
+const RANKS_REF = [
+  ['Royal Flush', 'As Ks Qs Js Ts'], ['Straight Flush', '9h 8h 7h 6h 5h'], ['Four of a Kind', 'Qs Qh Qd Qc 4s'],
+  ['Full House', 'Ks Kh Kd 7c 7s'], ['Flush', 'Ad Jd 8d 5d 2d'], ['Straight', 'Ts 9d 8c 7h 6s'],
+  ['Three of a Kind', '8s 8h 8d Kc 3s'], ['Two Pair', 'Js Jd 5c 5h As'], ['Pair', '9s 9h Ad 7c 4s'], ['High Card', 'As Jd 8c 6h 3s'],
+];
+function ranksScreen(back) {
+  const parse = (str) => str.split(' ').map((x) => RANKS.indexOf(x[0]) * 4 + 'shdc'.indexOf(x[1]));
+  const rows = RANKS_REF.map(([name, ex], i) => `<div><i>${i + 1}</i><b>${name}</b><span>${cardsText(parse(ex))}</span></div>`).join('');
+  showOverlay({
+    title: 'Hand ranks', closable: true, onClose: back, wide: true,
+    body: `<p>Best at the top. Your hand is the best five cards from your two plus the board.</p><div class="ranks">${rows}</div>`,
+    items: [[`${glyph('B')}Back`, back]],
+  });
+}
 function settingsMenu(back) {
   const onOff = (v) => (v ? 'On' : 'Off');
   const set = (fn) => () => { fn(); applyPrefs(); };
   showOverlay({
     title: 'Settings', compact: true, closable: true, onClose: back,
-    body: `<p>Speed changes how long opponents and deals take. Stack size applies from the next table. Left-handed moves the buttons to the left.</p>`,
+    body: `<p>Speed changes how long opponents and deals take. Stack size applies from the next table. Left-handed moves the buttons to the left. Coach shows your rough chance of winning and the odds a call needs.</p>`,
     items: [
       [() => `Speed: ${prefs.speed}`, set(() => { prefs.speed = cycle(PACE, prefs.speed); }), true],
       [() => `Stacks: ${prefs.stack}`, set(() => { prefs.stack = cycle(STACKS, prefs.stack); }), true],
@@ -508,6 +535,7 @@ function settingsMenu(back) {
       [() => `Music: ${onOff(audio.settings.music)}`, () => audio.setMusic(!audio.settings.music), true],
       [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => { prefs.rumble = !prefs.rumble; if (prefs.rumble) setTimeout(() => fx.rumble(0.6, 0.6, 150), 30); }), true],
       [() => `Table talk: ${onOff(prefs.chatter)}`, set(() => { prefs.chatter = !prefs.chatter; }), true],
+      [() => `Coach: ${onOff(prefs.coach)}`, set(() => { prefs.coach = !prefs.coach; if (game && game.stage !== 'idle') render(); }), true],
       [`${glyph('B')}Back`, back],
     ],
   });
