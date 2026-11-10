@@ -366,11 +366,11 @@ const CONTROLS = `<table>
 <tr><td>Start / P</td><td>Menu</td></tr></table>`;
 
 // items: [label | () => label, fn, keepOpen]
-function showOverlay({ title, body, items, closable = false, compact = false, onClose }) {
+function showOverlay({ title, body, items, closable = false, compact = false, wide = false, onClose }) {
   overlay = { items, focus: 0, closable, onClose, cols: compact ? 2 : 1 };
   const el = $('overlay');
   el.innerHTML = '';
-  const d = h('div', 'dialog' + (compact ? ' compact' : ''));
+  const d = h('div', 'dialog' + (compact ? ' compact' : '') + (wide ? ' wide' : ''));
   d.append(h('div', '', `<h1>${title}</h1>${body}`));
   const list = h('div', 'items');
   const text = (l) => (typeof l === 'function' ? l() : l);
@@ -409,8 +409,8 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Settings', () => settingsMenu(startScreen)]]
-      : [[`${glyph('A')}Play`, () => startTable(1)], ['Settings', () => settingsMenu(startScreen)]],
+      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)]]
+      : [[`${glyph('A')}Play`, () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)]],
   });
 }
 function pauseMenu() {
@@ -419,10 +419,37 @@ function pauseMenu() {
     title: TITLE, body: CONTROLS, closable: true,
     items: [
       ['Resume'],
+      ['Last hand', () => lastHandScreen(pauseMenu)],
+      ['Stats', () => statsScreen(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
       ['New run', () => startTable(1)],
     ],
   });
+}
+function statsScreen(back) {
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '\u2013');
+  const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
+  showOverlay({
+    title: 'Stats', closable: true, onClose: back,
+    body: `<div class="stats">
+      ${tile(best(), 'best run (tables)')}${tile(stats.tables, 'tables cleared')}${tile(stats.knockouts, 'knock-outs')}
+      ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot')}
+      ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdowns won')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
+    </div>`,
+    items: [[`${glyph('B')}Back`, back]],
+  });
+}
+function lastHandScreen(back) {
+  const hnd = lastHand;
+  let body = '<p>No finished hand yet.</p>';
+  if (hnd) {
+    const rows = hnd.streets.filter((st) => st.acts.length || st.board.length).map((st) =>
+      `<tr><td>${st.name}${st.board.length ? `<br>${cardsText(st.board)}` : ''}</td><td>${st.acts.join(', ') || '\u2013'}</td></tr>`);
+    if (hnd.shown.length) rows.push(`<tr><td>Showdown</td><td>${hnd.shown.map((x) => `${x.name} ${cardsText(x.cards)} <i>${x.hand}</i>`).join('<br>')}</td></tr>`);
+    body = `<p>Table ${hnd.table}, hand ${hnd.no} &middot; blinds ${hnd.blinds} &middot; you held ${cardsText(hnd.hole)}</p>
+      <table class="log">${rows.join('')}</table><p class="res">${hnd.result}</p>`;
+  }
+  showOverlay({ title: 'Last hand', closable: true, onClose: back, wide: true, body, items: [[`${glyph('B')}Back`, back]] });
 }
 function settingsMenu(back) {
   const onOff = (v) => (v ? 'On' : 'Off');
@@ -456,6 +483,7 @@ function tableCleared() {
   audio.win(3); fx.burst($('center'), 60);
   try { localStorage.setItem('padpoker.best', Math.max(best(), table)); } catch { /* private mode */ }
   writeSave({ table: table + 1, habits });
+  stats.tables++; saveStats();
   showOverlay({
     title: 'Table <span>cleared!</span>',
     body: `<p>You took every chip at Table ${table} in ${game.handNo} hands. The next table is tougher.</p>`,
@@ -573,6 +601,46 @@ function handOverFx() {
   else audio.win(0);
 }
 
+// ---------- stats and hand history ----------
+const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, allins: 0, allinsWon: 0, knockouts: 0, tables: 0, runs: 0, bestScore: 0, bestHand: '' };
+const stats = { ...STATS0 };
+try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) || {}); } catch { /* private mode */ }
+const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };
+let handLog = null; // the hand in progress
+let lastHand = null; // the most recent finished hand
+const cardText = (c) => `<span class="${(c & 3) === 1 || (c & 3) === 2 ? 'rd' : 'bk'}">${RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]}${SUITS[c & 3]}</span>`;
+const cardsText = (cs) => cs.map(cardText).join(' ');
+
+function logStart(g) {
+  handLog = { no: g.handNo, table, blinds: `${g.sb}/${g.bb}`, hole: [...g.players[ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '' };
+}
+function logAction(p) {
+  handLog?.streets.at(-1).acts.push(`${p.name} ${p.lastAction.toLowerCase()}`);
+}
+function logStreet(g) {
+  if (!handLog || g.stage === 'handOver') return;
+  handLog.streets.push({ name: g.street[0].toUpperCase() + g.street.slice(1), board: [...g.board], acts: [] });
+}
+function recordHand(g) {
+  const me = g.players[ME];
+  if (handLog) {
+    if (g.result.showdown) handLog.shown = g.players.filter((p) => !p.folded).map((p) => ({ name: p.name, cards: [...p.cards], hand: p.handName }));
+    handLog.board = [...g.board];
+    handLog.result = g.result.text;
+    lastHand = handLog; handLog = null;
+  }
+  stats.hands++;
+  if (me.won > 0) { stats.won++; stats.biggest = Math.max(stats.biggest, me.won); }
+  if (g.result.showdown && !me.folded) {
+    stats.showdowns++;
+    if (me.won > 0) stats.showdownsWon++;
+    if (me.score > stats.bestScore) { stats.bestScore = me.score; stats.bestHand = me.handName; }
+  }
+  if (me.allIn) { stats.allins++; if (me.won > 0) stats.allinsWon++; }
+  if (me.won > 0) stats.knockouts += g.players.filter((p) => !p.isHuman && !p.out && p.chips === 0 && p.total > 0).length;
+  saveStats();
+}
+
 // ---------- opponent character ----------
 const bluffers = new Set(); // seats that have bluff-raised this hand
 // How the human has been playing; the AI adapts to it (see ai.js).
@@ -657,7 +725,7 @@ function startTable(n, saved) {
   const cfg = tableConfig(n);
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: STACKS[prefs.stack] });
-  if (n === 1 && !saved) habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
+  if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); }
   if (saved?.habits) habits = saved.habits;
   if (saved?.chips) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
@@ -684,6 +752,7 @@ async function run() {
     bluffers.clear();
     audio.musicLevel(1);
     settled = false;
+    logStart(g);
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((dealOrder(p.seat) + k * n) * DEAL_GAP / 1000);
@@ -705,6 +774,7 @@ async function run() {
         } else await sleep(250);
         if (id !== runId) return;
         g.nextStreet();
+        logStreet(g);
         audio.musicLevel(2);
         render();
         if (ui.slowRiver && g.board.length === 5) {
@@ -732,6 +802,7 @@ async function run() {
       if (id !== runId) return;
       const potBefore = g.pot;
       g.act(a.type, a.amount);
+      logAction(p);
       render();
       actionFx(p, potBefore);
     }
@@ -741,6 +812,7 @@ async function run() {
     if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);
     if (id !== runId) return;
     settled = true;
+    recordHand(g);
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
