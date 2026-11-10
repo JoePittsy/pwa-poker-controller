@@ -319,7 +319,7 @@ let game = null;
 let runId = 0;
 let seatEls = [];
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false };
+const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false, throwPower: 0, scatter: 0 };
 let settled = false; // false between the last action of a hand and the moment the result is shown
 let overlay = null; // { items, focus, closable }
 
@@ -340,15 +340,16 @@ function cardEl(c, face, cls = '', cover = false) {
 // overlapping, with the middle of the heap on top. The layout is fixed for a given
 // count, so a pile grows outwards as chips are added rather than reshuffling.
 const chipCount = (amount, per, max) => Math.max(1, Math.min(max, Math.round(Math.log2(amount / game.bb + 1) * per)));
-function setPile(el, n) {
-  if (el.dataset.n === String(n)) return;
-  el.dataset.n = n;
-  const gap = 0.6, disc = 1.55; // em
+function setPile(el, n, scatter = 0) { // scatter 0..1: a thrown bet lands as a looser, messier heap
+  const key = `${n}:${scatter}`;
+  if (el.dataset.n === key) return;
+  el.dataset.n = key;
+  const gap = 0.6 + scatter * 0.55, disc = 1.55; // em
   const R = gap * Math.sqrt(Math.max(0, n - 1));
   el.style.width = el.style.height = `${(2 * R + disc + 0.3).toFixed(2)}em`;
   let html = '';
   for (let i = n - 1; i >= 0; i--) { // outer chips first, so they sit underneath
-    const a = i * 2.39996 + 0.7, r = gap * Math.sqrt(i); // golden-angle spiral
+    const a = i * 2.39996 + 0.7 + scatter * Math.sin(i * 12.9898) * 1.4, r = gap * Math.sqrt(i) * (1 + scatter * Math.sin(i * 78.233) * 0.35); // golden-angle spiral, jittered when thrown
     html += `<i class="c${i % 3} h${i % 4 === 0 ? 2 : 1}" style="left:${(R + r * Math.cos(a)).toFixed(2)}em;top:${(R + r * Math.sin(a)).toFixed(2)}em"></i>`;
   }
   el.innerHTML = html;
@@ -489,7 +490,7 @@ function render() {
       if (a) fx.pop(badge, 1.5);
     }
     const bet = el.querySelector('.bet');
-    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setPile(bet.lastChild, chipCount(p.bet, 1.7, 10)); }
+    if (p.bet) { bet.hidden = false; bet.classList.remove('leaving'); fx.roll(bet.firstChild, p.bet, { dur: 200 }); setPile(bet.lastChild, chipCount(p.bet, 1.7, 10), mine(p) ? ui.scatter : 0); }
     else { bet.hidden = true; bet.firstChild._cur = 0; }
     const d = el.querySelector('.dealer');
     if (g.dealer === i && !d) el.querySelector('.plate').append(h('div', 'dealer', 'D'));
@@ -559,6 +560,47 @@ function coachOdds(g) {
   const key = `${table}:${g.handNo}:${g.board.length}:${opp}`;
   if (coachCache.key !== key) coachCache = { key, pct: Math.round(equity(g.players[ME].cards, g.board, Math.max(1, opp), 400) * 100) };
   return coachCache.pct;
+}
+
+// ---------- throwing your chips in ----------
+// A quick flick up on the stick (or a swipe up on the buttons) while betting or calling
+// throws the chips: they fly harder, land as a messier heap and thump the table, in
+// proportion to how fast the flick was. A slow push still just adjusts the bet as before.
+function throwBet(power) {
+  power = Math.max(0.25, Math.min(1, power));
+  if (ui.mode === 'raise') {
+    if (flick.raiseBefore) setRaise(flick.raiseBefore, true, true); // undo the nudge the flick itself gave the amount
+    ui.throwPower = power;
+    confirmRaise();
+  } else if (ui.mode === 'actions' && !game.legal(ME).canCheck) {
+    ui.throwPower = power;
+    choose('call');
+  }
+}
+const flick = { t0: 0, peak: 0, raiseBefore: 0 };
+(function watchFlick() {
+  const up = overlay ? 0 : upAmount();
+  const now = performance.now();
+  if (up > 0.2 && !flick.t0) { flick.t0 = now; flick.peak = 0; }
+  if (flick.t0) {
+    flick.peak = Math.max(flick.peak, up);
+    if (up < 0.2) { // released: was it a flick?
+      const dt = now - flick.t0;
+      if (flick.peak > 0.8 && dt < 240 && (ui.mode === 'raise' || ui.mode === 'actions')) throwBet(1.15 - dt / 240);
+      flick.t0 = 0; flick.raiseBefore = 0;
+    }
+  }
+  requestAnimationFrame(watchFlick);
+})();
+{ // swipe up on the action buttons or the bet panel
+  let start = null;
+  addEventListener('pointerdown', (e) => { start = e.target.closest?.('#actions') ? { y: e.clientY, t: performance.now() } : null; });
+  addEventListener('pointerup', (e) => {
+    if (!start) return;
+    const dy = start.y - e.clientY, dt = performance.now() - start.t;
+    start = null;
+    if (dy > 45 && dt < 350) { e.preventDefault(); throwBet((dy / dt) / 1.2); }
+  });
 }
 
 // ---------- squeezing your cards ----------
@@ -679,7 +721,7 @@ function renderActions() {
     back.onclick = closeRaise;
     const ok = h('button', 'btn raise focus', `${glyph('A')}Confirm`);
     ok.onclick = confirmRaise;
-    row.append(back, h('div', '', `${glyph('LB')} ${glyph('RB')}`), ok);
+    row.append(back, h('div', 'flickhint', `${glyph('LB')} ${glyph('RB')}<small>flick &uarr; to throw</small>`), ok);
     panel.append(row);
     bar.append(panel);
     setRaise(ui.raiseTo, true, true);
@@ -1055,7 +1097,7 @@ function onButton(b) {
     if (b === 'left') setRaise(ui.raiseTo - step);
     else if (b === 'right') setRaise(ui.raiseTo + step);
     else if (b === 'down') setRaise(ui.raiseTo - step * 5);
-    else if (b === 'up') setRaise(ui.raiseTo + step * 5);
+    else if (b === 'up') { flick.raiseBefore = ui.raiseTo; setRaise(ui.raiseTo + step * 5); } // remembered in case this turns out to be a flick
     else if (b === 'lb') setRaise(ps.filter((v) => v < ui.raiseTo).pop() ?? L.minTo);
     else if (b === 'rb') setRaise(ps.find((v) => v > ui.raiseTo) ?? L.maxTo);
     else if (b === 'a' || b === 'y') confirmRaise();
@@ -1084,7 +1126,11 @@ function actionFx(p, potBefore) {
   if (a === 'Check') return audio.check();
   const size = p.bet / Math.max(potBefore, 1);
   const allIn = a.startsWith('All-in');
-  fx.flyChips(el.querySelector('.plate'), bet, allIn ? 8 : size > 0.6 ? 4 : 2, { stagger: 35 });
+  const thrown = mine(p) ? ui.throwPower : 0; // how hard you threw it, 0 if you just placed it
+  ui.throwPower = 0;
+  if (mine(p)) { ui.scatter = Math.round(thrown * 10) / 10; if (thrown) setPile(bet.lastChild, chipCount(p.bet, 1.7, 10), ui.scatter); }
+  fx.flyChips(el.querySelector('.plate'), bet, (allIn ? 8 : size > 0.6 ? 4 : 2) + Math.round(thrown * 6), { stagger: thrown ? 18 : 35, spread: 1 + thrown * 2.2 });
+  if (thrown) { audio.thrown(thrown); setTimeout(() => { fx.shake(2 + thrown * 6, 260); fx.haptic(thrown > 0.6 ? 'slam' : 'raise'); }, 330); }
   fx.pop(bet, allIn ? 1.7 : 1.35);
   fx.pop($('pot'), 1.12);
   if (allIn) {
@@ -1413,6 +1459,7 @@ async function run() {
   while (nextHand()) {
     audio.tension(false);
     audio.newHand();
+    ui.scatter = 0; ui.throwPower = 0;
     bluffers.clear();
     g.players.forEach((p) => setMood(p.seat, 'idle'));
     audio.musicLevel(1);

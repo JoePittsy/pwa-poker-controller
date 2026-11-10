@@ -27,8 +27,8 @@ function spawn(cls, html = '') {
   return e;
 }
 
-export function flyChips(fromEl, toEl, n = 1, { stagger = 45, onLand } = {}) {
-  const a = mid(fromEl), b = mid(toEl), u = rem();
+export function flyChips(fromEl, toEl, n = 1, { stagger = 45, onLand, spread = 1 } = {}) {
+  const a = mid(fromEl), b = mid(toEl), u = rem() * spread; // spread > 1 scatters the landing, for a thrown bet
   for (let i = 0; i < n; i++) {
     const c = spawn('chipfx c' + (i % 3));
     const x0 = a.x + rnd(-u, u), y0 = a.y + rnd(-u, u) * 0.5, x1 = b.x + rnd(-u, u) * 0.6, y1 = b.y + rnd(-u, u) * 0.4;

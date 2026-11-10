@@ -199,6 +199,12 @@ export const arrive = sfx(() => {
   tok(scale(2) + 12, { delay: 0.45, v: 0.2, d: 0.3, wet: 0.3 });
 });
 export const sticker = sfx(() => { tok(79, { v: 0.26, d: 0.2, wet: 0.4 }); tok(84, { delay: 0.1, v: 0.26, d: 0.2, wet: 0.4 }); tok(91, { delay: 0.2, v: 0.3, d: 0.6, wet: 0.6 }); });
+// chips thrown in rather than placed: a scatter of clacks and a thump, harder with power
+export const thrown = sfx((power = 0.5) => {
+  const n = 5 + Math.round(power * 7);
+  for (let i = 0; i < n; i++) tok(scale(3 + ((i * 5) % 8)) + 12, { delay: 0.3 + i * 0.028 + Math.random() * 0.02, v: 0.12 + power * 0.14, d: 0.07 });
+  thud(0.32, 0.3 + power * 0.6);
+});
 export const lose = sfx(() => { // a little "wah-wah"
   tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
   tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });
