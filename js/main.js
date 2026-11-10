@@ -33,7 +33,22 @@ const h = (tag, cls = '', html = '') => {
   return e;
 };
 const glyph = (g) => `<span class="glyph ${g.length > 1 ? 'wide' : g.toLowerCase()}">${g}</span>`;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const rawSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch with the speed setting
+
+// ---------- player preferences ----------
+const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
+const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem('padpoker.prefs')) || {}); } catch { /* private mode */ }
+if (!PACE[prefs.speed]) prefs.speed = 'Normal';
+if (!STACKS[prefs.stack]) prefs.stack = 'Standard';
+function applyPrefs() {
+  document.body.classList.toggle('lefty', prefs.lefty);
+  fx.setRumble(prefs.rumble);
+  try { localStorage.setItem('padpoker.prefs', JSON.stringify(prefs)); } catch { /* private mode */ }
+}
+const cycle = (obj, cur) => { const k = Object.keys(obj); return k[(k.indexOf(cur) + 1) % k.length]; };
 
 let game = null;
 let runId = 0;
@@ -351,11 +366,11 @@ const CONTROLS = `<table>
 <tr><td>Start / P</td><td>Menu</td></tr></table>`;
 
 // items: [label | () => label, fn, keepOpen]
-function showOverlay({ title, body, items, closable = false }) {
-  overlay = { items, focus: 0, closable };
+function showOverlay({ title, body, items, closable = false, compact = false, onClose }) {
+  overlay = { items, focus: 0, closable, onClose, cols: compact ? 2 : 1 };
   const el = $('overlay');
   el.innerHTML = '';
-  const d = h('div', 'dialog');
+  const d = h('div', 'dialog' + (compact ? ' compact' : ''));
   d.append(h('div', '', `<h1>${title}</h1>${body}`));
   const list = h('div', 'items');
   const text = (l) => (typeof l === 'function' ? l() : l);
@@ -394,8 +409,8 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)]]
-      : [[`${glyph('A')}Play`, () => startTable(1)]],
+      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Settings', () => settingsMenu(startScreen)]]
+      : [[`${glyph('A')}Play`, () => startTable(1)], ['Settings', () => settingsMenu(startScreen)]],
   });
 }
 function pauseMenu() {
@@ -404,9 +419,26 @@ function pauseMenu() {
     title: TITLE, body: CONTROLS, closable: true,
     items: [
       ['Resume'],
-      [() => `Sound: ${audio.settings.sfx ? 'On' : 'Off'}`, () => audio.setSfx(!audio.settings.sfx), true],
-      [() => `Music: ${audio.settings.music ? 'On' : 'Off'}`, () => audio.setMusic(!audio.settings.music), true],
+      ['Settings', () => settingsMenu(pauseMenu)],
       ['New run', () => startTable(1)],
+    ],
+  });
+}
+function settingsMenu(back) {
+  const onOff = (v) => (v ? 'On' : 'Off');
+  const set = (fn) => () => { fn(); applyPrefs(); };
+  showOverlay({
+    title: 'Settings', compact: true, closable: true, onClose: back,
+    body: `<p>Speed changes how long opponents and deals take. Stack size applies from the next table. Left-handed moves the buttons to the left.</p>`,
+    items: [
+      [() => `Speed: ${prefs.speed}`, set(() => { prefs.speed = cycle(PACE, prefs.speed); }), true],
+      [() => `Stacks: ${prefs.stack}`, set(() => { prefs.stack = cycle(STACKS, prefs.stack); }), true],
+      [() => `Left-handed: ${onOff(prefs.lefty)}`, set(() => { prefs.lefty = !prefs.lefty; }), true],
+      [() => `Sound: ${onOff(audio.settings.sfx)}`, () => audio.setSfx(!audio.settings.sfx), true],
+      [() => `Music: ${onOff(audio.settings.music)}`, () => audio.setMusic(!audio.settings.music), true],
+      [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => { prefs.rumble = !prefs.rumble; if (prefs.rumble) setTimeout(() => fx.rumble(0.6, 0.6, 150), 30); }), true],
+      [() => `Table talk: ${onOff(prefs.chatter)}`, set(() => { prefs.chatter = !prefs.chatter; }), true],
+      [`${glyph('B')}Back`, back],
     ],
   });
 }
@@ -415,7 +447,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p>Knock out all ${cfg.names.length} to move up. Everyone starts with 1,000. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
+    body: `<p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${STACKS[prefs.stack].toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p><p class="who">${who}</p>`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -449,10 +481,12 @@ function onButton(b) {
     toast('Tap the screen once to turn sound on');
   }
   if (overlay) {
-    if (b === 'up' || b === 'left') overlayFocus(-1);
-    else if (b === 'down' || b === 'right') overlayFocus(1);
+    if (b === 'up') overlayFocus(-overlay.cols);
+    else if (b === 'down') overlayFocus(overlay.cols);
+    else if (b === 'left') overlayFocus(-1);
+    else if (b === 'right') overlayFocus(1);
     else if (b === 'a') $('overlay').querySelectorAll('.items .btn')[overlay.focus].click();
-    else if ((b === 'b' || b === 'start') && overlay.closable) { audio.back(); closeOverlay(); }
+    else if ((b === 'b' || b === 'start') && overlay.closable) { const done = overlay.onClose; audio.back(); closeOverlay(); done?.(); }
     return;
   }
   if (b === 'start') return pauseMenu();
@@ -568,6 +602,7 @@ function showThinking(seat) {
   badge.className = 'badge think';
 }
 function say(p, moment) {
+  if (!prefs.chatter) return;
   const text = line(p.name, moment);
   if (!text) return;
   const el = seatEls[p.seat].querySelector('.say');
@@ -621,7 +656,7 @@ function startTable(n, saved) {
   table = n;
   const cfg = tableConfig(n);
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
-  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel });
+  game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: STACKS[prefs.stack] });
   if (n === 1 && !saved) habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
   if (saved?.habits) habits = saved.habits;
   if (saved?.chips) {
@@ -674,7 +709,7 @@ async function run() {
         render();
         if (ui.slowRiver && g.board.length === 5) {
           audio.riverSlam();
-          await sleep(1000);
+          await rawSleep(1000); // matches the slam animation and sound, whatever the speed setting
           fx.shake(8, 400); fx.rumble(1, 1, 250);
           await sleep(500);
         }
@@ -749,6 +784,7 @@ startInput(onButton, (on) => {
   document.body.classList.toggle('gp', on);
   toast(on ? 'Controller connected' : 'Controller disconnected');
 });
+applyPrefs();
 startScreen();
 window.__poker = { get game() { return game; }, ui };
 

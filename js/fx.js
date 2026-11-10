@@ -89,7 +89,10 @@ export function roll(el, to, { dur = 420, onTick } = {}) {
   el._raf = requestAnimationFrame(frame);
 }
 
+let rumbleOn = true;
+export function setRumble(on) { rumbleOn = on; }
 export function rumble(strong = 0.5, weak = 0.5, ms = 120) {
+  if (!rumbleOn) return;
   try {
     for (const gp of navigator.getGamepads?.() ?? []) {
       gp?.vibrationActuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch?.(() => {});
