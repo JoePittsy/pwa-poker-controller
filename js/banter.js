@@ -45,6 +45,21 @@ export const LINES = {
     bust: ['Good game, all.', 'Well played.'],
     tank: ['Give me a sec.', 'Thinking…'],
   },
+  Vera: {
+    allin: ['House rules.', 'I already know how this ends.'], win: ['The house always wins.', 'As expected.'],
+    bluffed: ['You should have looked closer.'], steal: ['Thank you, darling.'], lose: ['Interesting. Again.', 'Hm. You got lucky.'],
+    bust: ["Well. That's never happened."], tank: ['Let me read you\u2026'],
+  },
+  Otto: {
+    allin: ['Why not? It is only money!', 'All of it! Ha!'], win: ['Marvellous!', 'More champagne!'],
+    bluffed: ['I had napkins!'], steal: ['Splendid.'], lose: ['Oh, bother. Fetch more.', 'Easy come!'],
+    bust: ['I shall need a bigger boat.'], tank: ['Decisions, decisions\u2026'],
+  },
+  Stone: {
+    allin: ['I have it.', 'All in.'], win: ['Told you.', 'Mm.'],
+    bluffed: ['\u2026'], steal: ['Fold.'], lose: ['Hm.', 'Fine.'],
+    bust: ['\u2026well played.'], tank: ['\u2026'],
+  },
 };
 
 const last = {};

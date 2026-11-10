@@ -17,6 +17,9 @@ const EXTRA = {
   Dot: '<g fill="none"><circle cx="11" cy="14" r="4.4"/><circle cx="21" cy="14" r="4.4"/><path d="M15.4 14 L16.6 14"/></g>', // round glasses
   Rex: '<g fill="none"><path d="M6.5 8.5 L13.5 11"/><path d="M25.5 8.5 L18.5 11"/></g>', // heavy brows
   Ivy: '<g fill="none"><path d="M7.5 11.5 L6 9.5"/><path d="M10 10.5 L9.6 8.2"/><path d="M24.5 11.5 L26 9.5"/><path d="M22 10.5 L22.4 8.2"/></g>', // lashes
+  Vera: '<g fill="none"><path d="M5 9.5 Q16 4 27 9.5"/><path d="M5 9.5 L27 9.5"/></g><circle cx="24" cy="20" r="0.9"/>', // dealer's visor and a beauty spot
+  Otto: '<g fill="none"><circle cx="21" cy="14" r="4.6"/><path d="M25 17.5 L27 24"/></g>', // monocle on a chain
+  Stone: '<path d="M6 10 L26 10" fill="none" stroke-width="2.6"/>', // one flat brow
   Gus: '<path d="M9.5 19.5 Q12.5 16.5 16 19 Q19.5 16.5 22.5 19.5 Q19.5 21 16 19.6 Q12.5 21 9.5 19.5 Z"/>', // moustache
 };
 export function face(name) {

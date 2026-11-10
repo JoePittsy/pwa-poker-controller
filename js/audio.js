@@ -180,7 +180,7 @@ export const win = sfx((size = 1) => { // 0 = someone else won, 1..3 = our win b
 });
 // each opponent "speaks" in their own register: three quick blips
 export const talk = sfx((seat = 1) => {
-  const base = [0, 67, 76, 55, 81, 62][seat] ?? 67;
+  const base = [0, 67, 76, 55, 81, 62, 72, 48, 43][seat] ?? 67;
   [0, 3, -2].forEach((n, i) => tone({ delay: i * 0.07, f: midi(base + n), type: 'triangle', d: 0.06, v: 0.13 }));
 });
 export const lose = sfx(() => { // a little "wah-wah"
