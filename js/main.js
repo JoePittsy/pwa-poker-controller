@@ -349,6 +349,7 @@ function pauseMenu() {
   });
 }
 function gameOver(won) {
+  audio.musicLevel(0);
   if (won) { audio.win(3); fx.burst($('center'), 60); } else audio.lose();
   showOverlay({
     title: won ? 'You <span>win!</span>' : 'Busted',
@@ -485,6 +486,7 @@ async function run() {
   while (g.startHand()) {
     audio.tension(false);
     audio.newHand();
+    audio.musicLevel(1);
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((dealOrder(p.seat) + k * n) * DEAL_GAP / 1000);
@@ -502,6 +504,7 @@ async function run() {
         if (id !== runId) return;
         const hidden = !g.showCards;
         g.nextStreet();
+        audio.musicLevel(2);
         if (g.stage === 'handOver' && hidden) audio.flip();
         render();
         continue;

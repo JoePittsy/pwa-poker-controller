@@ -2,12 +2,15 @@
 // Sound direction matches the art: dry, chunky and toy-like. Everything pitched is a
 // marimba-style "tok" in one pentatonic key, so play makes little melodies.
 // Browsers only start audio after a touch/click/key press (a gamepad press does not count on iOS).
+import { createMusic, BAR } from './music.js';
+
 const store = (() => { try { return JSON.parse(localStorage.getItem('padpoker.audio')) || {}; } catch { return {}; } })();
 export const settings = { sfx: store.sfx ?? true, music: store.music ?? true };
 const save = () => { try { localStorage.setItem('padpoker.audio', JSON.stringify(settings)); } catch { /* private mode */ } };
 
-let ctx, sfxBus, musicBus, verb, noiseBuf, musicTimer;
-let tense = false;
+let ctx, sfxBus, musicBus, musicFilter, verb, noiseBuf, musicTimer;
+let level = 0; // how much of the band is playing, see music.js
+const MUSIC_VOL = 0.8;
 let heat = 0; // climbs with every bet/raise in a hand, so the table "heats up"
 const rnd = (a, b) => a + Math.random() * (b - a);
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
@@ -23,7 +26,7 @@ function init() {
   comp.threshold.value = -12; comp.ratio.value = 4;
   comp.connect(ctx.destination);
   sfxBus = ctx.createGain(); sfxBus.gain.value = settings.sfx ? 1 : 0; sfxBus.connect(comp);
-  musicBus = ctx.createGain(); musicBus.gain.value = settings.music ? 0.5 : 0; musicBus.connect(comp);
+  musicBus = ctx.createGain(); musicBus.gain.value = settings.music ? MUSIC_VOL : 0; musicBus.connect(comp);
   // a short, dry room: just enough air to stop things sounding clinical
   const len = Math.floor(ctx.sampleRate * 0.45);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -160,51 +163,21 @@ export const lose = sfx(() => { // a little "wah-wah"
 
 // ---------- settings ----------
 export function setSfx(on) { settings.sfx = on; save(); if (ctx) sfxBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05); }
-export function setMusic(on) { settings.music = on; save(); if (ctx) musicBus.gain.setTargetAtTime(on ? 0.5 : 0, ctx.currentTime, 0.3); }
-// while an all-in is run out the band drops to just bass and pulse
-export function tension(on) { tense = on; }
+export function setMusic(on) { settings.music = on; save(); if (ctx) musicBus.gain.setTargetAtTime(on ? MUSIC_VOL : 0, ctx.currentTime, 0.3); }
+// while an all-in is run out the music sinks underwater
+export function tension(on) { if (musicFilter) musicFilter.frequency.setTargetAtTime(on ? 380 : 8000, ctx.currentTime, on ? 0.3 : 0.8); }
+export function musicLevel(n) { level = n; }
 
-// ---------- generative background music: a bouncy mallet-and-bass groove ----------
-// [bass root, chord tones for the mallet pattern]
-const BARS = [
-  [36, [60, 64, 67, 69, 74]], [33, [60, 64, 67, 69, 72]], [41, [60, 65, 69, 72, 76]], [43, [62, 67, 69, 71, 74]],
-  [38, [62, 65, 69, 72, 74]], [43, [62, 65, 67, 71, 74]], [40, [59, 64, 67, 71, 74]], [33, [60, 64, 67, 72, 76]],
-];
-const RIFF = [0, -1, 2, 1, -1, 3, 2, 4]; // chord-tone index per eighth note, -1 = rest
-const STEP = 60 / 104 / 2; // eighth notes at 104 bpm
+// ---------- background music (composed in music.js, scheduled a bar at a time) ----------
 function startMusic() {
-  let step = 0, next = ctx.currentTime + 0.3;
+  const music = createMusic(ctx, musicBus);
+  musicFilter = music.filter;
+  let bar = 0, next = ctx.currentTime + 0.25;
   const schedule = () => {
-    if (ctx.state !== 'running') { next = Math.max(next, ctx.currentTime + 0.1); return; }
-    while (next < ctx.currentTime + 0.35) {
-      if (settings.music) playStep(step, next - ctx.currentTime + (step % 2 ? STEP * 0.18 : 0));
-      step++; next += STEP;
-    }
+    if (ctx.state !== 'running' || !settings.music) return;
+    if (next < ctx.currentTime) next = ctx.currentTime + 0.15; // we were suspended: start a fresh bar
+    while (next < ctx.currentTime + 0.5) { music.scheduleBar(bar++, next, level); next += BAR; }
   };
-  musicTimer = setInterval(schedule, 110);
-}
-function playStep(step, delay) {
-  const s = step % 8, bar = Math.floor(step / 8);
-  const [root, notes] = BARS[bar % BARS.length];
-  const m = { bus: musicBus };
-  // bass: round and plucky
-  const bass = { 0: 0, 3: 0, 4: 12, 6: 7 }[s];
-  if (bass !== undefined && (s !== 3 || bar % 2)) {
-    tone({ ...m, delay, f: midi(root + bass), type: 'triangle', d: 0.24, v: 0.36 });
-    tone({ ...m, delay, f: midi(root + bass) / 2, d: 0.2, v: 0.2 });
-  }
-  // pulse
-  if (s === 0 || s === 4) tone({ ...m, delay, f: 120, f2: 48, d: 0.12, v: 0.4 });
-  noise({ ...m, delay, type: 'highpass', f: 6500, d: s % 2 ? 0.035 : 0.02, v: s % 2 ? 0.05 : 0.025 });
-  if (tense) return;
-  if (s === 2 || s === 6) { // dry clap
-    noise({ ...m, delay, f: 1500, q: 0.9, d: 0.05, v: 0.13 });
-    noise({ ...m, delay: delay + 0.012, f: 1700, q: 0.9, d: 0.04, v: 0.1 });
-  }
-  if (s === 7 && bar % 4 === 3) tone({ ...m, delay, f: 880, f2: 720, d: 0.04, v: 0.12 }); // woodblock turnaround
-  // mallet riff, with the odd note dropped or lifted an octave so it never loops exactly
-  const idx = RIFF[(s + (bar % 4 === 2 ? 3 : 0)) % 8];
-  if (idx >= 0 && Math.random() < 0.85) {
-    tok(notes[idx] + (Math.random() < 0.12 ? 12 : 0), { delay, v: 0.13, d: 0.18, bus: musicBus, wet: 0.25 });
-  }
+  musicTimer = setInterval(schedule, 150);
+  schedule();
 }
