@@ -15,7 +15,14 @@ const CHARACTERS = {
   Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
   Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
   Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.5, aggr: 0.55 } },
+  // newcomers: they start turning up from Table 4
+  Zed: { tag: 'Maniac', color: '#ff8a3d', voice: 9, style: { loose: 0.95, aggr: 0.95 } },
+  Flo: { tag: 'Nit', color: '#c7e36a', voice: 10, style: { loose: 0.1, aggr: 0.5, tell: 'slowStrong' } },
+  Kit: { tag: 'Trickster', color: '#7ee0ff', voice: 11, style: { loose: 0.55, aggr: 0.6, tell: 'fastStrong' } },
+  Bea: { tag: 'Banker', color: '#e6b8ff', voice: 12, style: { loose: 0.4, aggr: 0.4, tell: 'smallValue' } },
+  Sol: { tag: 'Gambler', color: '#ffd98a', voice: 13, style: { loose: 0.7, aggr: 0.65, tell: 'fastBluff' } },
 };
+const REGULARS = ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
 // Bosses: after every third table you play one of these heads-up. Each bends a rule.
 const BOSSES = [
   { name: 'Vera', tag: 'The Dealer', color: '#b58cff', voice: 6, trick: 'She always seems to know roughly what you are holding.', style: { loose: 0.5, aggr: 0.7, cheat: 0.55 } },
@@ -44,7 +51,14 @@ function tableConfig(n, boss = false) {
       handsPerLevel: b.turbo ? 2 : 4, chips: STACKS[prefs.stack],
     };
   }
-  const names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'];
+  let names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : REGULARS;
+  if (n >= 4) { // from here the line-up is five of the ten, shuffled per run and table
+    const rnd = mulberry(((runStats.seed || 1) + n * 7919) | 0);
+    const pool = Object.keys(CHARACTERS);
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    names = pool.slice(0, 5);
+    if (n === 4 && !names.some((x) => !REGULARS.includes(x))) names[4] = 'Zed'; // Table 4 always introduces someone new
+  }
   const [venue, mat] = VENUES[(n - 1) % VENUES.length];
   const lap = Math.ceil(n / VENUES.length);
   const twist = n >= 3 ? TWISTS[(n - 3) % TWISTS.length] : null; // the first two tables are plain
@@ -1086,7 +1100,7 @@ const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, al
 const stats = { ...STATS0 };
 try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) || {}); } catch { /* private mode */ }
 const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };
-const RUN0 = { hands: 0, won: 0, biggest: 0, knockouts: 0, bestScore: 0, bestHand: '', startBest: 0 };
+const RUN0 = { hands: 0, won: 0, biggest: 0, knockouts: 0, bestScore: 0, bestHand: '', startBest: 0, seed: 0 };
 let runStats = { ...RUN0 }; // this run only; saved with the game
 let handLog = null; // the hand in progress
 let lastHand = null; // the most recent finished hand
@@ -1153,6 +1167,7 @@ function thinkTime(p, a) {
   if (tell === 'fastBluff' && a.bluff) t = 260;
   if (tell === 'slowBluff' && a.bluff) t += 1800;
   if (tell === 'slowStrong' && a.strong) t += 1400;
+  if (tell === 'fastStrong' && a.strong) t = 300;
   return t;
 }
 function showThinking(seat) {
@@ -1229,6 +1244,8 @@ function startTable(n, saved) {
   if (n === 1 && !saved) perks = {};
   if (saved?.perks) perks = saved.perks;
   if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks, owed: false })); // a perk is due for the table just cleared
+  if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best(), seed: Math.floor(Math.random() * 1e9) + 1 }; }
+  if (saved?.run) runStats = { ...RUN0, ...saved.run };
   table = n;
   bossMode = !!saved?.boss;
   const cfg = tableConfig(n, bossMode);
@@ -1242,8 +1259,6 @@ function startTable(n, saved) {
   game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
   if (cfg.boss?.chips) game.players[1].chips = cfg.chips * cfg.boss.chips;
   twist = cfg.twist?.key || '';
-  if (n === 1 && !saved) { habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); runStats = { ...RUN0, startBest: best() }; }
-  if (saved?.run) runStats = { ...RUN0, ...saved.run };
   if (saved?.habits) habits = saved.habits;
   if (saved?.chips) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });

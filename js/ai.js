@@ -60,6 +60,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const raise = (frac, extra = {}) => {
     if (!L.canRaise) return passive();
     if (extra.bluff && tell === 'bigBluff') frac = 1.15; // overbets when he has nothing
+    if (extra.strong && tell === 'smallValue') frac = 0.33; // bets small when she has it
     const to = Math.round((g.currentBet + frac * (pot + toCall)) / g.sb) * g.sb;
     return out({ type: 'raise', amount: Math.max(L.minTo, Math.min(to, L.maxTo)) }, extra);
   };

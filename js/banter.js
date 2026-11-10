@@ -65,6 +65,31 @@ export const LINES = {
     bluffed: ['\u2026'], steal: ['Fold.'], lose: ['Hm.', 'Fine.'],
     bust: ['\u2026well played.'], tank: ['\u2026'],
   },
+  Zed: {
+    again: ['Oh, it is ON.'], revenge: ['Boom. Remember me?'],
+    allin: ['SEND IT!', 'All in. Again.'], win: ['Too fast for you!', 'Boom.'], bluffed: ['Air. Pure air.'], steal: ['Yoink.'],
+    lose: ['Reload!', 'Whatever. Next.'], bust: ['Worth every chip.'], tank: ['Nah, no thinking.'],
+  },
+  Flo: {
+    again: ['I remember everything.'], revenge: ['Patience.'],
+    allin: ['I have waited all night for this.', 'Finally.'], win: ['Worth the wait.', 'Mine.'], bluffed: ['I never bluff. Almost.'], steal: ['Thank you.'],
+    lose: ['Unbelievable.', 'That never happens.'], bust: ['I folded for THIS?'], tank: ['Hmm. No rush.'],
+  },
+  Kit: {
+    again: ['New game, new tricks.'], revenge: ['Tricked you back.'],
+    allin: ['Or am I?', 'Guess.'], win: ['Fooled you.', 'Too easy to read. You, I mean.'], bluffed: ['Wrong tell.'], steal: ['Wink.'],
+    lose: ['You saw through it.', 'Clever.'], bust: ['Good read. Finally.'], tank: ['Am I thinking? Or acting?'],
+  },
+  Bea: {
+    again: ['You still owe me.'], revenge: ['Debt settled.'],
+    allin: ['A sound investment.', 'Fully committed.'], win: ['Compound interest.', 'A tidy return.'], bluffed: ['Creative accounting.'], steal: ['Deposited.'],
+    lose: ['A write-off.', 'Market correction.'], bust: ['Insolvent. Goodness.'], tank: ['Running the figures\u2026'],
+  },
+  Sol: {
+    again: ['My luck has changed.'], revenge: ['Told you it would turn.'],
+    allin: ['Feeling lucky!', 'Let it ride!'], win: ['Lady Luck loves me.', 'Jackpot!'], bluffed: ['Lucky you folded.'], steal: ['Sweet.'],
+    lose: ['The luck will turn.', 'Next one is mine.'], bust: ['Luck ran dry.'], tank: ['Heads I call\u2026'],
+  },
 };
 
 const last = {};
