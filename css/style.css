@@ -37,7 +37,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 }
 #mat {
   position: absolute; left: 11%; right: 11%; top: 9.2rem; bottom: 10.2rem;
-  background: var(--blue); border: .35rem solid var(--ink); border-radius: 2.6rem;
+  background: var(--mat, var(--blue)); border: .35rem solid var(--ink); border-radius: 2.6rem; transition: background-color .6s;
   box-shadow: .7rem .7rem 0 var(--ink); rotate: -.6deg; overflow: hidden;
 }
 #mat::after { /* halftone fading in from the corner */
@@ -373,6 +373,7 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .dialog p { font-size: 1.45rem; color: var(--sky); line-height: 1.4; font-weight: 500; max-width: 34rem; }
 .dialog .items { display: flex; flex-direction: column; gap: 1.3rem; flex: none; }
 .dialog .btn { min-width: 17rem; height: 4.6rem; }
+.dialog p.venue { color: var(--yellow); font-weight: 800; font-size: 1.9rem; margin-top: -.6rem; }
 .dialog p.who { color: var(--paper); margin-top: .8rem; }
 .dialog p.who i { font-style: normal; color: var(--sky); }
 .dialog p.who b { color: var(--yellow); }
