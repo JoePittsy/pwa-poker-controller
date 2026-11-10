@@ -64,7 +64,7 @@ function tableConfig(n, boss = false) {
   const lap = Math.ceil(n / VENUES.length);
   const twist = n >= 3 ? TWISTS[(n - 3) % TWISTS.length] : null; // the first two tables are plain
   return {
-    names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
+    names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
     handsPerLevel: twist?.key === 'turbo' ? 2 : Math.max(3, 7 - n),
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
@@ -297,7 +297,9 @@ const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch w
 // ---------- player preferences ----------
 const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false, squeeze: true };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false, squeeze: true, difficulty: 'Standard' };
+// Difficulty shifts how well the opponents play, and in Shark gives them a bigger stack. The daily deal ignores it.
+const DIFFICULTY = { Casual: { skill: -0.25, stack: 1 }, Standard: { skill: 0, stack: 1 }, Shark: { skill: 0.25, stack: 1.25 } };
 // Card backs, and how many tables your best run must have cleared to unlock each.
 const BACKS = { Spade: 0, Lattice: 1, Sunburst: 2, Ruby: 3, Gold: 5 };
 const bestRun = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
@@ -305,6 +307,7 @@ const unlockedBacks = () => Object.keys(BACKS).filter((k) => BACKS[k] <= bestRun
 try { Object.assign(prefs, JSON.parse(localStorage.getItem('padpoker.prefs')) || {}); } catch { /* private mode */ }
 if (!PACE[prefs.speed]) prefs.speed = 'Normal';
 if (!STACKS[prefs.stack]) prefs.stack = 'Standard';
+if (!DIFFICULTY[prefs.difficulty]) prefs.difficulty = 'Standard';
 function applyPrefs() {
   document.body.classList.toggle('four', prefs.fourColour);
   if (!unlockedBacks().includes(prefs.back)) prefs.back = 'Spade';
@@ -956,8 +959,9 @@ function settingsMenu(back) {
   const set = (fn) => () => { fn(); applyPrefs(); };
   showOverlay({
     title: 'Settings', compact: true, closable: true, onClose: back,
-    body: `<p>Speed changes how long opponents and deals take. Stack size applies from the next table. Left-handed moves the buttons to the left. Coach shows your rough chance of winning and the odds a call needs.</p>`,
+    body: `<p>Difficulty changes how well opponents play (Shark also gives them bigger stacks) and applies from the next table, as does stack size. Speed changes how long opponents and deals take. Left-handed moves the buttons to the left. Coach shows your rough chance of winning and the odds a call needs.</p>`,
     items: [
+      [() => `Difficulty: ${prefs.difficulty}`, set(() => { prefs.difficulty = cycle(DIFFICULTY, prefs.difficulty); }), true],
       [() => `Speed: ${prefs.speed}`, set(() => { prefs.speed = cycle(PACE, prefs.speed); }), true],
       [() => `Stacks: ${prefs.stack}`, set(() => { prefs.stack = cycle(STACKS, prefs.stack); }), true],
       [() => `Left-handed: ${onOff(prefs.lefty)}`, set(() => { prefs.lefty = !prefs.lefty; }), true],
@@ -990,7 +994,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.${prefs.difficulty !== 'Standard' ? ` Difficulty: ${prefs.difficulty}.` : ''}</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -1459,6 +1463,7 @@ function startTable(n, saved) {
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips });
   game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
   if (cfg.boss?.chips) game.players[1].chips = cfg.chips * cfg.boss.chips;
+  if (DIFFICULTY[prefs.difficulty].stack !== 1) for (const p of game.players) if (!p.isHuman) p.chips = Math.round(p.chips * DIFFICULTY[prefs.difficulty].stack);
   twist = cfg.twist?.key || '';
   if (saved?.habits) habits = saved.habits;
   if (saved?.chips) {
