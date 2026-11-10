@@ -1076,6 +1076,12 @@ function onButton(b) {
     else if ((b === 'b' || b === 'start') && overlay.closable) { const done = overlay.onClose; audio.back(); closeOverlay(); done?.(); }
     return;
   }
+  if (!$('emotes').hidden) { // table talk is open: a direction says it, anything else closes it
+    const e = EMOTES.find((x) => x[0] === b);
+    if (e) sendEmote(e[3]); else toggleEmotes(false);
+    return;
+  }
+  if (b === 'rb' && ui.mode !== 'raise') return toggleEmotes(true);
   if (b === 'start') return pauseMenu();
   if (ui.mode === 'actions') {
     const L = game.legal(ME);
@@ -1158,6 +1164,7 @@ async function collectBets() {
 
 function handOverFx() {
   const g = game, me = g.players[ME];
+  lastWinner = g.result.winners[0];
   for (const p of g.players) {
     if (p.out) continue;
     if (p.won > 0) setMood(p.seat, 'happy');
@@ -1347,6 +1354,41 @@ function say(p, moment) {
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 2600);
 }
+// ---------- table talk: say something, and someone answers in character ----------
+const EMOTES = [['up', '\u2191', 'Nice hand', 'nice', 'happy'], ['right', '\u2192', 'Hurry up', 'hurry', 'think'], ['down', '\u2193', 'Ouch', 'ouch', 'idle'], ['left', '\u2190', 'Ha!', 'ha', 'happy']];
+let lastTalk = 0, lastWinner = -1;
+function toggleEmotes(open = $('emotes').hidden) {
+  const bar = $('emotes');
+  if (open && (!game || mode === 'pass' || !prefs.chatter)) return;
+  bar.hidden = !open;
+  if (!open) return;
+  audio.tick();
+  bar.innerHTML = '';
+  for (const [, arrow, text, key] of EMOTES) {
+    const b = h('button', 'btn sm', `<span class="glyph wide">${arrow}</span>${text}`);
+    b.onclick = () => sendEmote(key);
+    bar.append(b);
+  }
+}
+function sendEmote(key) {
+  toggleEmotes(false);
+  const now = performance.now();
+  if (now - lastTalk < 2500) return;
+  lastTalk = now;
+  const [, , text, , mood] = EMOTES.find((e) => e[3] === key);
+  const mineEl = seatEls[ME].querySelector('.say');
+  mineEl.textContent = text; mineEl.classList.remove('show'); void mineEl.offsetWidth; mineEl.classList.add('show');
+  clearTimeout(mineEl._t); mineEl._t = setTimeout(() => mineEl.classList.remove('show'), 2200);
+  audio.talk(0);
+  // who answers: the last winner for a compliment, whoever is thinking for "hurry up", otherwise anyone
+  const g = game, ais = g.players.filter((p) => !p.isHuman && !p.out);
+  if (!ais.length) return;
+  let who = ais[Math.floor(Math.random() * ais.length)];
+  if (key === 'nice' && ais.some((p) => p.seat === lastWinner)) who = g.players[lastWinner];
+  if (key === 'hurry' && g.stage === 'betting' && !g.players[g.toAct].isHuman) who = g.players[g.toAct];
+  setTimeout(() => { if (game === g) { say(who, key); setMood(who.seat, mood, 1600); } }, 750);
+}
+
 function handOverBanter() {
   const g = game;
   if (g.stage !== 'handOver') return; // the next hand has already started
@@ -1617,6 +1659,7 @@ addEventListener('pageshow', (e) => { if (e.persisted) checkVersion(); });
 checkVersion();
 
 // ---------- boot ----------
+$('talk-btn').onclick = () => { audio.unlock(); if (!overlay) toggleEmotes(); };
 $('menu-btn').onclick = () => { audio.unlock(); if (!overlay && game) pauseMenu(); };
 for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, () => audio.unlock(), { capture: true, passive: true });
 document.addEventListener('contextmenu', (e) => e.preventDefault());
