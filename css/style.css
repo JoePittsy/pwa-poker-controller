@@ -36,7 +36,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   left: env(safe-area-inset-left); right: env(safe-area-inset-right);
 }
 #mat {
-  position: absolute; left: 11%; right: 11%; top: 9.2rem; bottom: 10.2rem;
+  position: absolute; left: 11%; right: 11%; top: 9.9rem; bottom: 10.2rem;
   background: var(--mat, var(--blue)); border: .35rem solid var(--ink); border-radius: 2.6rem; transition: background-color .6s;
   box-shadow: .7rem .7rem 0 var(--ink); rotate: -.6deg; overflow: hidden;
 }
@@ -115,7 +115,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 
 /* ---------- centre ---------- */
 #center {
-  position: absolute; left: 50%; top: 13.4rem; transform: translateX(-50%);
+  position: absolute; left: 50%; top: 14.2rem; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: .9rem; pointer-events: none;
 }
 #boardwrap { position: relative; }
@@ -215,12 +215,13 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .badge.think { rotate: 0deg; letter-spacing: .1em; animation: think .7s ease-in-out infinite alternate; }
 @keyframes think { from { opacity: .45; translate: 0 .1rem; } to { opacity: 1; translate: 0 -.15rem; } }
 .say {
-  position: absolute; left: 50%; top: calc(100% + 2.3rem); z-index: 6; transform: translateX(-50%);
-  max-width: 17rem; width: max-content; padding: .3rem .8rem; border-radius: .9rem; text-align: center;
-  font-size: 1.25rem; line-height: 1.15; background: var(--paper); color: var(--ink);
+  position: absolute; left: 50%; top: calc(100% + .7rem); z-index: 6; transform: translateX(-50%);
+  max-width: 17rem; width: max-content; padding: .15rem .7rem; border-radius: .8rem; text-align: center;
+  font-size: 1.2rem; line-height: 1.15; background: var(--paper); color: var(--ink);
   border: .2rem solid var(--ink); box-shadow: .3rem .3rem 0 var(--ink);
   opacity: 0; pointer-events: none; transition: opacity .25s;
 }
+.seat.shown .say { top: calc(100% + 2.3rem); } /* clear of the hand-name label at showdown */
 .say::before { /* tail pointing up at the speaker */
   content: ""; position: absolute; left: 50%; bottom: 100%; margin-left: -.5rem;
   border: .5rem solid transparent; border-bottom-color: var(--ink);
@@ -266,7 +267,11 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .bet.leaving { opacity: 0; }
 
 /* opponents sit in a row along the top */
-.seat.ai { top: 5.1rem; --bx: 0rem; --by: 6.1rem; --dy: 12rem; } /* left, colour and deal direction are set per seat in JS */
+.seat.ai { top: 5.65rem; --bx: 0rem; --by: 6.9rem; --dy: 12rem; }
+/* opponents get a bigger face so their expressions read at phone size */
+.seat.ai .ava { width: 4.2rem; height: 4.2rem; border-radius: .8rem; }
+.seat.ai .plate { min-width: 12rem; }
+.seat.ai .plate .chips { font-size: 1.85rem; } /* left, colour and deal direction are set per seat in JS */
 
 /* the human seat: big cards that breathe, plate to the left */
 .seat.s0 { left: 46%; top: 86%; --dy: -14rem; }
