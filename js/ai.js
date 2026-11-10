@@ -41,7 +41,8 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random) {
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
-  const { loose = 0.5, aggr = 0.5, tell } = p.style || {};
+  const { loose = 0.5, aggr = 0.5, tell, skill = 1 } = p.style || {};
+  const sloppy = 1 - skill; // weaker players see their hands less clearly and call too much
   const { foldToBet = 0.4, aggression = 0.3 } = human;
   const pot = g.pot, toCall = L.toCall, bb = g.bb;
   const opp = g.players.filter((q) => !q.folded && q !== p).length;
@@ -64,7 +65,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
     const position = behind <= 1 ? 1 : behind >= 4 ? -0.7 : 0; // looser late, tighter early
-    const s = chen(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10;
+    const s = chen(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2;
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const shove = toCall >= p.chips; // calling puts us all-in
@@ -85,7 +86,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     return giveUp();
   }
 
-  const e = equity(p.cards, g.board, Math.min(opp, 3), 200, rng) + (loose - 0.5) * 0.06;
+  const e = equity(p.cards, g.board, Math.min(opp, 3), 200, rng) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
   const strong = e > 0.75;
   if (toCall === 0) {
     if (e > 0.7) return rng() < 0.6 + 0.35 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
@@ -95,7 +96,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   }
   const odds = toCall / (pot + toCall);
   const pressure = toCall / Math.max(pot - toCall, 1);
-  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter;
+  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter - sloppy * 0.05;
   // close decisions for a big share of the stack take longest
   const close = 1 - Math.min(1, Math.abs(e - need) / 0.22);
   const stake = Math.min(1, toCall / Math.max(1, 0.3 * (p.chips + p.bet)));
