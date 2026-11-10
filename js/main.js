@@ -37,13 +37,18 @@ const h = (tag, cls = '', html = '') => {
 };
 const glyph = (g) => `<span class="glyph ${g.length > 1 ? 'wide' : g.toLowerCase()}">${g}</span>`;
 let fast = false; // true while skipping the rest of a hand you've folded
-const rawSleep = (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms));
+const tick = (ms) => new Promise((r) => setTimeout(r, ms));
+// Every pause in the game goes through here, so opening a menu really does pause play.
+const rawSleep = async (ms) => {
+  await tick(fast ? 0 : ms);
+  while (overlay) await tick(120);
+};
 const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch with the speed setting
 
 // ---------- player preferences ----------
 const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade' };
+const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false };
 // Card backs, and how many tables your best run must have cleared to unlock each.
 const BACKS = { Spade: 0, Lattice: 1, Sunburst: 2, Ruby: 3, Gold: 5 };
 const bestRun = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
@@ -52,6 +57,7 @@ try { Object.assign(prefs, JSON.parse(localStorage.getItem('padpoker.prefs')) ||
 if (!PACE[prefs.speed]) prefs.speed = 'Normal';
 if (!STACKS[prefs.stack]) prefs.stack = 'Standard';
 function applyPrefs() {
+  document.body.classList.toggle('four', prefs.fourColour);
   if (!unlockedBacks().includes(prefs.back)) prefs.back = 'Spade';
   for (const k of Object.keys(BACKS)) document.body.classList.toggle(`back-${k.toLowerCase()}`, k === prefs.back);
   document.body.classList.toggle('lefty', prefs.lefty);
@@ -76,7 +82,7 @@ function cardEl(c, face, cls = '', cover = false) {
   if (!face) { el.append(h('div', 'in back')); return el; }
   const r = RANKS[c >> 2], s = c & 3;
   el.dataset.c = c;
-  el.append(h('div', `in face ${s === 1 || s === 2 ? 'red' : 'black'}`,
+  el.append(h('div', `in face s${s} ${s === 1 || s === 2 ? 'red' : 'black'}`,
     `<span class="r">${r === 'T' ? '10' : r}</span><span class="s">${SUITS[s]}</span>`));
   return el;
 }
@@ -429,6 +435,7 @@ const CONTROLS = `<table>
 // items: [label | () => label, fn, keepOpen]
 function showOverlay({ title, body, items, closable = false, compact = false, wide = false, onClose }) {
   overlay = { items, focus: 0, closable, onClose, cols: compact ? 2 : 1 };
+  for (const e of document.querySelectorAll('.bannerfx')) e.remove(); // banners must not sit on top of a menu
   const el = $('overlay');
   el.innerHTML = '';
   const d = h('div', 'dialog' + (compact ? ' compact' : '') + (wide ? ' wide' : ''));
@@ -547,6 +554,7 @@ function settingsMenu(back) {
         const next = Object.keys(BACKS).find((k) => BACKS[k] > bestRun());
         if (mine.length === 1 && next) toast(`Clear ${tables(BACKS[next])} in a run to unlock ${next}`);
       }), true],
+      [() => `Deck: ${prefs.fourColour ? '4-colour' : '2-colour'}`, set(() => { prefs.fourColour = !prefs.fourColour; }), true],
       [() => `Coach: ${onOff(prefs.coach)}`, set(() => { prefs.coach = !prefs.coach; if (game && game.stage !== 'idle') render(); }), true],
       [`${glyph('B')}Back`, back],
     ],
@@ -703,7 +711,7 @@ try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) ||
 const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };
 let handLog = null; // the hand in progress
 let lastHand = null; // the most recent finished hand
-const cardText = (c) => `<span class="${(c & 3) === 1 || (c & 3) === 2 ? 'rd' : 'bk'}">${RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]}${SUITS[c & 3]}</span>`;
+const cardText = (c) => `<span class="s${c & 3} ${(c & 3) === 1 || (c & 3) === 2 ? 'rd' : 'bk'}">${RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]}${SUITS[c & 3]}</span>`;
 const cardsText = (cs) => cs.map(cardText).join(' ');
 
 function logStart(g) {

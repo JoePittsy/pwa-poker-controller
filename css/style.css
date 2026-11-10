@@ -56,6 +56,9 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 }
 .in.face { background: var(--paper); color: var(--ink); line-height: .95; font-weight: 800; }
 .in.face.red { color: var(--red); }
+/* four-colour deck: clubs green, diamonds blue */
+.four .in.face.s3, .four span.s3 { color: #14804a; }
+.four .in.face.s2, .four span.s2 { color: var(--blue); }
 .in .r { font-size: 1.7em; letter-spacing: -.06em; }
 .in .s { font-size: 1.4em; }
 .in.back { /* default: ink back, cream edge, thin yellow frame, one yellow spade. Other backs override the variables. */
