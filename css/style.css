@@ -246,21 +246,24 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.5;
   padding: 0 .7rem; border-radius: 2rem; background: var(--ink); color: var(--paper);
 }
-/* chips seen side-on, stacked from the bottom */
-.stack { order: -1; display: flex; flex-direction: column-reverse; align-items: center; font-style: normal; }
-.stack i {
-  display: block; width: 1.75rem; height: .62rem; margin-top: -.16rem; border-radius: .22rem;
-  background: var(--yellow); border: .16rem solid var(--ink);
-  background-image: linear-gradient(90deg, transparent 0 22%, rgba(20, 17, 43, .28) 22% 30%, transparent 30% 70%, rgba(20, 17, 43, .28) 70% 78%, transparent 78%);
+/* chips seen from above: a disc with edge inserts and an inner ring; overlapping discs make a pile */
+.pile { order: -1; display: flex; align-items: center; font-style: normal; padding: 0 .3rem .25rem 0; }
+.pile i, .chipfx {
+  --c: var(--yellow); --alt: var(--paper);
+  display: block; flex: none; width: 1.55rem; height: 1.55rem; border-radius: 50%; border: .14rem solid var(--ink);
+  background:
+    radial-gradient(circle, var(--c) 0 36%, var(--ink) 37% 46%, transparent 47%),
+    repeating-conic-gradient(var(--alt) 0 22.5deg, var(--c) 22.5deg 45deg);
 }
-.stack i.c1 { background-color: var(--red); }
-.stack i.c2 { background-color: var(--paper); }
-#pot-chips { display: flex; justify-content: flex-end; align-items: flex-end; gap: .2rem; margin-top: .5rem; min-height: 2.9rem; }
-#pot-chips .stack { order: 0; }
-.chipfx {
-  content: ""; width: 1.6rem; height: 1.6rem; border-radius: 50%;
-  background: var(--yellow); border: .2rem solid var(--ink); box-shadow: inset 0 0 0 .22rem var(--yellow), inset 0 0 0 .34rem var(--ink);
-}
+.pile i + i { margin-left: -.6rem; }
+.pile i.c1, .chipfx.c1 { --c: var(--red); }
+.pile i.c2, .chipfx.c2 { --c: var(--paper); --alt: var(--sky); }
+/* a disc that is two or three chips high shows the edges of the chips beneath it */
+.pile i.h1 { box-shadow: .08rem .1rem 0 var(--ink); }
+.pile i.h2 { box-shadow: .1rem .12rem 0 var(--c), .16rem .2rem 0 var(--ink); }
+.pile i.h3 { box-shadow: .1rem .12rem 0 var(--c), .16rem .2rem 0 var(--ink), .24rem .3rem 0 var(--c), .3rem .38rem 0 var(--ink); }
+#pot-chips { order: 0; flex-wrap: wrap-reverse; justify-content: flex-end; width: 5.6rem; margin: .5rem 0 0 auto; min-height: 1.9rem; padding: 0; }
+#pot-chips i { margin: -.45rem 0 0 -.6rem; }
 .bet[hidden] { display: none; }
 .bet.leaving { opacity: 0; }
 
@@ -341,8 +344,6 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 #fx { position: fixed; inset: 0; pointer-events: none; z-index: 20; overflow: hidden; }
 #fx > * { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
 .chipfx { margin: -.8rem 0 0 -.8rem; }
-.chipfx.c1 { background: var(--red); box-shadow: inset 0 0 0 .22rem var(--red), inset 0 0 0 .34rem var(--ink); }
-.chipfx.c2 { background: var(--paper); box-shadow: inset 0 0 0 .22rem var(--paper), inset 0 0 0 .34rem var(--ink); }
 .bannerfx {
   font-size: 5.5rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap;
   padding: .4rem 1.6rem; border-radius: 1.2rem; background: var(--red); color: var(--paper);
