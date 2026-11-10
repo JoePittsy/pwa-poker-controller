@@ -64,6 +64,10 @@ const PERKS = {
   slowblinds: { name: 'Slow Clock', text: 'Blinds take 2 more hands to rise.', stack: true },
 };
 let perks = {}; // key -> how many you hold
+// What the regulars remember about you this run: memory[name] = { ko: times you knocked them out }.
+// Someone you have knocked out comes back more aggressive, says so, and gloats when they get you back.
+let memory = {};
+const grudge = (name) => memory[name]?.ko || 0;
 let peekSeat = -1; // who is showing you a card this hand
 const perkSummary = () => Object.keys(perks).filter((k) => perks[k] > 0)
   .map((k) => `<b>${PERKS[k].name}</b>${perks[k] > 1 ? ` &times;${perks[k]}` : ''}`).join(' &middot; ');
@@ -842,7 +846,7 @@ function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. Everyone starts with ${cfg.chips.toLocaleString()}. Blinds rise every ${cfg.handsPerLevel} hands.</p>${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -867,7 +871,7 @@ function showCleared() {
   if (bossMode) { // beat the boss: on to the next table
     award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(table).name]);
     stats.bosses = (stats.bosses || 0) + 1; saveStats();
-    writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
+    writeSave({ table: table + 1, habits, run: runStats, perks, mem: memory, owed: true });
     const b = bossFor(table);
     return showOverlay({
       title: 'Boss <span>beaten!</span>',
@@ -883,7 +887,7 @@ function showCleared() {
   try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
   const bossNext = table % 3 === 0;
-  writeSave({ table: bossNext ? table : table + 1, boss: bossNext, habits, run: runStats, perks, owed: true });
+  writeSave({ table: bossNext ? table : table + 1, boss: bossNext, habits, run: runStats, perks, mem: memory, owed: true });
   stats.tables++; saveStats();
   const next = bossNext ? `a boss: ${bossFor(table).name}, ${bossFor(table).tag}` : `${tableConfig(table + 1).venue}, and it's tougher`;
   showOverlay({
@@ -1173,6 +1177,11 @@ function say(p, moment) {
 function handOverBanter() {
   const g = game;
   if (g.stage !== 'handOver') return; // the next hand has already started
+  const me0 = g.players[ME];
+  if (mode === 'run' && !bossMode) {
+    const avenger = g.players.find((p) => !p.isHuman && p.won > 0 && grudge(p.name) && g.result.showdown && !me0.folded && me0.won === 0);
+    if (avenger) { say(avenger, 'revenge'); setMood(avenger.seat, 'happy'); return; } // they enjoy getting you back
+  }
   const ais = g.players.filter((p) => !p.isHuman && !p.out);
   let said = 0;
   const maybe = (p, moment, chance) => { if (said < 2 && Math.random() < chance) { say(p, moment); said++; } };
@@ -1215,6 +1224,8 @@ function writeSave(s) {
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 function startTable(n, saved) {
   mode = 'run'; aiRng = Math.random;
+  if (n === 1 && !saved) memory = {};
+  if (saved?.mem) memory = saved.mem;
   if (n === 1 && !saved) perks = {};
   if (saved?.perks) perks = saved.perks;
   if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks, owed: false })); // a perk is due for the table just cleared
@@ -1222,7 +1233,11 @@ function startTable(n, saved) {
   bossMode = !!saved?.boss;
   const cfg = tableConfig(n, bossMode);
   const info = (name) => (cfg.boss ? cfg.boss : CHARACTERS[name]);
-  cast = [YOU, ...cfg.names.map((name) => ({ name, ...info(name), style: { ...info(name).style, skill: cfg.skill } }))];
+  cast = [YOU, ...cfg.names.map((name) => {
+    const st = { ...info(name).style, skill: cfg.skill };
+    if (grudge(name)) st.aggr = Math.min(0.95, st.aggr + 0.12 * grudge(name)); // out for revenge
+    return { name, ...info(name), style: st };
+  })];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel + 2 * (perks.slowblinds || 0), chips: cfg.chips });
   game.players[ME].chips = Math.round(cfg.chips * (1 + 0.3 * (perks.bigstack || 0)));
   if (cfg.boss?.chips) game.players[1].chips = cfg.chips * cfg.boss.chips;
@@ -1234,7 +1249,7 @@ function startTable(n, saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer;
     game.handNo = saved.handNo;
-  } else writeSave({ table: n, boss: bossMode, habits, run: runStats, perks });
+  } else writeSave({ table: n, boss: bossMode, habits, run: runStats, perks, mem: memory });
   $('app').style.setProperty('--mat', cfg.mat);
   audio.setVenue(n - 1);
   buildSeats();
@@ -1281,6 +1296,7 @@ async function run() {
     if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); fx.haptic('blinds'); }
     lastBB = g.bb;
     fx.shuffle($('deck')); audio.shuffle();
+    if (g.handNo === 1 && mode === 'run') { const again = g.players.find((p) => !p.isHuman && grudge(p.name)); if (again) setTimeout(() => say(again, 'again'), 1600); }
     render();
     const n = g.players.length;
     for (const p of g.players) if (!p.out) for (const k of [0, 1]) audio.card((SHUFFLE_MS + (dealOrder(p.seat) + k * n) * DEAL_GAP) / 1000);
@@ -1353,6 +1369,9 @@ async function run() {
     if (id !== runId) return;
     settled = true;
     const kos = recordHand(g);
+    if (mode === 'run' && !bossMode && me.won > 0) { // they remember who took their last chip
+      for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) memory[p.name] = { ko: grudge(p.name) + 1 };
+    }
     checkHandStickers(g, kos);
     // bonuses are paid by the house, on top of the pot
     const bonus = (twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (perks.hunter || 0) * kos
@@ -1370,7 +1389,7 @@ async function run() {
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table, boss: bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks });
+    writeSave({ table, boss: bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks, mem: memory });
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
