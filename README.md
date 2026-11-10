@@ -59,3 +59,4 @@ first button press.
 - [x] Visible deck: shuffle, deal, burn cards
 - [x] Opponent faces with moods, skip-hand after folding, blinds-up banner
 - [x] Coach hints, hand-ranks reference, unlockable card backs
+- [x] Real pause, four-colour deck, chip stacks, table venues, how-to-play primer

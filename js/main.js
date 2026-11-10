@@ -494,9 +494,14 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)]]
-      : [[`${glyph('A')}Play`, () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)]],
+      ? [[`${glyph('A')}Continue \u2013 Table ${saved.table}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
+      : [[`${glyph('A')}Play`, firstPlay], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
+}
+function firstPlay() {
+  let seen = true;
+  try { seen = !!localStorage.getItem('padpoker.seen'); } catch { /* private mode */ }
+  if (seen) startTable(1); else howTo(0, () => startTable(1), true);
 }
 function pauseMenu() {
   audio.tick();
@@ -506,7 +511,7 @@ function pauseMenu() {
       ['Resume'],
       ['Last hand', () => lastHandScreen(pauseMenu)],
       ['Stats', () => statsScreen(pauseMenu)],
-      ['Hand ranks', () => ranksScreen(pauseMenu)],
+      ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
       ['New run', () => startTable(1)],
     ],
@@ -542,6 +547,38 @@ const RANKS_REF = [
   ['Full House', 'Ks Kh Kd 7c 7s'], ['Flush', 'Ad Jd 8d 5d 2d'], ['Straight', 'Ts 9d 8c 7h 6s'],
   ['Three of a Kind', '8s 8h 8d Kc 3s'], ['Two Pair', 'Js Jd 5c 5h As'], ['Pair', '9s 9h Ad 7c 4s'], ['High Card', 'As Jd 8c 6h 3s'],
 ];
+// A three-step primer for people new to poker. Shown before the first game and from Help.
+const HOWTO = [
+  ['The <span>goal</span>', `<p>Everyone gets two cards of their own. Five more are dealt face up in the middle for all to share: three (the flop), then one (the turn), then one (the river).</p>
+    <p>Win the pot by holding the best five-card hand at the end, or by betting so that everyone else folds.</p>`],
+  ['Your <span>turn</span>', `<table>
+    <tr><td>${glyph('B')} Fold</td><td>Give up this hand. You lose what you've already put in.</td></tr>
+    <tr><td>${glyph('X')} Check</td><td>Pass, when nobody has bet yet.</td></tr>
+    <tr><td>${glyph('X')} Call</td><td>Match the current bet to stay in.</td></tr>
+    <tr><td>${glyph('Y')} Bet / Raise</td><td>Put more in, then choose how much.</td></tr></table>
+    <p>Two players post small forced bets (the blinds) each hand, so there is always something to win. The blinds grow over time.</p>`],
+  ['The <span>run</span>', `<p>Knock out every opponent to clear a table and move up to a tougher one. Lose all your chips and the run is over.</p>
+    <p>Not sure what beats what? Hand ranks is in the menu under Help. Coach, in Settings, shows your chance of winning as you play.</p>`],
+];
+function howTo(step, done, firstRun = false) {
+  const last = step === HOWTO.length - 1;
+  const finish = () => { try { localStorage.setItem('padpoker.seen', '1'); } catch { /* private mode */ } done(); };
+  const items = last
+    ? [[`${glyph('A')}${firstRun ? "Let's play" : 'Got it'}`, finish]]
+    : [[`${glyph('A')}Next`, () => howTo(step + 1, done, firstRun)], ['Skip', finish]];
+  if (last && firstRun) items.push(['Play with Coach on', () => { prefs.coach = true; applyPrefs(); finish(); }]);
+  showOverlay({ title: HOWTO[step][0], body: `<p class="venue">How to play &middot; ${step + 1} of ${HOWTO.length}</p>${HOWTO[step][1]}`, wide: true, items });
+}
+function helpMenu(back) {
+  showOverlay({
+    title: 'Help', closable: true, onClose: back, body: CONTROLS,
+    items: [
+      ['How to play', () => howTo(0, () => helpMenu(back))],
+      ['Hand ranks', () => ranksScreen(() => helpMenu(back))],
+      [`${glyph('B')}Back`, back],
+    ],
+  });
+}
 function ranksScreen(back) {
   const parse = (str) => str.split(' ').map((x) => RANKS.indexOf(x[0]) * 4 + 'shdc'.indexOf(x[1]));
   const rows = RANKS_REF.map(([name, ex], i) => `<div><i>${i + 1}</i><b>${name}</b><span>${cardsText(parse(ex))}</span></div>`).join('');
