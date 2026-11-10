@@ -41,7 +41,9 @@ export class Game {
     const lvl = Math.min(Math.floor((this.handNo - 1) / this.handsPerLevel), BLIND_LEVELS.length - 1);
     [this.sb, this.bb] = BLIND_LEVELS[lvl];
     this.dealer = this.nextSeat(this.dealer, (p) => !p.out);
-    this.deck = newDeck(this.rng);
+    this.deck = this.nextDeck || newDeck(this.rng); // nextDeck: replay a recorded hand
+    this.nextDeck = null;
+    this.dealt = [...this.deck]; // the full shuffled deck, kept so the hand can be replayed
     this.board = [];
     this.street = 'preflop';
     this.result = null;
