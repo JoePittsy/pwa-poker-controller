@@ -1,0 +1,16 @@
+{
+  "name": "Pad Poker",
+  "short_name": "Pad Poker",
+  "description": "Texas Hold'em against AI, playable with a game controller.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0b1a14",
+  "theme_color": "#0b1a14",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
