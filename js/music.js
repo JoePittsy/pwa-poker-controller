@@ -93,7 +93,6 @@ function planSection(sec, seed, arpBase) {
   }
   return {
     prog, melody,
-    leadUp: !home && rnd() < 0.2 ? 12 : 0,
     drums: home ? 'full' : energy < 0.22 ? 'none' : energy < 0.42 ? pick(['light', 'half']) : 'full',
     arp: !home && energy < 0.3 ? null : { shape: ARPS[(arpBase + Math.floor(rnd() * 3)) % ARPS.length], slow: !home && rnd() < 0.25 },
     keys: home ? 0 : pick([0, 0, 1, 2]), // electric-piano rhythm
@@ -183,22 +182,21 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
     lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(700, t + 0.25);
     osc('triangle', midi(note + key), t, t + 0.35).connect(lp); lp.connect(g); g.connect(pump);
   }
+  // The melody voice: a soft mallet, an octave below where it is written. Each note is struck
+  // and dies away (no held tone, no vibrato), and it is filtered dark so it never pierces.
   function lead(note, t, dur, v) {
-    const f = midi(note + key), end = t + dur + 0.4;
+    const f = midi(note + key - 12), ring = Math.max(0.45, dur + 0.25);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(v, t + 0.03);
-    g.gain.setValueAtTime(v, t + Math.max(0.03, dur - 0.05));
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.3);
-    const o = osc('sine', f, t, end);
-    const vib = ctx.createOscillator(), va = ctx.createGain();
-    vib.frequency.value = 5.2;
-    va.gain.setValueAtTime(0, t); va.gain.linearRampToValueAtTime(9, t + 0.35);
-    vib.connect(va); va.connect(o.detune); vib.start(t); vib.stop(end);
-    o.connect(g);
-    const o2 = osc('triangle', f * 2, t, end), g2 = ctx.createGain(); g2.gain.value = 0.25;
-    o2.connect(g2); g2.connect(g);
-    g.connect(pump);
+    g.gain.linearRampToValueAtTime(v, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(v * 0.3, t + ring * 0.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ring + 0.4);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 0.3;
+    osc('sine', f, t, t + ring + 0.5).connect(lp);
+    const o2 = osc('sine', f * 2, t, t + 0.3), g2 = ctx.createGain(); // a touch of the octave on the strike only
+    g2.gain.setValueAtTime(0.2, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    o2.connect(g2); g2.connect(lp);
+    lp.connect(g); g.connect(pump);
   }
   function hit(t, { f, q = 1, d, v, type = 'bandpass' }) {
     const s = ctx.createBufferSource(), flt = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -291,7 +289,7 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
       }
     }
     if (level >= 2 && plan.melody) {
-      for (const [b, s, n, l] of plan.melody) if (b === inSec) lead(n + plan.leadUp, at(s), l * S16, plan.leadUp ? 0.09 : 0.12);
+      for (const [b, s, n, l] of plan.melody) if (b === inSec) lead(n, at(s), l * S16, 0.11);
     }
   }
   return { scheduleBar, filter: master };
