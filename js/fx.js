@@ -142,3 +142,33 @@ export function chipRain(n = 40) {
     ], { duration: rnd(1100, 2100), delay: rnd(0, 1100), easing: 'cubic-bezier(.4, 0, .9, .6)', fill: 'both' }).onfinish = () => c.remove();
   }
 }
+
+// Named haptic patterns, so each kind of moment feels different in the hand.
+// Each step is [strong motor, weak motor, ms, pause after]. Falls back to the phone's
+// vibration motor where there is no controller rumble (not available in iOS Safari).
+const PATTERNS = {
+  deal: [[0, 0.5, 25]],
+  nudge: [[0, 0.25, 30]],
+  turn: [[0.2, 0.6, 60, 60], [0.2, 0.6, 60]],
+  check: [[0.5, 0, 30, 70], [0.5, 0, 30]],
+  call: [[0.3, 0.5, 70]],
+  raise: [[0.5, 0.7, 90, 40], [0.3, 0.9, 60]],
+  fold: [[0, 0.3, 90]],
+  allin: [[0.3, 0.3, 140, 40], [0.5, 0.5, 140, 40], [1, 1, 380]],
+  win1: [[0.3, 0.8, 80, 60], [0.5, 1, 140]],
+  win3: [[0.4, 0.8, 80, 50], [0.6, 1, 100, 50], [1, 1, 400]],
+  lose: [[0.7, 0, 300]],
+  slam: [[1, 1, 260]],
+  blinds: [[0, 0.6, 50, 80], [0, 0.6, 50, 80], [0, 0.8, 90]],
+};
+export function haptic(name) {
+  const steps = PATTERNS[name];
+  if (!steps || !rumbleOn) return;
+  const pads = [...(navigator.getGamepads?.() ?? [])].some((gp) => gp?.vibrationActuator);
+  if (!pads) { try { navigator.vibrate?.(steps.flatMap(([, , ms, gap = 0]) => [ms, gap])); } catch { /* unsupported */ } return; }
+  let t = 0;
+  for (const [strong, weak, ms, gap = 0] of steps) {
+    setTimeout(() => rumble(strong, weak, ms), t);
+    t += ms + gap;
+  }
+}
