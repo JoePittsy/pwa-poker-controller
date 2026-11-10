@@ -1,32 +1,38 @@
 // All sound is synthesised with WebAudio: no asset files, works offline.
+// Sound direction matches the art: dry, chunky and toy-like. Everything pitched is a
+// marimba-style "tok" in one pentatonic key, so play makes little melodies.
 // Browsers only start audio after a touch/click/key press (a gamepad press does not count on iOS).
 const store = (() => { try { return JSON.parse(localStorage.getItem('padpoker.audio')) || {}; } catch { return {}; } })();
 export const settings = { sfx: store.sfx ?? true, music: store.music ?? true };
 const save = () => { try { localStorage.setItem('padpoker.audio', JSON.stringify(settings)); } catch { /* private mode */ } };
 
-let ctx, sfxBus, musicBus, musicFilter, verb, noiseBuf, musicTimer;
+let ctx, sfxBus, musicBus, verb, noiseBuf, musicTimer;
+let tense = false;
+let heat = 0; // climbs with every bet/raise in a hand, so the table "heats up"
 const rnd = (a, b) => a + Math.random() * (b - a);
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
+const PENTA = [0, 2, 4, 7, 9];
+// i-th note of C major pentatonic, i = 0 at middle C
+const scale = (i) => 60 + 12 * Math.floor(i / 5) + PENTA[((i % 5) + 5) % 5];
 
 function init() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return false;
   ctx = new AC();
   const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -14; comp.ratio.value = 5;
+  comp.threshold.value = -12; comp.ratio.value = 4;
   comp.connect(ctx.destination);
   sfxBus = ctx.createGain(); sfxBus.gain.value = settings.sfx ? 1 : 0; sfxBus.connect(comp);
-  musicFilter = ctx.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 16000; musicFilter.connect(comp);
-  musicBus = ctx.createGain(); musicBus.gain.value = settings.music ? 0.55 : 0; musicBus.connect(musicFilter);
-  // small synthetic room reverb
-  const len = ctx.sampleRate * 1.8;
+  musicBus = ctx.createGain(); musicBus.gain.value = settings.music ? 0.5 : 0; musicBus.connect(comp);
+  // a short, dry room: just enough air to stop things sounding clinical
+  const len = Math.floor(ctx.sampleRate * 0.45);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3.2;
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 4;
   }
   verb = ctx.createConvolver(); verb.buffer = ir;
-  const wet = ctx.createGain(); wet.gain.value = 0.45;
+  const wet = ctx.createGain(); wet.gain.value = 0.3;
   verb.connect(wet); wet.connect(comp);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const nd = noiseBuf.getChannelData(0);
@@ -56,7 +62,7 @@ function shape(g, t, a, d, v) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
 }
 // delay is in seconds from now
-function tone({ f, f2, type = 'sine', delay = 0, a = 0.004, d = 0.15, v = 0.3, wet = 0, bus = sfxBus }) {
+function tone({ f, f2, type = 'sine', delay = 0, a = 0.003, d = 0.15, v = 0.3, wet = 0, bus = sfxBus }) {
   const t = ctx.currentTime + delay;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = type;
@@ -66,7 +72,7 @@ function tone({ f, f2, type = 'sine', delay = 0, a = 0.004, d = 0.15, v = 0.3, w
   o.connect(g); out(g, bus, wet);
   o.start(t); o.stop(t + a + d + 0.05);
 }
-function noise({ delay = 0, a = 0.003, d = 0.1, v = 0.2, type = 'bandpass', f = 2000, f2, q = 1, wet = 0, bus = sfxBus }) {
+function noise({ delay = 0, a = 0.002, d = 0.1, v = 0.2, type = 'bandpass', f = 2000, f2, q = 1, wet = 0, bus = sfxBus }) {
   const t = ctx.currentTime + delay;
   const s = ctx.createBufferSource(), flt = ctx.createBiquadFilter(), g = ctx.createGain();
   s.buffer = noiseBuf; s.loop = true;
@@ -77,119 +83,128 @@ function noise({ delay = 0, a = 0.003, d = 0.1, v = 0.2, type = 'bandpass', f = 
   s.connect(flt); flt.connect(g); out(g, bus, wet);
   s.start(t, Math.random()); s.stop(t + a + d + 0.05);
 }
+// the house instrument: a wooden mallet "tok" (fundamental + the 4x partial a marimba bar has)
+function tok(note, { delay = 0, v = 0.3, d = 0.2, bus = sfxBus, wet = 0.15 } = {}) {
+  const f = midi(note);
+  tone({ delay, f, d, v, wet, bus });
+  tone({ delay, f: f * 4, d: 0.045, v: v * 0.3, bus });
+  noise({ delay, f: 2400, q: 0.6, d: 0.012, v: v * 0.3, bus });
+}
+// a hollow knock, like a knuckle on a table or a woodblock
+function knock(delay = 0, v = 0.5, f = 620) {
+  tone({ delay, f, f2: f * 0.8, d: 0.045, v, wet: 0.2 });
+  tone({ delay, f: f * 2.7, d: 0.02, v: v * 0.3 });
+  tone({ delay, f: 150, f2: 80, d: 0.05, v: v * 0.6 });
+}
+// a rubber-stamp thud for things that land hard
+function thud(delay = 0, v = 0.8) {
+  tone({ delay, f: 140, f2: 46, d: 0.22, v });
+  noise({ delay, type: 'lowpass', f: 1400, f2: 300, d: 0.07, v: v * 0.5, wet: 0.3 });
+}
 const ok = () => ctx && ctx.state === 'running' && settings.sfx;
 const sfx = (fn) => (...args) => { if (ok()) fn(...args); };
 
+// paper: a quick dry "thwip"
 export const card = sfx((delay = 0) => {
-  const p = rnd(0.85, 1.2);
-  noise({ delay, f: 3200 * p, f2: 900 * p, d: 0.075, v: 0.32, q: 0.8 });
-  tone({ delay, f: 190 * p, f2: 110, d: 0.04, v: 0.18 });
+  const p = rnd(0.9, 1.15);
+  noise({ delay, f: 1800 * p, f2: 5200 * p, d: 0.045, v: 0.3, q: 1.4 });
+  noise({ delay: delay + 0.04, type: 'lowpass', f: 700, d: 0.025, v: 0.22 });
 });
 export const flip = sfx((delay = 0) => {
-  noise({ delay, f: 900, f2: 3600, d: 0.09, v: 0.22, q: 1.2 });
-  noise({ delay: delay + 0.08, f: 2600, f2: 1200, d: 0.05, v: 0.25 });
+  noise({ delay, f: 1200, f2: 4800, d: 0.07, v: 0.28, q: 1.6 });
+  tone({ delay: delay + 0.07, f: 420, f2: 980, d: 0.06, v: 0.22 }); // pop
+  noise({ delay: delay + 0.07, type: 'lowpass', f: 900, d: 0.03, v: 0.25 });
 });
-export const chips = sfx((n = 1, delay = 0, pitch = 1) => {
-  for (let i = 0; i < n; i++) {
-    const t = delay + i * rnd(0.035, 0.06), p = pitch * rnd(0.92, 1.1);
-    tone({ delay: t, f: 3050 * p, d: 0.07, v: 0.13, wet: 0.15 });
-    tone({ delay: t, f: 4720 * p, type: 'triangle', d: 0.05, v: 0.09 });
-    noise({ delay: t, type: 'highpass', f: 5000, d: 0.02, v: 0.1 });
-  }
+// chips are mallet notes: n notes climbing from scale step `from`
+export const chips = sfx((n = 1, delay = 0, from = 2) => {
+  for (let i = 0; i < n; i++) tok(scale(from + i) + 12, { delay: delay + i * 0.055, v: 0.2, d: 0.14 });
 });
-export const check = sfx(() => {
-  for (const delay of [0, 0.11]) {
-    tone({ delay, f: 170, f2: 70, d: 0.08, v: 0.55 });
-    noise({ delay, type: 'lowpass', f: 900, d: 0.04, v: 0.25 });
-  }
+// a bet or raise: starts higher each time someone raises this hand
+export const raise = sfx((n = 3) => {
+  const from = Math.min(heat, 9);
+  heat += 2;
+  for (let i = 0; i < n; i++) tok(scale(from + i) + 12, { delay: 0.04 + i * 0.06, v: 0.24, d: 0.16 });
+  thud(0.04 + n * 0.06, 0.45);
 });
-export const fold = sfx(() => noise({ type: 'lowpass', f: 2400, f2: 250, a: 0.02, d: 0.24, v: 0.24 }));
-export const turn = sfx(() => {
-  tone({ f: 660, type: 'triangle', d: 0.22, v: 0.2, wet: 0.5 });
-  tone({ delay: 0.09, f: 990, type: 'triangle', d: 0.3, v: 0.2, wet: 0.5 });
+export function newHand() { heat = 0; }
+export const check = sfx(() => { knock(0, 0.5); knock(0.1, 0.42); });
+export const fold = sfx(() => { // a deflating "bwoop"
+  tone({ f: 420, f2: 130, type: 'triangle', d: 0.17, v: 0.24 });
+  noise({ f: 2600, f2: 900, d: 0.08, v: 0.12 });
 });
-export const tick = sfx(() => tone({ f: 980, type: 'triangle', d: 0.03, v: 0.1 }));
-export const confirm = sfx(() => tone({ f: 620, f2: 1040, type: 'triangle', d: 0.09, v: 0.2, wet: 0.2 }));
-export const back = sfx(() => tone({ f: 520, f2: 330, type: 'triangle', d: 0.09, v: 0.16 }));
-export const slider = sfx((frac) => tone({ f: 380 * 2 ** (frac * 1.6), type: 'triangle', d: 0.04, v: 0.13 }));
-export const count = sfx((frac) => tone({ f: 700 * 2 ** frac, type: 'square', d: 0.03, v: 0.045 }));
-export const allin = sfx(() => {
-  noise({ f: 250, f2: 4200, a: 0.42, d: 0.1, v: 0.3, q: 2, wet: 0.3 });
-  tone({ delay: 0.45, f: 110, f2: 38, d: 0.6, v: 0.9 });
-  noise({ delay: 0.45, type: 'lowpass', f: 600, d: 0.25, v: 0.5, wet: 0.4 });
-  chips(7, 0.5, 0.9);
+export const turn = sfx(() => { tok(76, { v: 0.3, d: 0.3, wet: 0.3 }); tok(81, { delay: 0.11, v: 0.3, d: 0.4, wet: 0.3 }); });
+export const tick = sfx(() => knock(0, 0.16, 980));
+export const confirm = sfx(() => tone({ f: 330, f2: 990, d: 0.07, v: 0.28, wet: 0.1 })); // "bloop"
+export const back = sfx(() => tone({ f: 700, f2: 260, d: 0.08, v: 0.22 }));
+export const slider = sfx((frac) => tok(scale(Math.round(frac * 14)) + 12, { v: 0.2, d: 0.1 }));
+export const count = sfx((frac) => tok(scale(Math.round(frac * 10)) + 24, { v: 0.09, d: 0.05, wet: 0 }));
+export const allin = sfx(() => { // a run up the bars, then the stamp comes down
+  for (let i = 0; i < 9; i++) tok(scale(i) + 12, { delay: i * 0.048, v: 0.16 + i * 0.02, d: 0.12 });
+  thud(0.46, 1);
+  tok(scale(10) + 12, { delay: 0.46, v: 0.4, d: 0.6, wet: 0.5 });
+  tok(scale(7) + 12, { delay: 0.46, v: 0.3, d: 0.6, wet: 0.5 });
 });
-export const heartbeat = sfx(() => {
-  for (const delay of [0, 0.19]) tone({ delay, f: 72, f2: 42, d: 0.16, v: 0.75 });
-});
-const SCALE = [72, 76, 79, 84, 88, 91, 96];
+export const heartbeat = sfx(() => { thud(0, 0.7); thud(0.2, 0.5); });
 export const win = sfx((size = 1) => { // 0 = someone else won, 1..3 = our win by size
-  const n = size ? 3 + size : 2;
-  const v = size ? 0.2 : 0.09;
-  for (let i = 0; i < n; i++) {
-    const delay = i * 0.085;
-    tone({ delay, f: midi(SCALE[i]), type: 'triangle', d: 0.32, v, wet: 0.6 });
-    tone({ delay, f: midi(SCALE[i] + 12), d: 0.2, v: v * 0.4, wet: 0.6 });
-  }
-  if (size) for (const m of [72, 76, 79, 84]) tone({ delay: n * 0.085, f: midi(m), type: 'triangle', a: 0.01, d: 0.9, v: 0.13, wet: 0.8 });
+  if (!size) { tok(72, { v: 0.16 }); tok(76, { delay: 0.09, v: 0.16, d: 0.3 }); return; }
+  const n = 3 + size * 2;
+  for (let i = 0; i < n; i++) tok(scale(i + 2) + 12, { delay: i * 0.07, v: 0.26, d: 0.2, wet: 0.3 });
+  const end = n * 0.07 + 0.05;
+  for (const m of [72, 76, 79, 84]) tok(m + (size > 1 ? 12 : 0), { delay: end, v: 0.24, d: 0.7, wet: 0.5 });
+  thud(end, 0.5);
 });
-export const lose = sfx(() => {
-  [64, 60, 55].forEach((m, i) => tone({ delay: i * 0.16, f: midi(m), type: 'triangle', d: 0.4, v: 0.14, wet: 0.6 }));
+export const lose = sfx(() => { // a little "wah-wah"
+  tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
+  tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });
 });
 
 // ---------- settings ----------
 export function setSfx(on) { settings.sfx = on; save(); if (ctx) sfxBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05); }
-export function setMusic(on) { settings.music = on; save(); if (ctx) musicBus.gain.setTargetAtTime(on ? 0.55 : 0, ctx.currentTime, 0.3); }
-// muffle the music while an all-in is being run out
-export function tension(on) { if (ctx) musicFilter.frequency.setTargetAtTime(on ? 420 : 16000, ctx.currentTime, on ? 0.25 : 0.6); }
+export function setMusic(on) { settings.music = on; save(); if (ctx) musicBus.gain.setTargetAtTime(on ? 0.5 : 0, ctx.currentTime, 0.3); }
+// while an all-in is run out the band drops to just bass and pulse
+export function tension(on) { tense = on; }
 
-// ---------- generative background music: slow, swung, late-night ----------
+// ---------- generative background music: a bouncy mallet-and-bass groove ----------
+// [bass root, chord tones for the mallet pattern]
 const BARS = [
-  [38, [62, 65, 69, 72, 76]], [43, [59, 65, 69, 71, 76]], [36, [59, 64, 67, 71, 74]], [33, [60, 64, 67, 72, 76]],
-  [41, [57, 60, 64, 69, 72]], [40, [59, 62, 64, 67, 74]], [38, [57, 60, 62, 65, 72]], [43, [59, 62, 65, 69, 76]],
+  [36, [60, 64, 67, 69, 74]], [33, [60, 64, 67, 69, 72]], [41, [60, 65, 69, 72, 76]], [43, [62, 67, 69, 71, 74]],
+  [38, [62, 65, 69, 72, 74]], [43, [62, 65, 67, 71, 74]], [40, [59, 64, 67, 71, 74]], [33, [60, 64, 67, 72, 76]],
 ];
-const STEP = 60 / 74 / 2; // eighth notes at 74 bpm
+const RIFF = [0, -1, 2, 1, -1, 3, 2, 4]; // chord-tone index per eighth note, -1 = rest
+const STEP = 60 / 104 / 2; // eighth notes at 104 bpm
 function startMusic() {
   let step = 0, next = ctx.currentTime + 0.3;
-  const m = { bus: musicBus };
   const schedule = () => {
     if (ctx.state !== 'running') { next = Math.max(next, ctx.currentTime + 0.1); return; }
     while (next < ctx.currentTime + 0.35) {
-      if (settings.music) playStep(step, next - ctx.currentTime + (step % 2 ? STEP * 0.14 : 0), m);
+      if (settings.music) playStep(step, next - ctx.currentTime + (step % 2 ? STEP * 0.18 : 0));
       step++; next += STEP;
     }
   };
   musicTimer = setInterval(schedule, 110);
 }
-function playStep(step, delay, m) {
-  const s = step % 8;
-  const [root, notes] = BARS[Math.floor(step / 8) % BARS.length];
-  if (s === 0) {
-    for (const n of notes.slice(0, 4)) pad(midi(n), delay, STEP * 8);
-    tone({ ...m, delay, f: midi(root), a: 0.02, d: 0.9, v: 0.34 });
+function playStep(step, delay) {
+  const s = step % 8, bar = Math.floor(step / 8);
+  const [root, notes] = BARS[bar % BARS.length];
+  const m = { bus: musicBus };
+  // bass: round and plucky
+  const bass = { 0: 0, 3: 0, 4: 12, 6: 7 }[s];
+  if (bass !== undefined && (s !== 3 || bar % 2)) {
+    tone({ ...m, delay, f: midi(root + bass), type: 'triangle', d: 0.24, v: 0.36 });
+    tone({ ...m, delay, f: midi(root + bass) / 2, d: 0.2, v: 0.2 });
   }
-  if (s === 5 && Math.random() < 0.7) tone({ ...m, delay, f: midi(root + (Math.random() < 0.5 ? 7 : 12)), a: 0.02, d: 0.4, v: 0.22 });
-  if (s === 0 || s === 4) tone({ ...m, delay, f: 105, f2: 44, d: 0.16, v: 0.3 });
-  if (s === 2 || s === 6) noise({ ...m, delay, f: 1700, q: 0.7, d: 0.09, v: 0.06, wet: 0.3 });
-  noise({ ...m, delay, type: 'highpass', f: 7500, d: 0.03, v: s % 2 ? 0.035 : 0.02 });
-  if (Math.random() < 0.3) {
-    const f = midi(notes[Math.floor(Math.random() * notes.length)] + 12);
-    tone({ ...m, delay, f, a: 0.005, d: 0.5, v: 0.09, wet: 0.9 });
-    tone({ ...m, delay, f: f * 2, a: 0.005, d: 0.15, v: 0.025, wet: 0.9 });
+  // pulse
+  if (s === 0 || s === 4) tone({ ...m, delay, f: 120, f2: 48, d: 0.12, v: 0.4 });
+  noise({ ...m, delay, type: 'highpass', f: 6500, d: s % 2 ? 0.035 : 0.02, v: s % 2 ? 0.05 : 0.025 });
+  if (tense) return;
+  if (s === 2 || s === 6) { // dry clap
+    noise({ ...m, delay, f: 1500, q: 0.9, d: 0.05, v: 0.13 });
+    noise({ ...m, delay: delay + 0.012, f: 1700, q: 0.9, d: 0.04, v: 0.1 });
   }
-}
-function pad(f, delay, dur) {
-  const t = ctx.currentTime + delay;
-  const g = ctx.createGain(), flt = ctx.createBiquadFilter();
-  flt.type = 'lowpass'; flt.frequency.value = 750;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(0.05, t + 0.5);
-  g.gain.setValueAtTime(0.05, t + dur - 0.3);
-  g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.5);
-  for (const [type, det] of [['triangle', -6], ['sawtooth', 7]]) {
-    const o = ctx.createOscillator();
-    o.type = type; o.frequency.value = f; o.detune.value = det;
-    o.connect(flt); o.start(t); o.stop(t + dur + 0.6);
+  if (s === 7 && bar % 4 === 3) tone({ ...m, delay, f: 880, f2: 720, d: 0.04, v: 0.12 }); // woodblock turnaround
+  // mallet riff, with the odd note dropped or lifted an octave so it never loops exactly
+  const idx = RIFF[(s + (bar % 4 === 2 ? 3 : 0)) % 8];
+  if (idx >= 0 && Math.random() < 0.85) {
+    tok(notes[idx] + (Math.random() < 0.12 ? 12 : 0), { delay, v: 0.13, d: 0.18, bus: musicBus, wet: 0.25 });
   }
-  flt.connect(g); out(g, musicBus, 0.5);
 }
