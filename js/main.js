@@ -7,11 +7,11 @@ import * as fx from './fx.js';
 
 const ROSTER = [
   { name: 'You', isHuman: true },
-  { name: 'Mav', style: { loose: 0.8, aggr: 0.8 } },
-  { name: 'Dot', style: { loose: 0.25, aggr: 0.3 } },
-  { name: 'Rex', style: { loose: 0.35, aggr: 0.85 } },
-  { name: 'Ivy', style: { loose: 0.75, aggr: 0.3 } },
-  { name: 'Gus', style: { loose: 0.5, aggr: 0.55 } },
+  { name: 'Mav', tag: 'Wild', style: { loose: 0.8, aggr: 0.8 } },
+  { name: 'Dot', tag: 'Careful', style: { loose: 0.25, aggr: 0.3 } },
+  { name: 'Rex', tag: 'Shark', style: { loose: 0.35, aggr: 0.85 } },
+  { name: 'Ivy', tag: 'Sticky', style: { loose: 0.75, aggr: 0.3 } },
+  { name: 'Gus', tag: 'Steady', style: { loose: 0.5, aggr: 0.55 } },
 ];
 const ME = 0;
 const DEAL_GAP = 55; // ms between dealt cards
@@ -49,9 +49,10 @@ function buildSeats() {
   seatEls = game.players.map((p) => {
     const el = h('div', `seat s${p.seat}${p.isHuman ? ' me' : ''}`,
       `<div class="cards"></div><div class="badge"></div>
-       <div class="plate"><div class="name"></div><div class="chips"></div><div class="hand"></div></div>
+       <div class="plate"><div class="ava">${p.name[0]}</div>
+         <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
        <div class="bet" hidden><span></span></div>`);
-    el.querySelector('.name').textContent = p.name;
+    el.querySelector('.name').innerHTML = `${p.name}${ROSTER[p.seat].tag ? ` <i>${ROSTER[p.seat].tag}</i>` : ''}`;
     $('seats').append(el);
     return el;
   });
@@ -100,6 +101,7 @@ function render() {
         }));
       }
     }
+    el.classList.toggle('shown', !!sig && face && !p.isHuman);
     el.classList.toggle('active', g.stage === 'betting' && g.toAct === i);
     el.classList.toggle('folded', p.folded && !p.out);
     el.classList.toggle('out', p.out);
