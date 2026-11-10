@@ -40,6 +40,7 @@ first button press.
 - `js/main.js` – rendering, action bar, menus, game loop.
 - `js/audio.js` – sound effects, synthesised with WebAudio (no audio files).
 - `js/music.js` – the background music: a composed lo-fi groove, also synthesised, that adds layers as a hand develops.
+- `js/banter.js` – what each opponent says.
 - `js/fx.js` – pops, screen shake, flying chips, particles, rolling numbers, rumble.
 - `css/style.css` – flat print-poster look: paper, ink, spot colours, hard shadows.
 - `fonts/` – Bricolage Grotesque (SIL Open Font License), bundled so it works offline.
@@ -52,4 +53,6 @@ first button press.
 - [x] Saved progress between hands, automatic pick-up of new versions
 - [x] Opponent character: tells, thinking time, banter, play that adapts to you
 - [x] Runs: clear a table to climb to a tougher one; best run is remembered
-- [ ] Big-moment hand feel, settings, stats and hand history
+- [x] Big-moment hand feel: all-in odds, river slam, staged reveals
+- [x] Settings: speed, stack size, left-handed layout, rumble, table talk
+- [x] Lifetime stats and last-hand history

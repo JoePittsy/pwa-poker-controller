@@ -300,7 +300,7 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
   opacity: 0; transition: opacity .25s;
 }
 #toast.show { opacity: 1; }
-#overlay { position: absolute; inset: 0; z-index: 10; background: rgba(23, 20, 58, .93); display: flex; align-items: center; justify-content: center; }
+#overlay { position: absolute; inset: 0; z-index: 10; background: rgba(23, 20, 58, .965); display: flex; align-items: center; justify-content: center; }
 #overlay[hidden] { display: none; }
 .dialog { display: flex; gap: 4rem; align-items: center; max-width: 74rem; padding: 2rem; animation: rise .35s var(--spring) both; }
 .dialog h1 { font-size: 6.4rem; line-height: .88; font-weight: 800; text-transform: uppercase; letter-spacing: -.03em; text-shadow: .4rem .4rem 0 var(--blue); margin-bottom: 1.4rem; }
@@ -316,6 +316,25 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .dialog table { margin-top: .8rem; font-size: 1.25rem; color: var(--sky); border-spacing: 0 .25rem; font-weight: 500; }
 .dialog td:first-child { padding-right: 1rem; white-space: nowrap; color: var(--paper); font-weight: 700; }
 
+.dialog .btn { height: 4.2rem; }
+.dialog .items { gap: 1.05rem; }
+.stats { display: grid; grid-template-columns: repeat(3, 12.5rem); gap: .9rem; }
+.stats div {
+  background: var(--paper); color: var(--ink); border: var(--line); border-radius: .9rem; box-shadow: .3rem .3rem 0 var(--ink);
+  padding: .5rem .8rem; font-size: 1.1rem; font-weight: 500; line-height: 1.15;
+}
+.stats b { display: block; font-size: 2.2rem; font-weight: 800; line-height: 1.05; }
+.stats div:nth-child(9) b { font-size: 1.3rem; line-height: 1.15; min-height: 2.3rem; }
+.dialog.wide { max-width: 80rem; gap: 2.5rem; }
+.dialog.wide h1 { font-size: 3.4rem; margin-bottom: .6rem; }
+.dialog.wide p { max-width: none; font-size: 1.25rem; margin-top: .3rem; }
+.dialog p.res { color: var(--yellow); font-weight: 800; font-size: 1.4rem; }
+.dialog table.log { font-size: 1.2rem; margin-top: .5rem; border-spacing: 0 .35rem; max-width: 52rem; }
+.dialog table.log td { vertical-align: top; line-height: 1.25; }
+.dialog table.log td:first-child { color: var(--yellow); }
+.dialog table.log i { font-style: normal; color: var(--paper); }
+.rd, .bk { display: inline-block; background: var(--paper); border-radius: .25rem; padding: 0 .25rem; font-weight: 800; }
+.rd { color: var(--red); } .bk { color: var(--ink); }
 .dialog.compact { gap: 3rem; }
 .dialog.compact .items { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.2rem; }
 .dialog.compact .btn { min-width: 15rem; height: 4rem; font-size: 1.45rem; }
