@@ -143,32 +143,59 @@ function dailyScreen() {
   const done = d.scores[t] !== undefined;
   const mid = d.game && d.game.date === t;
   showOverlay({
-    title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: startScreen,
+    title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: moreGames,
     body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyCalendar()}`,
-    items: done ? [['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true], [`${glyph('B')}Back`, startScreen]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, startScreen]],
+    items: done ? [['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true], [`${glyph('B')}Back`, moreGames]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, moreGames]],
   });
 }
-function startDaily(saved) {
-  mode = 'daily'; bossMode = false; twist = ''; perks = {}; table = 0;
-  const cfg = DAILY_CFG;
+// Seat a one-off table (daily deal, quick table) outside the run.
+function seatSingle(kind, cfg, hud, saved) {
+  mode = kind; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random;
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
   habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
   if (saved) {
     game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     game.dealer = saved.dealer; game.handNo = saved.handNo;
-  } else { const d = dailyData(); d.game = { date: today(), chips: game.players.map((p) => p.chips), dealer: -1, handNo: 0 }; saveDaily(d); }
+  }
   $('app').style.setProperty('--mat', cfg.mat);
-  audio.setVenue(2);
+  audio.setVenue(cfg.music ?? 2);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;
-  $('hud').innerHTML = `<b>Daily deal</b><br>${today()}`;
+  $('hud').innerHTML = hud;
   ui.mode = 'wait'; ui.resolve = null;
   lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
   runId++;
   renderActions();
   run();
+}
+function startDaily(saved) {
+  if (!saved) { const d = dailyData(); d.game = { date: today(), chips: Array(6).fill(DAILY_CFG.chips), dealer: -1, handNo: 0 }; saveDaily(d); }
+  seatSingle('daily', DAILY_CFG, `<b>Daily deal</b><br>${today()}`, saved);
+}
+
+// ---------- quick table: one sit-and-go, nothing saved, nothing at stake ----------
+const QUICK_CFG = { names: REGULARS, skill: 0.7, venue: 'Quick table', mat: '#2c7da0', handsPerLevel: 4, chips: 1000, music: 1 };
+function quickDone() {
+  const me = game.players[ME];
+  const place = game.players.filter((p) => p.chips > 0).length + (me.chips > 0 ? 0 : 1);
+  const ord = ['', '1st', '2nd', '3rd', '4th', '5th', '6th'][place];
+  audio.musicLevel(0);
+  if (place === 1) { audio.fanfare(); fx.chipRain(40); } else audio.lose();
+  showOverlay({
+    title: place === 1 ? 'You <span>win!</span>' : `${ord} <span>place</span>`,
+    body: `<p>${place === 1 ? `You took the whole table in ${game.handNo} hands.` : `Out in ${ord} of 6 after ${game.handNo} hands.`}</p>`,
+    items: [[`${glyph('A')}Play again`, () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], ['Done', startScreen]],
+  });
+}
+function moreGames() {
+  const d = dailyData(), done = d.scores[today()] !== undefined;
+  showOverlay({
+    title: 'More <span>games</span>', closable: true, onClose: startScreen,
+    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p>`,
+    items: [['Daily deal', dailyScreen], ['Quick table', () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], [`${glyph('B')}Back`, startScreen]],
+  });
 }
 function dailyDone() {
   const me = game.players[ME], d = dailyData(), t = today();
@@ -451,6 +478,7 @@ function render() {
   const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
   $('hud').innerHTML = mode === 'daily'
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
+    : mode === 'quick' ? `<b>Quick</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   renderActions();
@@ -728,8 +756,8 @@ function startScreen() {
     title: TITLE,
     body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
     items: saved
-      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['Daily deal', dailyScreen], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
-      : [[`${glyph('A')}Play`, firstPlay], ['Daily deal', dailyScreen], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
+      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['More games', moreGames], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
+      : [[`${glyph('A')}Play`, firstPlay], ['More games', moreGames], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
 }
 function firstPlay() {
@@ -1253,6 +1281,7 @@ function loadSave() {
   } catch { return null; }
 }
 function writeSave(s) {
+  if (mode === 'quick') return;
   if (mode === 'daily') { // the daily deal keeps its own progress and never touches the run
     const d = dailyData();
     if (s) d.game = { date: today(), chips: s.chips, dealer: s.dealer, handNo: s.handNo }; else delete d.game;
@@ -1433,10 +1462,10 @@ async function run() {
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
-    if (me.chips === 0) return mode === 'daily' ? dailyDone() : busted();
+    if (me.chips === 0) return mode === 'daily' ? dailyDone() : mode === 'quick' ? quickDone() : busted();
     if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
-  if (mode === 'daily') dailyDone(); else if (me.chips > 0) tableCleared(); else busted();
+  if (mode === 'daily') dailyDone(); else if (mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
 }
 
 // ---------- new-version check ----------
