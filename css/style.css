@@ -62,7 +62,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   background: radial-gradient(circle, var(--paper) 26%, transparent 28%) 0 0 / .62em .62em, var(--red);
   box-shadow: inset 0 0 0 .22em var(--red), .14em .14em 0 var(--ink);
 }
-.card.deal { animation: deal .42s cubic-bezier(.3, .9, .4, 1) both; }
+.card.deal { animation: deal .55s cubic-bezier(.3, .7, .3, 1) both; }
 .card.drop { animation: drop .62s ease-out both; }
 .card.slam { animation: slam 1.25s cubic-bezier(.5, 0, .8, .4) both; z-index: 3; }
 @keyframes slam { /* hangs over the table as an ink silhouette, then lands and shows its face */
@@ -79,9 +79,9 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .seat:not(.me) .card.hl { translate: 0 -.25em; scale: 1.04; }
 .card.dim { filter: brightness(.5) saturate(.5); }
 @keyframes deal { /* waits invisibly on the deck, then flies to its seat */
-  0% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -6em)) scale(.8); }
-  1% { opacity: 1; transform: translate(var(--dx, 0), var(--dy, -6em)) scale(.8); }
-  55% { transform: translate(calc(var(--dx, 0) * .25), calc(var(--dy, -6em) * .25)) rotate(-14deg) scale(1.05); }
+  0% { opacity: 0; rotate: 0deg; transform: translate(var(--dx, 0), var(--dy, -6em)) scale(var(--ds, 1)); }
+  1% { opacity: 1; rotate: 0deg; transform: translate(var(--dx, 0), var(--dy, -6em)) scale(var(--ds, 1)); }
+  12% { rotate: 0deg; }
 }
 @keyframes drop { /* slides out of the deck face down, then turns over in place */
   0% { opacity: 0; transform: translateX(var(--dx, 0)); }
@@ -94,7 +94,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   from { transform: perspective(20em) rotateY(-100deg) scale(1.15); }
   60% { transform: perspective(20em) rotateY(12deg) scale(1.15); }
 }
-@keyframes toss { 85% { opacity: 1; } to { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -3em)) rotate(40deg) scale(.7); } }
+@keyframes toss { 85% { opacity: 1; } to { opacity: 0; rotate: 0deg; transform: translate(var(--dx, 0), var(--dy, -3em)) scale(var(--ds, .7)); } }
 
 /* ---------- centre ---------- */
 #center {
@@ -105,14 +105,14 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 /* five fixed slots, filled from the left, so cards never shuffle sideways as more arrive */
 #board { display: flex; gap: .65rem; font-size: 1.7rem; height: 4.2em; width: calc(15em + 2.6rem); }
 #deck { position: absolute; left: calc(100% + 1.8rem); top: 0; font-size: 1.7rem; width: 3em; height: 4.2em; }
-#deck .in { position: absolute; inset: 0; }
+#deck .in { position: absolute; inset: 0; border-radius: .4em; border: .12em solid var(--ink); }
 #deck .in:first-child { /* the stack's thickness */
   box-shadow: inset 0 0 0 .22em var(--red), .09em .09em 0 var(--paper), .15em .15em 0 var(--ink),
     .24em .24em 0 var(--paper), .3em .3em 0 var(--ink), .39em .39em 0 var(--paper), .45em .45em 0 var(--ink);
 }
 #burn { position: absolute; left: calc(100% + 1.8rem + 6.6rem); top: 1.1rem; font-size: 1.25rem; width: 3em; height: 4.2em; }
 .card.burn { position: absolute; left: 0; top: 0; animation: burn .38s ease-out both; filter: brightness(.8); }
-@keyframes burn { from { transform: translate(-5.3em, -.9em) scale(1.36); filter: brightness(1); } }
+@keyframes burn { from { rotate: 0deg; transform: translate(-4.74em, -.12em) scale(1.36); filter: brightness(1); } }
 .card { position: relative; }
 .in.cover { position: absolute; inset: 0; z-index: 1; animation: uncover .62s linear both; }
 @keyframes uncover { 0%, 64% { opacity: 1; } 65%, 100% { opacity: 0; } }

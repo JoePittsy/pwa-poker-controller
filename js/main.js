@@ -141,11 +141,17 @@ function render() {
         const dr = $('deck').getBoundingClientRect(), cr = cards.getBoundingClientRect();
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
-        cards.replaceChildren(...p.cards.map((c, k) => {
-          const e = cardEl(c, face && !p.isHuman, 'deal');
+        // every card starts exactly on top of the deck, at the deck's size, and slides off it
+        const els = p.cards.map((c) => cardEl(c, face && !p.isHuman));
+        cards.replaceChildren(...els);
+        els.forEach((e, k) => {
+          const r = e.getBoundingClientRect();
+          e.style.setProperty('--dx', `${dr.left + dr.width / 2 - r.left - r.width / 2}px`);
+          e.style.setProperty('--dy', `${dr.top + dr.height / 2 - r.top - r.height / 2}px`);
+          e.style.setProperty('--ds', dr.width / e.offsetWidth);
           e.style.animationDelay = `${delay(k)}ms`;
-          return e;
-        }));
+          e.classList.add('deal');
+        });
         if (p.isHuman) { // your cards land face down, then you get to look
           setTimeout(() => {
             if (cards.dataset.sig !== sig) return;
