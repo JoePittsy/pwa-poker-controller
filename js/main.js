@@ -22,6 +22,7 @@ function tableConfig(n) {
   return { names, skill: Math.min(1, 0.3 + (n - 1) * 0.175), handsPerLevel: Math.max(3, 7 - n) };
 }
 let table = 1;
+let lastBB = 0; // to announce when the blinds go up
 let cast = []; // cast[seat] = character info for the current table
 const ME = 0;
 const DEAL_GAP = 90; // ms between dealt cards
@@ -35,7 +36,8 @@ const h = (tag, cls = '', html = '') => {
   return e;
 };
 const glyph = (g) => `<span class="glyph ${g.length > 1 ? 'wide' : g.toLowerCase()}">${g}</span>`;
-const rawSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let fast = false; // true while skipping the rest of a hand you've folded
+const rawSleep = (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms));
 const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch with the speed setting
 
 // ---------- player preferences ----------
@@ -323,6 +325,10 @@ function renderActions() {
     panel.append(row);
     bar.append(panel);
     setRaise(ui.raiseTo, true, true);
+  } else if (ui.mode === 'skip') {
+    const b = h('button', 'btn focus', `${glyph('A')}Skip hand`);
+    b.onclick = skipHand;
+    bar.append(b);
   } else if (ui.mode === 'continue') {
     const b = h('button', 'btn call focus', `${glyph('A')}Next hand`);
     b.onclick = () => { audio.confirm(); finish(); };
@@ -368,6 +374,15 @@ function prompt(mode) {
   ui.focus = 1;
   renderActions();
   return new Promise((r) => { ui.resolve = r; });
+}
+// You've folded: jump straight to the result instead of watching the rest play out.
+function skipHand() {
+  if (ui.mode !== 'skip') return;
+  audio.confirm();
+  fast = true;
+  audio.hush(true);
+  ui.mode = 'wait';
+  renderActions();
 }
 function choose(type) {
   if (ui.mode === 'actions') finish({ type });
@@ -571,6 +586,8 @@ function onButton(b) {
     else if (b === 'rb') setRaise(ps.find((v) => v > ui.raiseTo) ?? L.maxTo);
     else if (b === 'a' || b === 'y') confirmRaise();
     else if (b === 'b') closeRaise();
+  } else if (ui.mode === 'skip') {
+    if (b === 'a' || b === 'x') skipHand();
   } else if (ui.mode === 'continue') {
     if (b === 'a' || b === 'x') { audio.confirm(); finish(); }
   }
@@ -578,6 +595,7 @@ function onButton(b) {
 
 // ---------- effects tied to game events ----------
 function actionFx(p, potBefore) {
+  if (fast) return;
   const el = seatEls[p.seat];
   const a = p.lastAction;
   const bet = el.querySelector('.bet');
@@ -601,6 +619,7 @@ function actionFx(p, potBefore) {
 }
 
 async function collectBets() {
+  if (fast) return;
   const bets = seatEls.map((el) => el.querySelector('.bet')).filter((b) => !b.hidden);
   if (!bets.length) return;
   for (const b of bets) { fx.flyChips(b, $('pot'), 2, { stagger: 30 }); b.classList.add('leaving'); }
@@ -780,6 +799,7 @@ function startTable(n, saved) {
   $('pot').hidden = true;
   $('hud').innerHTML = `Table <b>${table}</b>`;
   ui.mode = 'wait'; ui.resolve = null;
+  lastBB = 0; fast = false; audio.hush(false);
   runId++; // stop any game loop still running from the previous table
   renderActions();
   if (saved?.chips) run(); else tableIntro(run);
@@ -797,6 +817,8 @@ async function run() {
     audio.musicLevel(1);
     settled = false;
     logStart(g);
+    if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); }
+    lastBB = g.bb;
     fx.shuffle($('deck')); audio.shuffle();
     render();
     const n = g.players.length;
@@ -839,10 +861,11 @@ async function run() {
         a = await prompt('actions');
         noteHumanAction(a, g.legal(ME));
       } else {
+        if (me.folded && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
         a = decide(g, p.seat, Math.random, humanProfile());
         const wait = me.folded ? 300 : thinkTime(p, a);
-        if (wait > 1100) showThinking(p.seat);
-        if (wait > 2000 && Math.random() < 0.35) say(p, 'tank');
+        if (wait > 1100 && !fast) showThinking(p.seat);
+        if (wait > 2000 && !fast && Math.random() < 0.35) say(p, 'tank');
         await sleep(wait);
         if (a.bluff && a.type === 'raise') bluffers.add(p.seat);
       }
@@ -855,6 +878,8 @@ async function run() {
       actionFx(p, potBefore);
     }
     audio.tension(false);
+    if (ui.mode === 'skip') { ui.mode = 'wait'; renderActions(); }
+    if (fast) { fast = false; audio.hush(false); await rawSleep(350); }
     // let everyone turn their cards over before the result lands
     render();
     if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);

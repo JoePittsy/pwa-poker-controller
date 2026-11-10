@@ -101,8 +101,8 @@ export function rumble(strong = 0.5, weak = 0.5, ms = 120) {
 }
 
 // A big sticker that punches into the middle of the screen for a moment.
-export function banner(text) {
-  const e = spawn('bannerfx', text);
+export function banner(text, cls = '') {
+  const e = spawn(`bannerfx ${cls}`, text);
   const at = 'translate(50vw, 42vh) translate(-50%, -50%)';
   e.animate([
     { transform: `${at} scale(3) rotate(-20deg)`, opacity: 0 },

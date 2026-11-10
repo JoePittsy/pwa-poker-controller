@@ -104,7 +104,9 @@ function thud(delay = 0, v = 0.8) {
   tone({ delay, f: 140, f2: 46, d: 0.22, v });
   noise({ delay, type: 'lowpass', f: 1400, f2: 300, d: 0.07, v: v * 0.5, wet: 0.3 });
 }
-const ok = () => ctx && ctx.state === 'running' && settings.sfx;
+let hushed = false; // effects are silenced while a folded hand is skipped
+export function hush(on) { hushed = on; }
+const ok = () => ctx && ctx.state === 'running' && settings.sfx && !hushed;
 const sfx = (fn) => (...args) => { if (ok()) fn(...args); };
 
 // paper: a quick dry "thwip"
@@ -138,6 +140,7 @@ export const raise = sfx((n = 3) => {
   thud(0.04 + n * 0.06, 0.45);
 });
 export function newHand() { heat = 0; }
+export const blindsUp = sfx(() => { tok(72, { v: 0.3, d: 0.25, wet: 0.3 }); tok(76, { delay: 0.12, v: 0.3, d: 0.25, wet: 0.3 }); tok(79, { delay: 0.24, v: 0.32, d: 0.45, wet: 0.4 }); });
 export const check = sfx(() => { knock(0, 0.5); knock(0.1, 0.42); });
 export const fold = sfx(() => { // a deflating "bwoop"
   tone({ f: 420, f2: 130, type: 'triangle', d: 0.17, v: 0.24 });
