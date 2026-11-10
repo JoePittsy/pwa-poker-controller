@@ -6,6 +6,7 @@ import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
 import { face } from './faces.js';
+import { shareCard } from './share.js';
 import { STICKERS, has as hasSticker, count as stickerCount, unlock as unlockSticker } from './stickers.js';
 
 const YOU = { name: 'You', isHuman: true };
@@ -144,7 +145,7 @@ function dailyScreen() {
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: startScreen,
     body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyCalendar()}`,
-    items: done ? [[`${glyph('B')}Back`, startScreen]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, startScreen]],
+    items: done ? [['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true], [`${glyph('B')}Back`, startScreen]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, startScreen]],
   });
 }
 function startDaily(saved) {
@@ -180,7 +181,7 @@ function dailyDone() {
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true,
     body: `<p class="venue">You finished with ${me.chips.toLocaleString()} chips${me.chips === 0 ? '' : ` after ${game.handNo} hands`}.</p>${dailyCalendar()}`,
-    items: [[`${glyph('A')}Done`, startScreen]],
+    items: [[`${glyph('A')}Done`, startScreen], ['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true]],
   });
 }
 
@@ -927,7 +928,7 @@ function bustSummary() {
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('A')}New run`, () => startTable(1)], ['Stats', () => statsScreen(bustSummary)]],
+    items: [[`${glyph('A')}New run`, () => startTable(1)], ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)]],
   });
 }
 
@@ -1046,6 +1047,30 @@ function handOverFx() {
     }, 250);
   } else if (!me.folded && g.result.showdown) { audio.lose(); fx.haptic('lose'); }
   else audio.win(0);
+}
+
+// ---------- shareable result cards ----------
+async function share(card, name) {
+  toast('Making your card\u2026');
+  const res = await shareCard(card, name).catch(() => 'failed');
+  toast(res === 'saved' ? 'Card saved as an image' : res === 'failed' ? "Couldn't make the card" : 'Shared');
+}
+function runCard() {
+  const cleared = bossMode ? table : table - 1, r = runStats;
+  return {
+    kicker: 'My run', title: `${tables(cleared)} cleared`,
+    sub: bossMode ? `Beaten by ${bossFor(table).name}, ${bossFor(table).tag}` : `Out at Table ${table}, ${tableConfig(table).venue}`,
+    accent: tableConfig(table, bossMode).mat,
+    tiles: [[r.knockouts, 'knock-outs'], [r.hands, 'hands played'], [r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won'],
+      [r.biggest.toLocaleString(), 'biggest pot'], [r.bestHand ? r.bestHand.split(',')[0] : '\u2013', 'best hand'], [`${stickerCount()}/${STICKERS.length}`, 'stickers']],
+  };
+}
+function dailyCard() {
+  const d = dailyData(), t = today(), all = Object.values(d.scores);
+  return {
+    kicker: `Daily deal \u00b7 ${t}`, title: `${(d.scores[t] ?? 0).toLocaleString()} chips`, sub: `from 1,000 over ${DAILY_HANDS} hands`, accent: DAILY_CFG.mat,
+    tiles: [[all.length, 'days played'], [Math.max(...all, 0).toLocaleString(), 'best day'], [`${stickerCount()}/${STICKERS.length}`, 'stickers']],
+  };
 }
 
 // ---------- stickers (achievements) ----------
@@ -1446,7 +1471,7 @@ startInput(onButton, (on) => {
 });
 applyPrefs();
 startScreen();
-window.__poker = { get game() { return game; }, ui };
+window.__poker = { get game() { return game; }, ui, runCard, dailyCard };
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
