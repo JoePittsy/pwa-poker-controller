@@ -150,6 +150,7 @@ function dailyScreen() {
 }
 // Seat a one-off table (daily deal, quick table) outside the run.
 function seatSingle(kind, cfg, hud, saved) {
+  ME = 0; ui.hidden = false;
   mode = kind; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random;
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
   game = new Game({ players: cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips });
@@ -189,12 +190,67 @@ function quickDone() {
     items: [[`${glyph('A')}Play again`, () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], ['Done', startScreen]],
   });
 }
+// ---------- pass and play: two to four people share the device ----------
+// The table turns to face whoever is acting. Between turns their cards are face down and a
+// handover screen covers the table, so nobody sees a hand that isn't theirs.
+const PASS_COLORS = ['var(--blue)', 'var(--red)', 'var(--mint)', 'var(--yellow)'];
+let passHumans = 2;
+function startPass(humans) {
+  mode = 'pass'; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random; ME = 0;
+  const people = Array.from({ length: humans }, (_, i) => ({ name: `P${i + 1}`, badge: String(i + 1), isHuman: true, tag: 'Player', color: PASS_COLORS[i] }));
+  const bots = ['Gus', 'Ivy'].slice(0, Math.max(0, 4 - humans)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
+  cast = [...people, ...bots];
+  game = new Game({ players: cast, handsPerLevel: 5, chips: 1000 });
+  passHumans = humans;
+  $('app').style.setProperty('--mat', '#8a4fbf');
+  audio.setVenue(3);
+  ui.hidden = true;
+  buildSeats();
+  $('msg').textContent = ''; $('msg').classList.remove('show');
+  $('pot').hidden = true;
+  $('hud').innerHTML = '<b>Pass &amp; play</b>';
+  ui.mode = 'wait'; ui.resolve = null;
+  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
+  runId++;
+  renderActions();
+  run();
+}
+function passMenu() {
+  showOverlay({
+    title: 'Pass <span>&amp; play</span>', closable: true, onClose: moreGames,
+    body: `<p>Share one device. On your turn the table turns to face you and shows your cards; after you act they go face down and you pass it on. Computer players fill the table up to four.</p>`,
+    items: [['2 players', () => startPass(2)], ['3 players', () => startPass(3)], ['4 players', () => startPass(4)], [`${glyph('B')}Back`, moreGames]],
+  });
+}
+// Hand the device to the player who is about to act, then turn the table to them.
+async function takeSeat(p) {
+  const peopleLeft = game.players.filter((q) => q.isHuman && !q.out).length;
+  if (peopleLeft > 1) {
+    await new Promise((res) => showOverlay({
+      title: `Pass to <span>${p.name}</span>`,
+      body: `<p>Everyone else, look away. ${p.name}, press when only you can see the screen.</p>`,
+      items: [[`${glyph('A')}I'm ${p.name}`, res]],
+    }));
+  }
+  ME = p.seat; ui.hidden = false;
+  ui.noAnim = true; buildSeats(true); render(); ui.noAnim = false;
+}
+function passDone() {
+  const w = game.players.find((p) => p.chips > 0);
+  ME = 0; ui.hidden = false;
+  audio.musicLevel(0); audio.fanfare(); fx.chipRain(40);
+  showOverlay({
+    title: `${w.name} <span>wins!</span>`,
+    body: `<p>${w.isHuman ? `Player ${w.name.slice(1)}` : w.name} took every chip in ${game.handNo} hands.</p>`,
+    items: [[`${glyph('A')}Play again`, () => startPass(passHumans)], ['Done', startScreen]],
+  });
+}
 function moreGames() {
   const d = dailyData(), done = d.scores[today()] !== undefined;
   showOverlay({
     title: 'More <span>games</span>', closable: true, onClose: startScreen,
-    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p>`,
-    items: [['Daily deal', dailyScreen], ['Quick table', () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], [`${glyph('B')}Back`, startScreen]],
+    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p><p><b>Pass &amp; play:</b> two to four people on one device.</p>`,
+    items: [['Daily deal', dailyScreen], ['Quick table', () => seatSingle('quick', QUICK_CFG, '<b>Quick table</b>')], ['Pass & play', passMenu], [`${glyph('B')}Back`, startScreen]],
   });
 }
 function dailyDone() {
@@ -216,7 +272,8 @@ let table = 1;
 let twist = ''; // the current table's rule change, if any
 let lastBB = 0; // to announce when the blinds go up
 let cast = []; // cast[seat] = character info for the current table
-const ME = 0;
+let ME = 0; // the seat whose view is on screen: always 0, except in pass-and-play where it follows the player holding the device
+const mine = (p) => p.seat === ME;
 const DEAL_GAP = 90; // ms between dealt cards
 const SHUFFLE_MS = 800; // the shuffle before each deal
 const REVEAL_GAP = 320; // ms between players turning their cards over
@@ -262,7 +319,7 @@ let game = null;
 let runId = 0;
 let seatEls = [];
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true };
+const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false };
 let settled = false; // false between the last action of a hand and the moment the result is shown
 let overlay = null; // { items, focus, closable }
 
@@ -297,23 +354,24 @@ function setPile(el, n) {
   el.innerHTML = html;
 }
 
-function buildSeats() {
+function buildSeats(keepBoard = false) {
   $('seats').innerHTML = '';
-  $('board').innerHTML = '';
+  if (!keepBoard) $('board').innerHTML = '';
   seatEls = game.players.map((p) => {
-    const el = h('div', `seat ${p.isHuman ? 's0 me' : 'ai'}`,
+    const el = h('div', `seat ${mine(p) ? 's0 me' : 'ai'}`,
       `<div class="cards"></div><div class="badge"></div>
-       <div class="plate"><div class="ava" data-mood="idle">${p.isHuman ? p.name[0] : face(p.name)}</div>
+       <div class="plate"><div class="ava" data-mood="idle">${p.isHuman ? (cast[p.seat].badge || p.name[0]) : face(p.name)}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
        <div class="bet" hidden><span></span><em class="pile"></em></div><div class="say"></div>`);
     const c = cast[p.seat];
     el.querySelector('.name').innerHTML = `${p.name}${c.tag ? ` <i>${c.tag}</i>` : ''}`;
-    if (!p.isHuman) { // spread the opponents evenly along the top
+    if (!mine(p)) { // spread everyone else evenly along the top, in order round the table from the viewer
       const n = game.players.length - 1;
-      const left = n === 1 ? 50 : 13 + (p.seat - 1) * (74 / (n - 1));
+      const slot = (p.seat - ME - 1 + game.players.length) % game.players.length;
+      const left = n === 1 ? 50 : 13 + slot * (74 / (n - 1));
       el.style.left = `${left}%`;
       el.style.setProperty('--pc', c.color);
-      el.style.setProperty('--i', p.seat);
+      el.style.setProperty('--i', slot + 1);
       el.style.setProperty('--dx', `${(50 - left) * 0.8}vw`);
     }
     $('seats').append(el);
@@ -343,8 +401,8 @@ function render() {
   const odds = g.runout && g.board.length < 5 && g.stage !== 'handOver' ? oddsFor(g) : null;
   g.players.forEach((p, i) => {
     const el = seatEls[i];
-    const face = p.isHuman || (g.showCards && !p.folded);
-    const show = p.cards.length && (!p.folded || p.isHuman);
+    const face = (mine(p) && !ui.hidden) || (g.showCards && !p.folded);
+    const show = p.cards.length && (!p.folded || mine(p));
     const seen = (k) => face || (i === peekSeat && k === 0 && !p.folded); // Peek perk: one opponent shows a card
     const sig = show ? p.cards.map((c, k) => (seen(k) ? c : 'x')).join() : '';
     const cards = el.querySelector('.cards');
@@ -369,14 +427,14 @@ function render() {
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         // every card starts exactly on top of the deck, at the deck's size, and slides off it
-        const sq = p.isHuman && prefs.squeeze; // your cards stay face down until you squeeze them
+        const sq = mine(p) && prefs.squeeze && mode !== 'pass' && !ui.noAnim; // your cards stay face down until you squeeze them
         const els = p.cards.map((c, k) => {
-          const e = cardEl(c, sq || (seen(k) && !p.isHuman), '', sq);
+          const e = cardEl(c, ui.noAnim ? seen(k) : sq || (seen(k) && !mine(p)), '', sq);
           if (sq) e.firstChild.classList.add('sq');
           return e;
         });
         cards.replaceChildren(...els);
-        els.forEach((e, k) => {
+        if (!ui.noAnim) els.forEach((e, k) => {
           const r = e.getBoundingClientRect();
           e.style.setProperty('--dx', `${dr.left + dr.width / 2 - r.left - r.width / 2}px`);
           e.style.setProperty('--dy', `${dr.top + dr.height / 2 - r.top - r.height / 2}px`);
@@ -385,7 +443,7 @@ function render() {
           e.classList.add('deal');
         });
         if (sq) startSqueeze(cards, sig);
-        if (p.isHuman && !sq) { // your cards land face down, then turn over by themselves
+        if (mine(p) && !sq && !ui.noAnim && mode !== 'pass') { // your cards land face down, then turn over by themselves
           setTimeout(() => {
             if (cards.dataset.sig !== sig) return;
             cards.replaceChildren(...p.cards.map((c, k) => {
@@ -398,7 +456,7 @@ function render() {
         }
       }
     }
-    el.classList.toggle('shown', !!sig && face && !p.isHuman);
+    el.classList.toggle('shown', !!sig && face && !mine(p));
     el.classList.toggle('active', g.stage === 'betting' && g.toAct === i);
     el.classList.toggle('folded', p.folded && !p.out);
     el.classList.toggle('out', p.out);
@@ -407,11 +465,11 @@ function render() {
     if (p.out) { chips.textContent = 'Out'; chips._cur = 0; }
     else {
       fx.roll(chips, pending ? p.chips - p.won : p.chips, over && p.won > 0
-        ? { dur: 1100, onTick: p.isHuman ? audio.count : undefined }
+        ? { dur: 1100, onTick: mine(p) ? audio.count : undefined }
         : {});
     }
     let hand = '';
-    const known = !p.isHuman || ui.squeezed; // don't name a hand you haven't looked at yet
+    const known = !mine(p) || ui.squeezed; // don't name a hand you haven't looked at yet
     if (!p.folded && face && known && g.board.length >= 3) hand = describe(evaluate([...p.cards, ...g.board]));
     const handEl = el.querySelector('.hand');
     if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
@@ -419,7 +477,7 @@ function render() {
       const pct = `${Math.round(odds[i] * 100)}%`;
       const html = `${hand ? `${hand} ` : ''}<b>${pct}</b>`;
       if (handEl.innerHTML !== html) { handEl.innerHTML = html; fx.pop(handEl, 1.3); }
-    } else if (p.isHuman && prefs.coach && known && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
+    } else if (mine(p) && mode !== 'pass' && prefs.coach && known && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
       const html = `${hand ? `${hand} ` : ''}<b>${coachOdds(g)}%</b>`; // coach: rough chance your hand is best
       if (handEl.innerHTML !== html) handEl.innerHTML = html;
     } else if (handEl.textContent !== hand || handEl.children.length) handEl.textContent = hand;
@@ -475,9 +533,10 @@ function render() {
     $('msg').textContent = msg;
     $('msg').classList.toggle('show', !!msg);
   }
-  const left = g.players.filter((p) => !p.isHuman && !p.out && (p.chips > 0 || p.total > 0)).length;
+  const left = g.players.filter((p) => !mine(p) && !p.out && (p.chips > 0 || p.total > 0)).length;
   $('hud').innerHTML = mode === 'daily'
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
+    : mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : mode === 'quick' ? `<b>Quick</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
@@ -496,7 +555,7 @@ function burnCard() {
 // Coach: your chance of winning against the opponents still in, assuming they hold random cards.
 let coachCache = { key: '', pct: 0 };
 function coachOdds(g) {
-  const opp = g.players.filter((p) => !p.isHuman && !p.folded).length;
+  const opp = g.players.filter((p) => !mine(p) && !p.folded).length;
   const key = `${table}:${g.handNo}:${g.board.length}:${opp}`;
   if (coachCache.key !== key) coachCache = { key, pct: Math.round(equity(g.players[ME].cards, g.board, Math.max(1, opp), 400) * 100) };
   return coachCache.pct;
@@ -1016,7 +1075,7 @@ function actionFx(p, potBefore) {
   { // your own actions each have their own feel; other players' bets are a faint nudge
     const a0 = p.lastAction;
     const kind = a0 === 'Fold' ? 'fold' : a0 === 'Check' ? 'check' : a0.startsWith('Call') ? 'call' : a0.startsWith('All-in') ? '' : 'raise';
-    if (p.isHuman) fx.haptic(kind); else if (kind === 'raise') fx.haptic('nudge');
+    if (mine(p)) fx.haptic(kind); else if (kind === 'raise') fx.haptic('nudge');
   }
   const el = seatEls[p.seat];
   const a = p.lastAction;
@@ -1063,7 +1122,7 @@ function handOverFx() {
     const p = g.players[s], plate = seatEls[s].querySelector('.plate');
     const n = Math.max(4, Math.min(14, Math.round(p.won / g.bb / 2)));
     fx.flyChips($('center'), plate, n, { stagger: 50, onLand: (i) => { if (i % 2 === 0) audio.chips(1, 0, i / 2); } });
-    setTimeout(() => fx.floatText(plate, `+${p.won.toLocaleString()}`, p.isHuman ? 'big' : ''), 350);
+    setTimeout(() => fx.floatText(plate, `+${p.won.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
   }
   if (me.won > 0) {
     const size = me.won >= total && me.won > 40 * g.bb ? 3 : me.won > 12 * g.bb ? 2 : 1;
@@ -1281,7 +1340,7 @@ function loadSave() {
   } catch { return null; }
 }
 function writeSave(s) {
-  if (mode === 'quick') return;
+  if (mode === 'quick' || mode === 'pass') return;
   if (mode === 'daily') { // the daily deal keeps its own progress and never touches the run
     const d = dailyData();
     if (s) d.game = { date: today(), chips: s.chips, dealer: s.dealer, handNo: s.handNo }; else delete d.game;
@@ -1292,7 +1351,7 @@ function writeSave(s) {
 
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 function startTable(n, saved) {
-  mode = 'run'; aiRng = Math.random;
+  mode = 'run'; aiRng = Math.random; ME = 0; ui.hidden = false;
   if (n === 1 && !saved) memory = {};
   if (saved?.mem) memory = saved.mem;
   if (n === 1 && !saved) perks = {};
@@ -1405,6 +1464,7 @@ async function run() {
       const p = g.players[g.toAct];
       let a;
       if (p.isHuman) {
+        if (mode === 'pass') { await takeSeat(p); if (id !== runId) return; }
         audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== runId) return;
@@ -1412,9 +1472,10 @@ async function run() {
         noteHumanAction(a, g.legal(ME));
         feats.lastAct = { type: a.type === 'call' && g.legal(ME).canCheck ? 'check' : a.type, street: g.street };
       } else {
-        if (me.folded && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
+        const watching = mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded;
+        if (!watching && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
         a = decide(g, p.seat, aiRng, humanProfile());
-        const wait = me.folded ? 300 : thinkTime(p, a);
+        const wait = !watching ? 300 : thinkTime(p, a);
         if (wait > 1100 && !fast) showThinking(p.seat);
         if (wait > 2000 && !fast && Math.random() < 0.35) say(p, 'tank');
         await sleep(wait);
@@ -1425,7 +1486,9 @@ async function run() {
       g.act(a.type, a.amount);
       setMood(p.seat, 'idle');
       logAction(p);
-      render();
+      if (mode === 'pass' && p.isHuman && g.stage !== 'handOver') { // cards face down before the device moves on
+        ui.hidden = true; ui.noAnim = true; render(); ui.noAnim = false;
+      } else render();
       actionFx(p, potBefore);
     }
     audio.tension(false);
@@ -1433,15 +1496,17 @@ async function run() {
     if (ui.mode === 'skip') { ui.mode = 'wait'; renderActions(); }
     if (fast) { fast = false; audio.hush(false); await rawSleep(350); }
     // let everyone turn their cards over before the result lands
+    if (mode === 'pass') { ui.hidden = true; ui.noAnim = true; } // a winner who wasn't called doesn't have to show
     render();
+    ui.noAnim = false;
     if (ui.reveals) await sleep(ui.reveals * REVEAL_GAP + 500);
     if (id !== runId) return;
     settled = true;
-    const kos = recordHand(g);
+    const kos = mode === 'pass' ? 0 : recordHand(g);
     if (mode === 'run' && !bossMode && me.won > 0) { // they remember who took their last chip
       for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) memory[p.name] = { ko: grudge(p.name) + 1 };
     }
-    checkHandStickers(g, kos);
+    if (mode !== 'pass') checkHandStickers(g, kos);
     // bonuses are paid by the house, on top of the pot
     const bonus = (twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (perks.hunter || 0) * kos
       + (me.won > 0 ? Math.round(me.won * 0.1 * (perks.rakeback || 0)) : 0);
@@ -1462,10 +1527,11 @@ async function run() {
     await sleep(500);
     await prompt('continue');
     if (id !== runId) return;
+    if (mode === 'pass') { ui.hidden = true; continue; }
     if (me.chips === 0) return mode === 'daily' ? dailyDone() : mode === 'quick' ? quickDone() : busted();
     if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
-  if (mode === 'daily') dailyDone(); else if (mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
+  if (mode === 'pass') passDone(); else if (mode === 'daily') dailyDone(); else if (mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
 }
 
 // ---------- new-version check ----------
