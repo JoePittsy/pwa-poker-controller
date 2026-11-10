@@ -6,6 +6,7 @@ import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
 import { face } from './faces.js';
+import { STICKERS, has as hasSticker, count as stickerCount, unlock as unlockSticker } from './stickers.js';
 
 const YOU = { name: 'You', isHuman: true };
 const CHARACTERS = {
@@ -75,6 +76,7 @@ function pickPerk(done) {
     body: `<p>Yours for the rest of this run.</p>${perkSummary() ? `<p class="who">You hold: ${perkSummary()}</p>` : ''}`,
     items: offer.map((k, i) => [`${i === 0 ? glyph('A') : ''}<span>${PERKS[k].name}<small>${PERKS[k].text}</small></span>`, () => {
       perks[k] = (perks[k] || 0) + 1;
+      if (Object.values(perks).reduce((x, y) => x + y, 0) >= 3) award('loaded');
       audio.win(1);
       done();
     }]),
@@ -152,6 +154,9 @@ function startDaily(saved) {
 function dailyDone() {
   const me = game.players[ME], d = dailyData(), t = today();
   d.scores[t] = me.chips; delete d.game; saveDaily(d);
+  award('daily_player');
+  if (me.chips > 2000) award('in_the_black');
+  if (Object.keys(d.scores).length >= 3) award('regular_hours');
   audio.musicLevel(0);
   if (me.chips > DAILY_CFG.chips) { audio.win(2); fx.burst($('center'), 40); } else audio.lose();
   showOverlay({
@@ -469,7 +474,7 @@ function startSqueeze(el, sig) {
     el.style.setProperty('--peel', sq.peel.toFixed(3));
     const step = Math.floor(sq.peel * 6);
     if (step !== sq.ticked) { sq.ticked = step; if (target > sq.peel) { audio.slider(sq.peel); fx.rumble(0.1, 0.25, 30); } }
-    if (sq.peel >= 0.9) return finishSqueeze();
+    if (sq.peel >= 0.9) { award('sweat'); return finishSqueeze(); }
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
@@ -737,7 +742,7 @@ function statsScreen(back) {
       ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot')}
       ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdowns won')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('B')}Back`, back]],
+    items: [[`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],
   });
 }
 function lastHandScreen(back) {
@@ -860,6 +865,7 @@ async function tableCleared() {
 }
 function showCleared() {
   if (bossMode) { // beat the boss: on to the next table
+    award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(table).name]);
     stats.bosses = (stats.bosses || 0) + 1; saveStats();
     writeSave({ table: table + 1, habits, run: runStats, perks, owed: true });
     const b = bossFor(table);
@@ -869,6 +875,10 @@ function showCleared() {
       items: [[`${glyph('A')}Carry on`, () => startTable(table + 1, loadSave())]],
     });
   }
+  if (table >= 1) award('regular');
+  if (table >= 3) award('made_it');
+  if (table >= 5) award('vault');
+  if (game.handNo <= 15) award('speedrun');
   const before = best();
   try { localStorage.setItem('padpoker.best', Math.max(before, table)); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= table);
@@ -1018,6 +1028,53 @@ function handOverFx() {
     }, 250);
   } else if (!me.folded && g.result.showdown) { audio.lose(); fx.haptic('lose'); }
   else audio.win(0);
+}
+
+// ---------- stickers (achievements) ----------
+let stickerQueue = 0;
+function award(id) {
+  const st = unlockSticker(id);
+  if (!st) return;
+  const delay = 1500 + stickerQueue++ * 1900; // let the hand's own fanfare finish, and don't stack them
+  setTimeout(() => {
+    stickerQueue = Math.max(0, stickerQueue - 1);
+    audio.sticker();
+    fx.sticker(st[3], st[1], st[2], STICKERS.indexOf(st) % 4);
+  }, delay);
+}
+// Things only the game loop knows, noted during a hand for the checks below.
+const feats = { startChips: 0, turnOdds: 1, lastAct: null, winStreak: 0, foldStreak: 0 };
+function checkHandStickers(g, kos) {
+  const me = g.players[ME];
+  const won = me.won > 0, sd = g.result.showdown && !me.folded;
+  const cat = sd ? Math.floor(me.score / 13 ** 5) : -1;
+  const ranks = me.cards.map((c) => c >> 2).sort((a, b) => a - b);
+  feats.winStreak = won ? feats.winStreak + 1 : 0;
+  feats.foldStreak = me.folded ? feats.foldStreak + 1 : 0;
+  if (won) award('first_win');
+  if (won && ranks[0] === 0 && ranks[1] === 5) award('seven_two');
+  if (ranks[0] === 12 && ranks[1] === 12) { if (won) award('rockets'); else if (sd) award('cracked'); }
+  if (won && !g.result.showdown && g.street === 'river') award('stone_cold');
+  if (won && sd && cat <= 1 && feats.lastAct?.type === 'call' && feats.lastAct.street === 'river') award('soul_read');
+  if (won && cat === 5) award('flushed');
+  if (won && cat === 6) award('full_boat');
+  if (cat === 7) award('quads');
+  if (cat === 8) award('unicorn');
+  if (me.won >= 2000) award('whale_hunter');
+  if (won && me.allIn) award('fearless');
+  if (won && me.allIn && sd && feats.turnOdds < 0.3) award('river_rat');
+  if (won && feats.startChips < 5 * g.bb) award('chip_chair');
+  if (kos >= 2) award('two_birds');
+  if (feats.winStreak >= 4) award('heater');
+  if (feats.foldStreak >= 8) award('patience');
+}
+function stickersScreen(back) {
+  const tiles = STICKERS.map(([id, name, , icon], i) => `<div class="${hasSticker(id) ? 'got' : ''}"><b class="${hasSticker(id) ? `k${i % 4}` : ''}">${hasSticker(id) ? icon : '?'}</b>${name}</div>`).join('');
+  showOverlay({
+    title: 'Stickers', wide: true, closable: true, onClose: back,
+    body: `<p>${stickerCount()} of ${STICKERS.length} collected. Each one is earned by something you did at the table.</p><div class="stickers">${tiles}</div>`,
+    items: [[`${glyph('B')}Back`, back]],
+  });
 }
 
 // ---------- stats and hand history ----------
@@ -1217,6 +1274,7 @@ async function run() {
     g.players.forEach((p) => setMood(p.seat, 'idle'));
     audio.musicLevel(1);
     settled = false;
+    feats.startChips = me.chips + me.total; feats.turnOdds = 1; feats.lastAct = null;
     const others = g.players.filter((p) => !p.isHuman && !p.out);
     peekSeat = perks.peek && others.length ? others[Math.floor(Math.random() * others.length)].seat : -1;
     logStart(g);
@@ -1240,6 +1298,7 @@ async function run() {
           if (g.street !== 'river') { audio.heartbeat(); fx.rumble(0.8, 0.2, 120); }
           // the river of a live all-in gets the full treatment
           const o = g.street === 'turn' ? Object.values(oddsFor(g)) : [];
+          if (g.street === 'turn' && !me.folded) feats.turnOdds = oddsFor(g)[ME] ?? 1;
           ui.slowRiver = o.some((x) => x > 0.02 && x < 0.98);
           await sleep(g.street === 'river' ? 900 : ui.slowRiver ? 1700 : 1300);
           if (ui.slowRiver) { audio.heartbeat(); fx.rumble(0.8, 0.2, 120); }
@@ -1266,6 +1325,7 @@ async function run() {
         if (id !== runId) return;
         a = await prompt('actions');
         noteHumanAction(a, g.legal(ME));
+        feats.lastAct = { type: a.type === 'call' && g.legal(ME).canCheck ? 'check' : a.type, street: g.street };
       } else {
         if (me.folded && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
         a = decide(g, p.seat, aiRng, humanProfile());
@@ -1293,6 +1353,7 @@ async function run() {
     if (id !== runId) return;
     settled = true;
     const kos = recordHand(g);
+    checkHandStickers(g, kos);
     // bonuses are paid by the house, on top of the pot
     const bonus = (twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (perks.hunter || 0) * kos
       + (me.won > 0 ? Math.round(me.won * 0.1 * (perks.rakeback || 0)) : 0);
@@ -1302,6 +1363,7 @@ async function run() {
     }
     if (me.chips === 0 && perks.lifeline > 0) { // one more chance
       perks.lifeline--;
+      award('second_wind');
       me.chips = Math.round(tableConfig(table, bossMode).chips * 0.3);
       setTimeout(() => { fx.banner('Lifeline!', 'info'); audio.win(1); }, 1200);
     }

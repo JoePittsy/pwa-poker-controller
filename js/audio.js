@@ -198,6 +198,7 @@ export const arrive = sfx(() => {
   thud(0.42, 0.45);
   tok(scale(2) + 12, { delay: 0.45, v: 0.2, d: 0.3, wet: 0.3 });
 });
+export const sticker = sfx(() => { tok(79, { v: 0.26, d: 0.2, wet: 0.4 }); tok(84, { delay: 0.1, v: 0.26, d: 0.2, wet: 0.4 }); tok(91, { delay: 0.2, v: 0.3, d: 0.6, wet: 0.6 }); });
 export const lose = sfx(() => { // a little "wah-wah"
   tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
   tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });
