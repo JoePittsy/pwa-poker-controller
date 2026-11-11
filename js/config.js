@@ -50,7 +50,7 @@ export function tableConfig(n, boss = false) {
     const b = bossFor(n);
     return {
       names: [b.name], boss: b, skill: 1, venue: `${b.name}, ${b.tag}`, mat: '#3a3355', twist: null,
-      handsPerLevel: b.turbo || !b.chips ? 2 : 3, chips: STACKS[prefs.stack], // the whale's big stack needs the slower blinds
+      handsPerLevel: b.chips ? 3 : 2, chips: STACKS[prefs.stack], // the whale's big stack needs the slower blinds
     };
   }
   let names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : REGULARS;
@@ -68,7 +68,7 @@ export function tableConfig(n, boss = false) {
   return {
     variant: variantFor(n),
     names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
-    handsPerLevel: twist?.key === 'turbo' ? 2 : [10, 8, 6, 5, 4][n - 1] ?? 3, // the first tables give you time to play
+    handsPerLevel: twist?.key === 'turbo' ? 2 : n === 1 ? 2 : 3, // about 15-25 hands a table (see test/length.test.js); the first has the fewest opponents
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
 }

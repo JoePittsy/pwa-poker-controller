@@ -56,9 +56,9 @@ test('a saved trip is made safe to use', () => {
 });
 
 test('a fast clear pays more, scaled to the size of the table', () => {
-  assert.deepEqual([fastPar(3), quickPar(3)], [24, 39]);
-  assert.deepEqual([24, 25, 39, 40].map((h) => speedBonus(h, 3)), [0.3, 0.15, 0.15, 0]);
-  assert.equal(speedBonus(30, 5), 0.3);
+  assert.deepEqual([fastPar(3), quickPar(3)], [16, 19]);
+  assert.deepEqual([16, 17, 19, 20].map((h) => speedBonus(h, 3)), [0.3, 0.15, 0.15, 0]);
+  assert.equal(speedBonus(27, 5), 0.3);
   assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.3), 3900);
 });
 test('you may walk away once half your opponents are out, but not before, not at the end, and never from a boss', () => {
