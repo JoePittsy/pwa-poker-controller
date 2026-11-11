@@ -46,7 +46,7 @@ export class Game {
     const alive = this.players.filter((p) => !p.out);
     if (alive.length < 2) return false;
     this.handNo++;
-    const levels = this.startLevel === 0 && this.handsPerLevel <= 3 ? RISING_LEVELS : BLIND_LEVELS;
+    const levels = this.startLevel === 0 && this.handsPerLevel <= 5 ? RISING_LEVELS : BLIND_LEVELS;
     const lvl = Math.min(this.startLevel + Math.floor((this.handNo - 1) / this.handsPerLevel), levels.length - 1);
     [this.sb, this.bb] = levels[lvl];
     this.dealer = this.nextSeat(this.dealer, (p) => !p.out);
