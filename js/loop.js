@@ -1,3 +1,4 @@
+import { keepAwake } from './awake.js';
 import { worstOf } from './coach.js';
 import { adjust, noteGaveUp, notePushed, noteShowdownWon } from './reads.js';
 import { nextHeat, payout, stackFactor } from './build.js';
@@ -110,6 +111,7 @@ export function startTable(n, saved) {
 }
 
 export async function run() {
+  keepAwake(true);
   const id = ++S.runId;
   const g = S.game;
   const me = g.players[S.ME];

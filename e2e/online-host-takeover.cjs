@@ -1,0 +1,36 @@
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const errs = [];
+  const open = async (tag, name, url = 'http://localhost:8080/') => { const ctx = await b.newContext({ viewport: { width: 750, height: 369 } }); const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(`${tag}: ${e.message}`));
+    await p.addInitScript((name) => { localStorage.setItem('padpoker.seen', '1'); localStorage.setItem('padpoker.relay', 'ws://localhost:1884'); if (!localStorage.getItem('padpoker.prefs')) localStorage.setItem('padpoker.prefs', JSON.stringify({ speed: 'Fast', squeeze: false, name, nameAsked: true })); }, name); await p.goto(url); await p.waitForTimeout(500); return p; };
+  const click = (p, label) => p.evaluate((label) => [...document.querySelectorAll('#overlay .btn')].find((x) => x.textContent.includes(label)).click(), label);
+  const title = (p) => p.evaluate(() => (document.getElementById('overlay').hidden ? '' : document.querySelector('#overlay h1').textContent));
+  const dlg = (p) => p.evaluate(() => document.querySelector('#overlay .dialog')?.innerText.replace(/\n+/g, ' / ').slice(0, 300));
+  const st = (p) => p.evaluate(async () => { const { S } = await import('/js/state.js'); const { ui } = await import('/js/prefs.js'); const g = S.game; return g ? { role: S.net?.role, code: S.net?.code, m: ui.mode, me: S.ME, hand: g.handNo, stage: g.stage, toAct: g.toAct, table: g.players.map((q) => `${q.name}${q.isHuman ? '' : '*'}:${q.chips + q.total}`).join(' '), sum: g.players.reduce((a, q) => a + q.chips + q.total, 0) } : { role: S.net?.role, code: S.net?.code }; });
+  const host = await open('host', 'Joe');
+  await click(host, 'Online'); await host.waitForTimeout(200); await click(host, 'Host a game');
+  for (let i = 0; i < 40 && !/^Room/.test(await title(host)); i++) await host.waitForTimeout(100);
+  const code = (await title(host)).replace(/\D/g, ''); const url = `http://localhost:8080/?join=${code}`;
+  const a = await open('A', 'Sam', url), c = await open('C', 'Al', url);
+  for (let i = 0; i < 60 && !/Al/.test(await host.evaluate(() => document.querySelector('#overlay .who')?.textContent || '')); i++) await host.waitForTimeout(100);
+  await click(host, 'Start game'); await host.waitForTimeout(2500);
+  const play = async (pages, ms, until) => { const t = Date.now(); while (Date.now() - t < ms) { for (const p of pages) { const v = await st(p); if (v?.m === 'actions') await p.keyboard.press('c'); if (v?.role === 'host' && v.stage === 'handOver' && v.m === 'continue') await p.keyboard.press('Enter'); } if (until && await until()) return true; await pages[0].waitForTimeout(80); } return false; };
+  await play([host, a, c], 30000, async () => (await st(host)).hand >= 3 && (await st(host)).stage === 'betting');
+  const before = await st(host);
+  console.log('before host dies:', before.table, '| sum', before.sum, '| hand', before.hand, before.stage);
+  await host.close();
+  const t0 = Date.now(); while (Date.now() - t0 < 30000 && !/lost/i.test(await title(a))) await a.waitForTimeout(300);
+  console.log(`after ${Math.round((Date.now() - t0) / 1000)}s  A:`, await dlg(a)); console.log('  C:', await dlg(c));
+  await a.screenshot({ path: 'hostlost.png' });
+  await click(a, 'Take over'); 
+  const t1 = Date.now(); let ok = false;
+  while (Date.now() - t1 < 30000) { const va = await st(a), vc = await st(c); if (va.role === 'host' && va.hand !== undefined && vc.role === 'guest' && vc.code === va.code && vc.hand !== undefined) { ok = true; break; } await a.waitForTimeout(300); }
+  const va = await st(a), vc = await st(c);
+  console.log(`moved in ${Math.round((Date.now() - t1) / 1000)}s ok=${ok} old room ${code} -> new ${va.code}`);
+  console.log('  new host A:', JSON.stringify(va)); console.log('  guest C   :', JSON.stringify(vc));
+  const on = await play([a, c], 40000, async () => (await st(a)).hand >= va.hand + 2);
+  const ea = await st(a), ec = await st(c);
+  console.log('carried on:', on, '| A', ea.table, 'sum', ea.sum, '| C in sync:', ea.table === ec.table || ec.table);
+  await a.screenshot({ path: 'tookover.png' });
+  console.log(errs); await b.close();
+})();

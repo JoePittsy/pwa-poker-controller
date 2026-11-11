@@ -108,6 +108,8 @@ const S = () => crypto.subtle;
 const b64 = (buf) => { let s = ''; for (const b of new Uint8Array(buf)) s += String.fromCharCode(b); return btoa(s); };
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const CURVE = { name: 'ECDH', namedCurve: 'P-256' };
+/** A fresh key shared by everyone in a room, as text. Used only to prove a message came from someone in it. */
+export const newSecret = () => b64(crypto.getRandomValues(new Uint8Array(32)));
 export const canEncrypt = () => !!globalThis.crypto?.subtle;
 export async function newKeys() {
   const pair = await S().generateKey(CURVE, false, ['deriveKey']);
