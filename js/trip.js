@@ -35,7 +35,7 @@ export function cashOut(trip, table, finalStack, bonus = 0) {
 // for no bonus and without the table counting as cleared. Never against a boss.
 // (What counts as won is measured against the table's ordinary stack: chips a perk or a boost added to your
 // starting stack are yours to bank, so walking away is never worth nothing just because you started big.)
-export const FAST = 5.5, QUICK = 6.5; // tables last about 15-25 hands (test/length.test.js): about a quarter of clears are fast, six in ten at least quick
+export const FAST = 7, QUICK = 9; // tables last about 20-30 hands (test/length.test.js)
 export const fastPar = (opponents) => Math.floor(FAST * opponents);
 export const quickPar = (opponents) => Math.floor(QUICK * opponents);
 /** The bonus, as a share of the cash-out, for clearing a table of this many opponents in this many hands. */

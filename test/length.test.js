@@ -49,8 +49,8 @@ function simulate(table, names, tables, seed) {
 // the blind schedule, and 150 tables per seed is a small sample, so the test must not flake on a small drift.
 const SLACK = 3, TABLES = 150;
 const CASES = [
-  { table: 1, names: ['Dot', 'Ivy', 'Gus'], median: [14, 20], p90: 28, firstOut: 10 },
-  { table: 2, names: ['Mav', 'Dot', 'Ivy', 'Gus'], median: [16, 24], p90: 32 },
+  { table: 1, names: ['Dot', 'Ivy', 'Gus'], median: [20, 30], p90: 38, firstOut: 13 },
+  { table: 2, names: ['Mav', 'Dot', 'Ivy', 'Gus'], median: [18, 28], p90: 40 },
 ];
 for (const c of CASES) {
   test(`Table ${c.table} lasts about ${c.median[0]}-${c.median[1]} hands (90% of tables within ${c.p90})`, () => {

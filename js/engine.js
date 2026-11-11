@@ -8,7 +8,7 @@ export const BLIND_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [50, 100], [
 // Tables whose levels are 3 hands or fewer (the run's tables, bosses and turbo) climb this steeper ladder, so that a
 // table lasts about 15-25 hands: the opening 5/10 against 1000 chips is unchanged and the big blind at most doubles
 // per step. Slower tables (sit & go, ladder, daily, pass, online) keep BLIND_LEVELS.
-export const RISING_LEVELS = [[5, 10], [10, 20], [20, 40], [30, 60], [60, 120], [120, 240], [240, 480], [400, 800], [800, 1600]];
+export const RISING_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [40, 80], [60, 120], [100, 200], [150, 300], [250, 500], [400, 800], [600, 1200], [1000, 2000]];
 
 export class Game {
   constructor({ players, chips = 1000, handsPerLevel = 8, rng = Math.random, variant = 'holdem', startLevel = 0 }) {
