@@ -1,3 +1,4 @@
+import { setTable } from './venue.js';
 import * as audio from './audio.js';
 import { CHARACTERS, setVariantLook } from './config.js';
 import { Game } from './engine.js';
@@ -25,7 +26,7 @@ export function startPass(humans) {
   S.game = new Game({ players: S.cast, handsPerLevel: 5, chips: 1000 });
   setVariantLook('holdem');
   S.passHumans = humans;
-  $('app').style.setProperty('--mat', '#8a4fbf');
+  setTable('#8a4fbf', 'pass', 'Pass & play');
   audio.setVenue(3);
   ui.hidden = true;
   buildSeats();
