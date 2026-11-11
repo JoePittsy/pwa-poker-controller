@@ -155,7 +155,7 @@ function dailyScreen() {
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: moreGames,
     body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyCalendar()}`,
-    items: done ? [['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true], [`${glyph('B')}Back`, moreGames]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, moreGames]],
+    items: done ? [['Share', () => share(dailyCard(), 'pokerpad-daily.png'), true], [`${glyph('B')}Back`, moreGames]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, moreGames]],
   });
 }
 // Seat a one-off table (daily deal, quick table) outside the run.
@@ -353,7 +353,7 @@ function hostLobby(focus = 0) {
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {
-        try { if (navigator.share) await navigator.share({ title: 'Pad Poker', text: `Join my poker table: room ${net.code}`, url: link }); else { await navigator.clipboard.writeText(link); toast('Link copied'); } } catch { toast(`Room code ${net.code}`); }
+        try { if (navigator.share) await navigator.share({ title: 'PokerPad', text: `Join my poker table: room ${net.code}`, url: link }); else { await navigator.clipboard.writeText(link); toast('Link copied'); } } catch { toast(`Room code ${net.code}`); }
       }, true],
       [`Turn timer: ${c.timer ? `${c.timer}s` : 'Off'}`, again(2, () => { c.timer = next(NET_TIMERS, c.timer); })],
       [`Seats: ${c.seats}`, again(3, () => { c.seats = c.seats >= 6 ? Math.max(2, people) : c.seats + 1; })],
@@ -683,7 +683,7 @@ function dailyDone() {
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true,
     body: `<p class="venue">You finished with ${me.chips.toLocaleString()} chips${me.chips === 0 ? '' : ` after ${game.handNo} hands`}.</p>${dailyCalendar()}`,
-    items: [[`${glyph('A')}Done`, startScreen], ['Share', () => share(dailyCard(), 'pad-poker-daily.png'), true]],
+    items: [[`${glyph('A')}Done`, startScreen], ['Share', () => share(dailyCard(), 'pokerpad-daily.png'), true]],
   });
 }
 
@@ -920,11 +920,11 @@ function render() {
     const slow = ui.slowRiver && i === 4;
     const wait = BURN_MS + k * 170;
     if (ui.noAnim) { board.append(cardEl(g.board[i], true)); continue; } // putting a table back: no dealing, no sound
-    const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop', !slow);
+    const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop', true);
     // each board card slides out from the deck, which sits just right of the fifth slot
     e.style.setProperty('--dx', `${17.59 - i * 3.382}em`);
     e.style.animationDelay = `${wait}ms`;
-    if (!slow) e.firstChild.style.animationDelay = `${wait}ms`;
+    e.firstChild.style.animationDelay = `${wait}ms`; // the card-back cover keeps time with the card
     board.append(e);
     if (!slow) { audio.card(wait / 1000); audio.flip(wait / 1000 + 0.3); }
   }
@@ -1270,7 +1270,7 @@ function overlayFocus(d) {
   });
 }
 
-const TITLE = '<span class="logo">Pad <span>Poker</span></span>';
+const TITLE = '<span class="logo">Poker<span>Pad</span></span>';
 const best = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
 const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 function startScreen() {

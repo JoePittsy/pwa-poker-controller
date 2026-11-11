@@ -1,4 +1,4 @@
-# Pad Poker
+# PokerPad
 
 No-limit Texas Hold'em against five AI opponents, built as an installable PWA for
 landscape phones and playable with a game controller (including iOS Safari).
