@@ -1,4 +1,4 @@
-import { facingBet } from './coach.js';
+import { facingBet, rangeEquity } from './coach.js';
 import { cashHud } from './tables.js';
 import { equity } from './ai.js';
 import * as audio from './audio.js';
@@ -254,7 +254,7 @@ export function burnCard() {
   audio.card();
 }
 
-// Coach: your chance of winning against the opponents still in, assuming they hold random cards.
+// Coach: your chance of winning against the opponents still in, given what each is likely to hold.
 /* coachCache: see state.js */
 // The board as the player can see it: a card counts once it has landed and turned, not when it is dealt.
 export const seenBoard = (g) => g.board.slice(0, Math.min(g.board.length, ui.boardShown ?? g.board.length));
@@ -262,6 +262,16 @@ export function coachOdds(g) {
   const opp = g.players.filter((p) => !mine(p) && !p.folded).length, board = seenBoard(g);
   const L = g.stage === 'betting' && g.toAct === S.ME ? g.legal(S.ME) : { toCall: 0 };
   const key = `${S.table}:${g.handNo}:${board.length}:${opp}:${L.toCall}`;
-  if (S.coachCache.key !== key) S.coachCache = { key, pct: Math.round(facingBet(equity(g.players[S.ME].cards, board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant), L.toCall, g.pot, g.street) * 100) };
+  if (S.coachCache.key !== key) {
+    const hole = g.players[S.ME].cards, plain = !g.variant || g.variant === 'holdem';
+    // Each opponent is given cards that fit their character and how hard they have bet (see rangeEquity).
+    const size = L.toCall > 0 ? Math.min(1, L.toCall / Math.max(1, g.pot - L.toCall)) : 0;
+    const them = g.players.filter((p) => !mine(p) && !p.folded).map((p) => ({
+      loose: p.style?.loose ?? 0.5,
+      pressure: L.toCall > 0 && p.seat === g.aggressor ? Math.min(1, 0.3 + 0.7 * size) : p.total > 3 * g.bb ? 0.3 : 0,
+    }));
+    const eq = plain && them.length ? rangeEquity(hole, board, them, 400) : facingBet(equity(hole, board, Math.max(1, opp), 150, Math.random, g.variant), L.toCall, g.pot, g.street);
+    S.coachCache = { key, pct: Math.round(eq * 100) };
+  }
   return S.coachCache.pct;
 }

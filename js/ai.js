@@ -47,8 +47,7 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant
 }
 
 // human: { foldToBet, aggression } — observed tendencies of the human player, 0..1
-const K = JSON.parse(process.env.K || '{}');
-const CA = K.CA ?? 1, CL = K.CL ?? 5, RA = K.RA ?? 1, RB = K.RB ?? 0.2, SL = K.SL ?? 0.2, TB = K.TB ?? 0.3, TIGHT = K.C ?? 1.5, LOOSE_SPAN = K.LF ?? 10;
+const SF = +process.env.SF || 7, SK = +process.env.SK || 0;
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
@@ -66,7 +65,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const fromHero = hero && g.aggressor === hero.seat;
   const lighter = fromHero ? (aggression - 0.3) * 0.2 : 0;
   const vsShover = fromHero ? Math.min(0.7, shoveRate) : 0; // someone who shoves all the time has any two cards
-  const nerve = Math.min(1, aggr ** 1.5 * (0.2 + loose)); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing
+  const nerve = Math.min(1, 3.3 * aggr ** 1.5 * loose * loose); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing: a maniac about 1, a steady player a third of that, a careful one a fifth
   let think = 0.1 + rng() * 0.25;
 
   const out = (a, extra) => ({ ...a, think: Math.min(1, think), ...extra });
@@ -83,8 +82,8 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
     const position = behind <= 1 ? 1 : behind >= 4 ? -0.5 : 0; // looser late, tighter early
-    const rs = strength(p.cards) - TIGHT + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * SL + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // what the cards are worth for raising
-    const s = rs + (loose - 0.5) * LOOSE_SPAN; // ...and how much the character wants to play them: loose adds to that, never to raising
+    const rs = strength(p.cards) - 1.25 + (rng() - 0.5) + (opp <= 2 ? 2 : 0) + position + lighter * 10 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // what the cards are worth for raising (a hand is never judged exactly the same twice, so a style is a smooth rate, not a cliff)
+    const s = rs + (loose - 0.5) * 10; // ...and how much the character wants to play them: loose adds to that, never to raising
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves, without the character's wishful thinking
@@ -94,10 +93,10 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     // player wants more, a loose one less) and on who is betting: against a habitual shover, far less.
     if (cost > 12 || (shove && toCall > 5 * bb)) {
       think += 0.3;
-      return raw >= 10 + (0.5 - loose) * 3 - vsShover * 6 ? passive() : giveUp();
+      return raw >= Math.max(SF - SK * loose, 10 + (0.5 - loose) * 3 - vsShover * 9) ? passive() : giveUp();
     }
-    const openRaise = Math.min(0.95, aggr * (RA + RB * Math.max(0, Math.min(1, (rs - 6) / 6)))); // how often a hand worth playing is raised: mostly the character, a little the cards
-    if (rs >= 11) {
+    const openRaise = Math.min(0.95, aggr * (1.5 + 0.3 * Math.max(0, Math.min(1, (rs - 6) / 6)))); // how often a hand worth playing is raised: mostly the character, a little the cards
+    if (rs >= 10.5) {
       const premium = rs >= 13;
       if (cost > 6 && !premium) return passive();
       if (raised && raw < 10) return passive(); // re-raising takes real cards, whoever you are
@@ -106,13 +105,13 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     if (s >= 8) {
       if (!raised) return rng() < openRaise ? raise(0.8) : passive();
       if (cost > 9) return giveUp();
-      return raw >= 7 && rng() < TB * aggr * aggr ? raise(0.9) : passive();
+      return raw >= 7 && rng() < 0.8 * aggr * aggr ? raise(0.9) : passive();
     }
     if (s >= 6) {
       if (!raised) return rng() < openRaise ? raise(0.8) : passive();
-      return cost <= CA + CL * loose ? passive() : giveUp(); // a loose player pays to see a raise with a so-so hand, a tight one folds it
+      return cost <= 1 + 7.5 * loose ? passive() : giveUp(); // a loose player pays to see a raise with a so-so hand, a tight one folds it
     }
-    if (s >= 4.5) return cost <= 1 && rng() < 0.2 + 0.75 * loose ? passive() : giveUp();
+    if (s >= 4.5) return cost <= 1 && rng() < Math.max(0, 1.6 * loose - 0.5) ? passive() : giveUp();
     if (!raised && toCall > 0 && rng() < 0.08 * nerve * bluffy * (1 + position)) return raise(0.8, { bluff: true }); // steal
     return giveUp();
   }
@@ -123,7 +122,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (toCall === 0) {
     if (e > 0.7) return rng() < 0.45 + 0.5 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
     if (e > 0.5) return rng() < 0.1 + 0.6 * aggr ? raise(0.4 + rng() * 0.2) : passive();
-    if (opp <= 2 && rng() < 0.12 * aggr * bluffy) { think += 0.2; return raise(0.6, { bluff: true }); }
+    if (opp <= 2 && rng() < 0.15 * nerve * bluffy * (g.street !== 'river' && e > 0.3 ? 1.6 : 0.6)) { think += 0.2; return raise(0.6, { bluff: true }); }
     return passive();
   }
   const odds = toCall / (pot + toCall);
@@ -141,7 +140,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   strong = e > 0.75;
   if (e > 0.82 || (e > 0.68 && rng() < aggr * 0.5)) return raise(0.7 + rng() * 0.3, { strong });
   if (e >= need) return out({ type: 'call' }, { strong });
-  if (pressure < 0.6 && rng() < 0.04 * aggr * bluffy) return raise(0.8, { bluff: true });
+  if (pressure < 0.6 && rng() < 0.06 * nerve * bluffy) return raise(0.8, { bluff: true });
   return giveUp();
 }
 

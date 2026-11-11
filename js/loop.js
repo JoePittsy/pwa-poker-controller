@@ -215,7 +215,7 @@ export async function run() {
         audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== S.runId) return;
-        lastCoach = prefs.coach ? coachOdds(g) / 100 : null; // what the coach is showing for this decision: the review must agree with it
+        lastCoach = S.mode === 'pass' ? null : coachOdds(g) / 100; // what the coach is showing for this decision: the review must agree with it
         a = await prompt('actions');
         noteHumanAction(a, g.legal(S.ME));
         if (S.handLog && S.mode !== 'pass' && a) { // what you knew when you chose: your rough chance to win and the price you were offered

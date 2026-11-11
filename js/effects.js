@@ -78,7 +78,7 @@ export function handOverFx() {
     if (g.result.showdown && !me.folded && S.mode !== 'pass' && S.mode !== 'net') {
       const w = g.players[g.result.winners.find((s) => s !== S.ME)];
       if (w?.handName && me.handName) {
-        const lower = (t) => t.charAt(0).toLowerCase() + t.slice(1);
+        const lower = (t) => t.replace(/^(Two Pair|Pair|Three|Four|Full House|Straight Flush|Straight|Flush|Royal Flush|\w)/, (m) => m.toLowerCase());
         const text = `${w.name} had ${lower(w.handName)}; you had ${lower(me.handName)}.`;
         let tries = 0; // wait for the end of any banner already on screen (a bonus or lifeline) rather than overlap it
         const show = () => {
