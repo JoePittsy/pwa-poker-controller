@@ -222,6 +222,7 @@ export async function run() {
           const L = g.legal(S.ME), opp = g.players.filter((q) => !mine(q) && !q.folded).length;
           S.handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
+            opp, allin: a.type === 'raise' && a.amount >= L.maxTo, // how many were still in, and whether this was for everything
             to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
             eq: lastCoach !== null ? lastCoach : facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot, g.street), need: L.toCall / (g.pot + L.toCall),
           });

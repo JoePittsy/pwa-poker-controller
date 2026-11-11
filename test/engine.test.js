@@ -185,3 +185,23 @@ test('a pair that is only on the board is recognised as everyone\'s', () => {
   assert.equal(onBoard(v('Ah 7c 7s 2d 5c 5s 3h'), C('7s 2d 5c 5s 3h')), false);
   assert.equal(onBoard(v('Ah Kc Qs 9d 5c 4s 3h'), C('Qs 9d 5c 4s 3h')), false); // high card
 });
+
+test('a showdown result is the winner\'s net gain, and a chop says who split it', () => {
+  const play = (h0, h1, board) => {
+    const g = new Game({ players: [{ name: 'You', isHuman: true }, { name: 'Gus' }], chips: 1000, rng: rng(5) });
+    g.startHand();
+    g.players[0].cards = C(h0); g.players[1].cards = C(h1);
+    const b = C(board);
+    g.deck = [b[4], 0, b[3], 0, b[2], b[1], b[0], 0]; // popped from the end: burn, flop, burn, turn, burn, river
+    while (g.stage !== 'handOver') { if (g.stage === 'streetEnd') g.nextStreet(); else g.act(g.legal().toCall ? 'call' : 'check'); }
+    return g;
+  };
+  const win = play('As Ah', 'Kd 7c', '2s 5h 9d Jc 3h');
+  assert.deepEqual(win.board, C('2s 5h 9d Jc 3h'));
+  assert.equal(win.result.text, 'You win 10 \u2014 Pair of Aces');
+  const lose = play('Kd 7c', 'As Ah', '2s 5h 9d Jc 3h');
+  assert.equal(lose.result.text, 'Gus wins 10 \u2014 Pair of Aces');
+  const chop = play('As Kd', 'Ah Kc', 'Qs Js Ts 3h 2c');
+  assert.equal(chop.result.text, 'You and Gus split it \u2014 Straight, Ace high');
+  assert.ok(!/ pot/.test(win.result.text));
+});

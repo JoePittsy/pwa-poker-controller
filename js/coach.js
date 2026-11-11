@@ -2,8 +2,9 @@ import { chen, equity } from './ai.js';
 import { scoreHand } from './cards.js';
 
 // The coach: how one decision is judged, and how a session's decisions add up into habits.
-// A decision is { type, street, eq, need, toCall, to }: what you did, your rough chance of winning at
+// A decision is { type, street, eq, need, toCall, to, pot, opp?, allin? }: what you did, your rough chance of winning at
 // the time (against random cards for everyone still in) and the share of the pot a call was asking for.
+const EPS = 1e-9; // so that 0.30 counts as 0.25 + 0.05
 /** Judges one decision. Returns [kind, what you did, why], kind being good | meh | bad | bluff. */
 export function judge(d) {
   const e = Math.round(d.eq * 100), n = Math.round(d.need * 100);
@@ -12,21 +13,31 @@ export function judge(d) {
       : ['good', 'Fold', `A sound fold: about ${e}% to win against the ${n}% the call needed.`];
   }
   if (d.type === 'call') {
-    if (Math.abs(d.eq - d.need) <= 0.05) return ['meh', `Call ${d.toCall}`, `A close call: about ${e}% to win against the ${n}% it needed. Either choice was fine.`];
+    if (d.eq < d.need && d.eq < 0.15) return ['bad', `Call ${d.toCall}`, `Too loose: about ${e}% to win, but the call needed ${n}%.`]; // almost no chance is never a close call
+    if (closeCall(d)) return ['meh', `Call ${d.toCall}`, `A close call: about ${e}% to win against the ${n}% it needed. Either choice was fine.`];
     if (d.eq < d.need - 0.08) return ['bad', `Call ${d.toCall}`, `Too loose: about ${e}% to win, but the call needed ${n}%.`];
     if (d.eq < d.need) return ['meh', `Call ${d.toCall}`, `A marginal call: about ${e}% to win against the ${n}% it needed. Close, but slightly behind the price.`];
-    if (d.eq > 0.7) return ['meh', `Call ${d.toCall}`, `Fine, but at about ${e}% to win a raise would have built a bigger pot.`];
-    return ['good', `Call ${d.toCall}`, `A fair call: about ${e}% to win for a price that needed ${n}%.`];
+    if (d.eq > 0.85) return ['meh', `Call ${d.toCall}`, `Fine, but at about ${e}% to win a raise would have built a bigger pot.`];
+    return ['good', `Call ${d.toCall}`, `A good call: about ${e}% to win for a price that needed ${n}%.`];
   }
   if (d.type === 'check') {
     return d.eq > 0.7 ? ['meh', 'Check', `Missed value: you were about ${e}% to have the best hand and bet nothing.`]
       : ['good', 'Check', `Nothing to bet with at about ${e}%. ${d.street === 'river' ? 'Checking was fine.' : 'Taking a free card was fine.'}`];
   }
   const what = `${d.toCall ? 'Raise to' : 'Bet'} ${d.to}`;
-  if (d.eq < 0.35) return ['bluff', what, `A bluff: only about ${e}% to win if called, so it needed them to fold.`];
-  if (d.eq > 0.6) return ['good', what, `Betting for value at about ${e}% to win.`];
-  return ['meh', what, `A thin bet at about ${e}%: fine against few players, risky against many.`];
+  const opp = Math.max(1, d.opp || 1), fair = 1 / (opp + 1); // an average hand's share against that many opponents
+  if (d.allin) {
+    if (d.eq >= fair + 0.05 - EPS) return ['good', 'All in', `All in as the favourite: about ${e}% to win if called.`];
+    if (d.eq < fair - 0.1) return ['bluff', 'All in', `An all-in bluff: about ${e}% if called, so it needed a fold.`];
+    return ['meh', 'All in', `A coin-flip all-in: about ${e}% if called. Fine when the blinds are high, reckless when they are not.`];
+  }
+  if (d.street === 'preflop' && d.toCall <= d.pot / 2 && d.eq >= fair + 0.05 - EPS) return ['good', what, 'A standard raise with a hand that is ahead of the field.']; // nobody has raised yet
+  if (d.eq >= fair + 0.08 - EPS) return ['good', what, `Betting for value at about ${e}% to win, against ${opp} opponent${opp === 1 ? '' : 's'}.`];
+  if (d.eq < fair - 0.1) return ['bluff', what, `A bluff: only about ${e}% to win if called, so it needed them to fold.`];
+  return ['meh', what, `A thin bet at about ${e}%: fine if they fold often, costly if called.`];
 }
+/** A call within five points of its price is a coin-flip either way, unless the chance is nearly nil. */
+const closeCall = (d) => Math.abs(d.eq - d.need) <= 0.05 && d.eq >= 0.15;
 
 // The habits a session is sorted into, with what to do about each.
 const HABITS = {
@@ -42,7 +53,7 @@ export function habitOf(d) {
   const [kind] = judge(d);
   if (kind === 'good') return 'sound';
   if (kind === 'bluff') return 'bluff';
-  if (d.type === 'call' && Math.abs(d.eq - d.need) <= 0.05) return 'sound'; // a close call either way is no leak
+  if (d.type === 'call' && closeCall(d)) return 'sound'; // a close call either way is no leak
   if (d.type === 'call') return kind === 'bad' || d.eq < d.need ? 'looseCall' : 'missedValue';
   if (d.type === 'fold') return 'tightFold';
   if (d.type === 'check') return 'missedValue';
@@ -76,6 +87,7 @@ export function worstOf(hand) {
   let pick = null;
   for (const d of hand?.mine || []) {
     const [kind, what, why] = judge(d);
+    if (kind === 'bad' && d.type === 'call' && d.street === 'preflop' && d.need - d.eq < 0.3 && !(d.toCall >= d.pot / 4)) continue; // a small price before the flop is not worth a scolding
     if (kind === 'bad' && (!pick || Math.abs(d.eq - d.need) > pick.gap)) pick = { gap: Math.abs(d.eq - d.need), street: d.street, what, why };
   }
   return pick;

@@ -223,9 +223,11 @@ export function render() {
   for (const el of /** @type {any} */ (board.children)) mark(el, `b:${el.dataset.c}`);
   S.seatEls.forEach((s, i) => { for (const el of s.querySelectorAll('.card[data-c]')) mark(el, `${i}:${el.dataset.c}`); });
 
-  $('pot').hidden = !g.pot || over;
-  fx.roll($('pot-n'), over ? 0 : Math.max(0, g.pot), { dur: 300 });
-  if (g.pot && !over) setPile($('pot-chips'), chipCount(g.pot, 3, 16));
+  const pot = shownPot(g), wasHidden = $('pot').hidden;
+  $('pot').hidden = !pot || over;
+  if (wasHidden) $('pot-n')._cur = undefined; // a pot that has just appeared shows its amount at once, rather than counting up from nothing
+  fx.roll($('pot-n'), over ? 0 : pot, { dur: 300 });
+  if (pot && !over) setPile($('pot-chips'), chipCount(pot, 3, 16));
   const msg = over ? g.result.text : '';
   if ($('msg').textContent !== msg) {
     $('msg').textContent = msg;
@@ -245,6 +247,15 @@ export function render() {
   renderActions();
 }
 
+// The pot as the table shows it: without the part of the biggest stake that nobody left in could ever match
+// (a shove for more than everyone else has), which is handed back at the end of the street.
+export function shownPot(g) {
+  const live = g.players.filter((p) => !p.folded);
+  if (live.length < 2) return g.pot;
+  const top = live.reduce((a, b) => (b.total > a.total ? b : a));
+  const reach = Math.max(...live.filter((p) => p !== top).map((p) => p.total + p.chips));
+  return g.pot - Math.max(0, top.total - reach);
+}
 export const BURN_MS = 300;
 export function burnCard() {
   const e = h('div', 'card burn');

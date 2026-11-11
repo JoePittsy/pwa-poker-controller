@@ -203,7 +203,18 @@ export class Game {
     this.stage = 'handOver';
     this.result = {
       winners: winners.map((p) => p.seat), showdown: true,
-      text: (winners.length === 1 ? `${winners[0].name} ${winners[0].isHuman ? 'win' : 'wins'} the ${winners[0].won} pot` : winners.map((p) => `${p.name} ${p.isHuman ? 'take' : 'takes'} ${p.won}`).join(' · ')) + ` — ${winners[0].handName}`,
+      text: `${this._winLine(winners)} \u2014 ${winners[0].handName}`,
     };
+  }
+
+  // The result in net terms: what each winner made, or who split it.
+  _winLine(winners) {
+    const w = winners[0];
+    if (winners.length === 1) return `${w.name} ${w.isHuman ? 'win' : 'wins'} ${w.won - w.total}`;
+    if (winners.every((x) => Math.abs(x.won - w.won) <= 1)) {
+      const names = winners.map((x) => x.name);
+      return `${names.slice(0, -1).join(', ')} and ${names.at(-1)} split it`;
+    }
+    return winners.map((x) => `${x.name} ${x.isHuman ? 'win' : 'wins'} ${x.won - x.total}`).join(' \u00b7 '); // side pots won by different players
   }
 }
