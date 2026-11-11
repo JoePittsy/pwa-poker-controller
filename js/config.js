@@ -5,7 +5,7 @@ import { $, mulberry } from './util.js';
 export const YOU = { name: 'You', isHuman: true };
 export const CHARACTERS = {
   Mav: { tag: 'Wild', color: 'var(--red)', voice: 1, style: { loose: 0.65, aggr: 0.8, tell: 'fastBluff' } },
-  Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.33, aggr: 0.65, tell: 'slowBluff' } },
+  Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.33, aggr: 0.4, tell: 'slowBluff' } },
   Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
   Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.7, aggr: 0.1, tell: 'slowStrong' } },
   Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.44, aggr: 0.7 } },
