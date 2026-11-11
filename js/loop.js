@@ -1,3 +1,4 @@
+import { worstOf } from './coach.js';
 import { adjust, noteGaveUp, notePushed, noteShowdownWon } from './reads.js';
 import { nextHeat, payout, stackFactor } from './build.js';
 import { rankCheck } from './rank.js';
@@ -20,7 +21,7 @@ import { DIFFICULTY, prefs, ui } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
 import { BURN_MS, buildSeats, dealOrder, render } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
-import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
+import { finishSqueeze, oddsFor, renderActions, toast, waitForSqueeze } from './squeeze.js';
 import { S } from './state.js';
 import { RUN0, logAction, logStart, logStreet, recordHand, saveStats, stats } from './stats.js';
 import { handOverBanter } from './talk.js';
@@ -257,6 +258,10 @@ export async function run() {
     const friendly = S.mode === 'pass' || S.mode === 'net'; // games among people: no stats, stickers or notes
     const kos = friendly ? 0 : recordHand(g);
     rankCheck();
+    if (!friendly && prefs.coach) { // the coach has a word about the hand's worst mistake, if there was one
+      const w = worstOf(S.lastHand);
+      if (w) setTimeout(() => toast(`Coach, ${w.street === 'preflop' ? 'before the flop' : `on the ${w.street}`}: ${w.why}`), 2200);
+    }
     if (!friendly) noteHand(g);
     if (S.mode === 'run' && !S.bossMode && me.won > 0) { // they remember who took their last chip
       for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) S.memory[p.name] = { ...S.memory[p.name], ko: grudge(p.name) + 1 };
