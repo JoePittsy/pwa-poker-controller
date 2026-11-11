@@ -1,0 +1,12 @@
+{
+  "name": "pokerpad-e2e",
+  "private": true,
+  "description": "Browser tests that drive the real game. Kept apart from the site so the site itself needs nothing installed.",
+  "scripts": { "all": "bash run.sh" },
+  "dependencies": {
+    "aedes": "^1.2.0",
+    "playwright": "^1.50.0",
+    "websocket-stream": "^5.5.2",
+    "ws": "^8.22.2"
+  }
+}

@@ -2,7 +2,7 @@
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/', '_site/'] },
+  { ignores: ['node_modules/', '_site/', 'e2e/'] },
   {
     files: ['js/**/*.js', 'sw.js'],
     languageOptions: { ecmaVersion: 2024, sourceType: 'module', globals: { ...globals.browser, ...globals.serviceworker } },

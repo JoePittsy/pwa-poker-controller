@@ -71,4 +71,5 @@ No build step: the site is the files in this folder. `npm start` serves it on po
 
 - `npm run check` runs the linter, a type check over the JavaScript and the unit tests. The deploy runs it too and stops if it fails.
 - `js/main.js` only starts the app. Each area lives in its own file (`online.js`, `render.js`, `loop.js`, `menus.js` and so on), and everything that changes while the game runs is on the `S` object in `js/state.js`.
+- `e2e/` holds browser tests that play the real game, including several devices at one online table. See `e2e/README.md`.
 - A new file in `js/` must be added to the offline list in `sw.js`; a test fails if it is missing.

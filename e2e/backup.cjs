@@ -1,0 +1,23 @@
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const errs = [];
+  const mk = async (init) => { const ctx = await b.newContext({ viewport: { width: 750, height: 369 }, permissions: ['clipboard-read', 'clipboard-write'] }); const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(e.message)); await p.addInitScript(init); await p.goto('http://localhost:8080/'); await p.waitForTimeout(500); return p; };
+  const click = (p, label) => p.evaluate((label) => [...document.querySelectorAll('#overlay .btn')].find((x) => x.textContent.includes(label)).click(), label);
+  const a = await mk(() => { if (localStorage.getItem('padpoker.seen')) return; localStorage.setItem('padpoker.seen', '1'); localStorage.setItem('padpoker.best', '4'); localStorage.setItem('padpoker.stats', JSON.stringify({ hands: 321, won: 99 })); localStorage.setItem('padpoker.prefs', JSON.stringify({ name: 'Joe', face: 'Zed', speed: 'Fast' })); localStorage.setItem('padpoker.save', JSON.stringify({ table: 3 })); });
+  await click(a, 'Settings'); await a.waitForTimeout(200);
+  await a.screenshot({ path: 'settings.png' });
+  console.log('settings dialog:', await a.evaluate(() => { const d = document.querySelector('#overlay .dialog').getBoundingClientRect(); return `${Math.round(d.top)}..${Math.round(d.bottom)} of ${innerHeight}`; }));
+  await click(a, 'Back up'); await a.waitForTimeout(200); await a.screenshot({ path: 'backup.png' });
+  await click(a, 'Copy backup'); await a.waitForTimeout(300);
+  const code = await a.evaluate(() => navigator.clipboard.readText());
+  console.log('copied', code.length, 'chars:', code.slice(0, 40));
+  const n = await mk(() => { if (!localStorage.getItem('padpoker.seen')) localStorage.setItem('padpoker.seen', '1'); });
+  await click(n, 'Settings'); await n.waitForTimeout(200); await click(n, 'Back up'); await n.waitForTimeout(200); await click(n, 'Restore'); await n.waitForTimeout(300);
+  await n.fill('#backup-in', 'nonsense'); await click(n, 'Restore'); await n.waitForTimeout(300);
+  console.log('bad paste ->', await n.evaluate(() => document.getElementById('toast')?.textContent), '| still on:', await n.evaluate(() => document.querySelector('#overlay h1').textContent));
+  await n.fill('#backup-in', code); await n.screenshot({ path: 'restore.png' }); await click(n, 'Restore'); await n.waitForTimeout(300);
+  console.log('confirm:', await n.evaluate(() => document.querySelector('#overlay .dialog').innerText.replace(/\n+/g, ' / ')));
+  await click(n, 'Replace and restart'); await n.waitForTimeout(1200);
+  console.log('new device now has:', await n.evaluate(() => JSON.stringify({ best: localStorage.getItem('padpoker.best'), stats: localStorage.getItem('padpoker.stats'), name: JSON.parse(localStorage.getItem('padpoker.prefs')).name })), '| menu:', await n.evaluate(() => [...document.querySelectorAll('#overlay .btn')].map((x) => x.textContent).slice(0, 2).join(' | ')), errs);
+  await b.close();
+})();
