@@ -9,6 +9,7 @@ import { passMenu } from './pass.js';
 import { ui } from './prefs.js';
 import { quickMenu } from './quick.js';
 import { helpMenu, howTo, replayHand, settingsMenu } from './replay.js';
+import { rankCheck, rankHtml, ranksScreen } from './rank.js';
 import { reviewScreen } from './review.js';
 import { renderActions, toast } from './squeeze.js';
 import { S } from './state.js';
@@ -81,10 +82,11 @@ export function startScreen() {
     : [[`${glyph('A')}Play`, firstPlay]];
   showOverlay({
     title: TITLE, compact: true,
-    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>`,
+    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${rankHtml()}`,
     items: [...run, ['Online', onlineMenu], [daily, dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu],
       ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
+  rankCheck();
 }
 export function firstPlay() {
   let seen = true;
@@ -135,12 +137,12 @@ export function statsScreen(back) {
   const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
   showOverlay({
     title: 'Stats', closable: true, onClose: back,
-    body: `<div class="stats">
+    body: `${rankHtml()}<div class="stats">
       ${tile(best(), 'best run (tables)')}${tile(stats.tables, 'tables cleared')}${tile(stats.knockouts, 'knock-outs')}
       ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot')}
       ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdowns won')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], ['Notebook', () => notebookScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],
+    items: [['Ranks', () => ranksScreen(() => statsScreen(back))], [`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], ['Notebook', () => notebookScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],
   });
 }
 export function handsScreen(back, at = history.length - 1) {

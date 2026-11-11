@@ -579,3 +579,16 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 @media (prefers-reduced-motion: reduce) {
   .ava .eyes, #bg, .seat.me .card .in, .logo, .seat.active .plate { animation: none; }
 }
+
+/* career rank: name, experience, and a bar towards the next rank */
+.rank { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: .2rem .9rem; max-width: 30rem; margin-top: 1.1rem; }
+.rank b { font-size: 1.7rem; font-weight: 800; color: var(--yellow); }
+.rank span { font-size: 1.2rem; opacity: .8; text-align: right; }
+.rank i { grid-column: 1 / -1; height: .8rem; border-radius: 1rem; background: var(--ink); border: .16rem solid var(--ink); overflow: hidden; }
+.rank em { display: block; height: 100%; background: var(--yellow); border-radius: 1rem; }
+.rank small { grid-column: 1 / -1; font-size: 1.1rem; opacity: .7; }
+.ladder { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0 .4rem; }
+.ladder span { padding: .3rem .7rem; border-radius: .7rem; border: .16rem solid var(--sky); font-size: 1rem; opacity: .55; text-align: center; }
+.ladder span b { display: block; font-size: 1.15rem; }
+.ladder .done { opacity: .9; }
+.ladder .here { opacity: 1; background: var(--yellow); color: var(--ink); border-color: var(--ink); }

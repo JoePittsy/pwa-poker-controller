@@ -1,3 +1,6 @@
+import { saveStats, stats } from './stats.js';
+import { rankName } from './career.js';
+import { myRank } from './rank.js';
 import { decide } from './ai.js';
 import * as audio from './audio.js';
 import { humanProfile, say, setMood } from './character.js';
@@ -263,7 +266,7 @@ export function hostHears(m) {
       if (S.net.started) { toast('Someone is watching'); return void sendTo(m.pid, tableFor(-1)); }
     }
     else { gu = { name: `P${S.net.guests.size + 2}`, seat: S.net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; S.net.guests.set(m.pid, gu); }
-    gu.asked = cleanName(m.name); gu.face = FACES.includes(m.face) ? m.face : '';
+    gu.asked = cleanName(m.name); gu.rank = m.rank; gu.face = FACES.includes(m.face) ? m.face : '';
     if (!S.net.started && !!m.watch !== !!gu.watch && (m.watch || lobbyGuests().length < 5)) { gu.watch = !!m.watch; gu.seat = gu.watch ? -1 : 0; if (gu.watch) gu.name = 'Spectator'; } // changed their mind in the lobby
     if (!S.net.started) { tellLobby(); if (S.overlay?.lobby) hostLobby(S.overlay.focus); }
   } else if (m.t === 'act' && gu && S.net.waiter && S.net.waiter.seat === gu.seat && m.stamp === stampOf(S.game)) {
@@ -284,8 +287,8 @@ export function startOnline() {
   // seats are renumbered in case someone left the lobby
   lobbyGuests().forEach((gu, i) => { gu.seat = i + 1; gu.away = false; gu.seen = performance.now(); });
   const names = seatNames();
-  const people = [{ name: names[0], face: myFace(), badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
-    ...lobbyGuests().map((gu, i) => ({ name: gu.name, face: gu.face, badge: String(i + 2), isHuman: true, remote: true, tag: 'Player', color: PASS_COLORS[(i + 1) % 4] }))];
+  const people = [{ name: names[0], face: myFace(), badge: '1', isHuman: true, tag: myRank().name, color: PASS_COLORS[0] },
+    ...lobbyGuests().map((gu, i) => ({ name: gu.name, face: gu.face, badge: String(i + 2), isHuman: true, remote: true, tag: rankName(gu.rank), color: PASS_COLORS[(i + 1) % 4] }))];
   const bots = NET_BOTS.slice(0, Math.max(0, c.seats - people.length)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
   S.cast = [...people, ...bots];
   S.game = new Game({ players: S.cast, handsPerLevel: c.twist === 'turbo' ? 2 : 6, chips: Math.round(1000 * (c.twist === 'short' ? 0.5 : c.twist === 'deep' ? 2 : 1)), variant: c.variant });
@@ -339,7 +342,8 @@ export function remoteAction(p) {
 export function netDone() {
   const w = S.game.players.find((p) => p.chips > 0);
   const text = `${w.name} wins the table after ${S.game.handNo} hands.`;
-  for (const [pid, gu] of S.net.guests) if (!gu.kicked) sendTo(pid, { t: 'end', text, again: true });
+  for (const [pid, gu] of S.net.guests) if (!gu.kicked) sendTo(pid, { t: 'end', text, again: true, won: gu.seat === w.seat });
+  stats.online++; if (w.seat === S.ME) stats.onlineWins++; saveStats(); // counts towards your rank
   audio.musicLevel(0); audio.fanfare(); fx.chipRain(40);
   S.net.started = false; S.clock = null;
   showOverlay({ title: `${w.name} <span>wins!</span>`, body: `<p>${text}</p>`, items: [[`${glyph('A')}Back to the room`, () => hostLobby()], ['Close room', () => { leaveOnline(); startScreen(); }]] });
@@ -414,7 +418,7 @@ export async function joinOnline(code) {
   S.net.relay.onClose = async () => { // one quiet attempt to get back in
     if (!netOn('guest')) return;
     toast('Connection lost. Reconnecting…');
-    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = S.net.relay.onMessage; c.relay.onClose = S.net.relay.onClose; S.net.relay = c.relay; S.net.relay.subscribe(`${S.net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, v: ver() }); }
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = S.net.relay.onMessage; c.relay.onClose = S.net.relay.onClose; S.net.relay = c.relay; S.net.relay.subscribe(`${S.net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() }); }
     catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room. Open the link or enter the code again to return to your seat.</p>', items: [['OK', startScreen]] }); }
   };
   const knock = () => { // keep asking until the host answers; the relay does not store messages
@@ -424,7 +428,7 @@ export async function joinOnline(code) {
       clearInterval(S.net.joiner); leaveOnline(false); waiting('Joining <span>room</span>', `Looking for room ${code}\u2026`, onlineMenu); return joinOnline(code);
     }
     if (++S.net.tries > 8) { clearInterval(S.net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
-    if (S.net.key) sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, v: ver() });
+    if (S.net.key) sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() });
     else S.net.relay.publish(`${S.net.base}/up`, JSON.stringify({ pid, k: S.net.mine.pub }));
   };
   S.net.again = setInterval(() => { // keep sending our answer until the host's table shows it arrived
@@ -454,7 +458,7 @@ export async function guestRaw(raw) {
     S.net.hostPub = raw.k;
     S.net.key = await sharedKey(S.net.mine.priv, raw.k);
     try { localStorage.setItem('padpoker.seat', JSON.stringify({ code: S.net.code, pid: S.net.pid, key: await exportKey(S.net.key) })); } catch { /* private mode */ }
-    return sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, v: ver() });
+    return sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() });
   }
   if (!S.net.key || !raw.c) return;
   guestHears(await unseal(S.net.key, raw));
@@ -481,7 +485,7 @@ export function guestHears(m) {
     showOverlay({
       title: `Room <span>${S.net.code}</span>`,
       body: `<p>${m.watch ? 'You are <b>watching</b>: you will see the table, and cards only at showdown.' : `You are <b>${m.you}</b>.`} Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}${m.watching ? ` &middot; ${m.watching} watching` : ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
-      items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, v: ver() }); if (S.mode !== 'net' && S.net.lobbyMsg) guestHears({ ...S.net.lobbyMsg, again: true }); })], [m.watch ? 'Take a seat' : 'Watch only', () => { S.net.wantWatch = !m.watch; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, v: ver() }); }], ['Leave', onlineMenu]],
+      items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() }); if (S.mode !== 'net' && S.net.lobbyMsg) guestHears({ ...S.net.lobbyMsg, again: true }); })], [m.watch ? 'Take a seat' : 'Watch only', () => { S.net.wantWatch = !m.watch; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() }); }], ['Leave', onlineMenu]],
     });
     S.overlay.lobby = true;
     return;
@@ -491,6 +495,7 @@ export function guestHears(m) {
   if (m.t === 'end') {
     audio.musicLevel(0); S.clock = null;
     const stay = m.again; // the host may deal again: stay connected and wait
+    if (stay && !S.net.watch) { stats.online++; if (m.won) stats.onlineWins++; saveStats(); } // a finished game counts towards your rank
     if (!stay) { try { localStorage.removeItem('padpoker.seat'); } catch { /* private mode */ } leaveOnline(false); }
     return showOverlay({ title: 'Game <span>over</span>', body: `<p>${m.text}</p>${stay ? '<p>Stay here if the host is dealing again.</p>' : ''}`, items: [[stay ? 'Leave' : 'OK', () => { leaveOnline(); startScreen(); }]] });
   }
