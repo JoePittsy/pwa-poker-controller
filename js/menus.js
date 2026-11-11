@@ -1,6 +1,7 @@
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
 import { dailyData, dailyScreen, today } from './daily.js';
+import { streak } from './dailystats.js';
 import * as fx from './fx.js';
 import { loadSave, startTable, writeSave } from './loop.js';
 import { notebookScreen } from './notebook.js';
@@ -76,7 +77,7 @@ export const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 export function startScreen() {
   const saved = loadSave();
   const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
-  const d = dailyData(), daily = d.scores[today()] !== undefined ? 'Daily deal \u2713' : 'Daily deal';
+  const d = dailyData(), days = streak(d.scores, today()), daily = `Daily deal${d.scores[today()] !== undefined ? ' \u2713' : ''}${days > 1 ? ` \u00b7 ${days} days` : ''}`;
   const run = saved
     ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)]]
     : [[`${glyph('A')}Play`, firstPlay]];
