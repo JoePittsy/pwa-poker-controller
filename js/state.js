@@ -3,6 +3,7 @@
 export const S = {
   bossMode: false,
   perks: {},
+  heat: 0,
   memory: {},
   peekSeat: -1,
   mode: 'run',

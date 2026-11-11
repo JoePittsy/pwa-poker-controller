@@ -205,7 +205,7 @@ export function showCleared() {
   if (S.bossMode) { // beat the boss: on to the next table
     award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(S.table).name]);
     stats.bosses = (stats.bosses || 0) + 1; saveStats();
-    writeSave({ table: S.table + 1, habits: S.habits, run: S.runStats, perks: S.perks, mem: S.memory, owed: true });
+    writeSave({ table: S.table + 1, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory, owed: true });
     const b = bossFor(S.table);
     return showOverlay({
       title: 'Boss <span>beaten!</span>',
@@ -221,7 +221,7 @@ export function showCleared() {
   try { localStorage.setItem('padpoker.best', String(Math.max(before, S.table))); } catch { /* private mode */ }
   const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= S.table);
   const bossNext = S.table % 3 === 0;
-  writeSave({ table: bossNext ? S.table : S.table + 1, boss: bossNext, habits: S.habits, run: S.runStats, perks: S.perks, mem: S.memory, owed: true });
+  writeSave({ table: bossNext ? S.table : S.table + 1, boss: bossNext, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory, owed: true });
   stats.tables++; saveStats();
   const next = bossNext ? `a boss: ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `${tableConfig(S.table + 1).venue}, and it's tougher`;
   showOverlay({

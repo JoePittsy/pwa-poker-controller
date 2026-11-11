@@ -103,7 +103,7 @@ export function exitToMenu() {
     const me = g.players[S.ME];
     const chips = g.players.map((p) => (p === me ? p.chips : p.chips + p.total));
     if (me.chips > 0) { // (all-in and walking away would bust you: that hand is simply dealt again instead)
-      writeSave({ table: S.table, boss: S.bossMode, chips, dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, mem: S.memory });
+      writeSave({ table: S.table, boss: S.bossMode, chips, dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
       if (!me.folded && me.total > 0) setTimeout(() => toast('Saved. The hand you left counts as folded.'), 300);
     }
   }
