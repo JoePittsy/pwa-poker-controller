@@ -1,3 +1,4 @@
+import { backupMenu } from './backupmenu.js';
 import { award } from './achievements.js';
 import * as audio from './audio.js';
 import { RANKS } from './cards.js';
@@ -162,6 +163,7 @@ export function settingsMenu(back) {
       [() => `Deck: ${prefs.fourColour ? '4-colour' : '2-colour'}`, set(() => { prefs.fourColour = !prefs.fourColour; }), true],
       [() => `Squeeze cards: ${onOff(prefs.squeeze)}`, set(() => { prefs.squeeze = !prefs.squeeze; }), true],
       [() => `Coach: ${onOff(prefs.coach)}`, set(() => { prefs.coach = !prefs.coach; if (S.game && S.game.stage !== 'idle') render(); }), true],
+      ['Back up \u00b7 restore', () => backupMenu(() => settingsMenu(back))],
       [`${glyph('B')}Back`, back],
     ],
   });
