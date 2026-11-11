@@ -1,3 +1,4 @@
+import { rankHtml } from './rank.js';
 import { backupMenu } from './backupmenu.js';
 import { award } from './achievements.js';
 import * as audio from './audio.js';
@@ -187,20 +188,29 @@ export function tableIntro(start) {
 // The moment you take the last chip: the losers' tiles topple, chips rain, a fanfare plays,
 // and only then does the result screen come up.
 export async function tableCleared() {
-  const id = S.runId;
+  const id = S.runId, g = S.game, boss = S.bossMode;
   audio.musicLevel(0);
   ui.mode = 'wait'; renderActions();
-  S.seatEls.forEach((el, i) => { if (i !== S.ME) setTimeout(() => el.classList.add('toppled'), 150 + i * 130); });
+  // The best moment in the game: everything stops, the room falls over, and the title is stamped on.
+  S.seatEls.forEach((el, i) => { if (i !== S.ME) setTimeout(() => { el.classList.add('toppled'); setMood(i, i % 2 ? 'shock' : 'sad'); }, 150 + i * 130); });
   setMood(S.ME, 'happy');
-  audio.fanfare();
-  fx.banner(S.bossMode ? 'Boss beaten!' : 'Table cleared!', 'info');
-  fx.chipRain(46);
+  audio.victory(boss);
+  fx.flash(boss ? '#ffd23f' : '#ffffff'); fx.shake(boss ? 14 : 10, 450); fx.haptic('slam');
+  const kos = S.runStats.knockouts || 0;
+  fx.stamp(boss ? 'Boss beaten' : 'Table cleared', `${boss ? bossFor(S.table).name : `Table ${S.table}`} \u00b7 ${g.handNo} hand${g.handNo === 1 ? '' : 's'}${kos ? ` \u00b7 ${kos} knock-out${kos === 1 ? '' : 's'} this run` : ''}`, boss ? 'boss' : '', boss ? 3600 : 2900);
+  fx.confetti(boss ? 150 : 90);
+  fx.chipRain(boss ? 80 : 46);
   fx.burst(S.seatEls[S.ME].querySelector('.cards'), 50);
-  setTimeout(() => { fx.shake(7, 500); fx.rumble(1, 1, 400); fx.burst($('center'), 50); }, 620);
-  await tick(2600);
+  for (const [at, px] of boss ? [[700, 8], [1050, 8], [1400, 9], [1750, 10], [2150, 14]] : [[700, 7], [1050, 7], [1400, 8], [1800, 12]]) { // in time with the hits of the fanfare
+    setTimeout(() => { if (id !== S.runId) return; fx.shake(px, 260); fx.rumble(1, 1, 180); fx.burst($('center'), 26); }, at);
+  }
+  if (boss) setTimeout(() => { if (id === S.runId) { fx.confetti(120); fx.chipRain(60); } }, 2200);
+  await tick(boss ? 4300 : 3500);
   if (id !== S.runId) return;
   showCleared();
 }
+// What the win was worth towards your rank, with the bar as it now stands.
+const gainHtml = (xp) => `<p class="gain">+${xp} XP</p>${rankHtml()}`;
 export function showCleared() {
   if (S.bossMode) { // beat the boss: on to the next table
     award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(S.table).name]);
@@ -209,7 +219,7 @@ export function showCleared() {
     const b = bossFor(S.table);
     return showOverlay({
       title: 'Boss <span>beaten!</span>',
-      body: `<p>${b.name} is out of chips after ${S.game.handNo} hands. Next up: ${tableConfig(S.table + 1).venue}.</p>`,
+      body: `<p>${b.name} is out of chips after ${S.game.handNo} hands. Next up: ${tableConfig(S.table + 1).venue}.</p>${gainHtml(80)}`,
       items: [[`${glyph('A')}Carry on`, () => startTable(S.table + 1, loadSave())]],
     });
   }
@@ -226,7 +236,7 @@ export function showCleared() {
   const next = bossNext ? `a boss: ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `${tableConfig(S.table + 1).venue}, and it's tougher`;
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${S.table} in ${S.game.handNo} hands. Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}`,
+    body: `<p>You took every chip at Table ${S.table} in ${S.game.handNo} hands. Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${gainHtml(40)}`,
     items: [[`${glyph('A')}${bossNext ? 'Face the boss' : `Table ${S.table + 1}`}`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
   });
 }

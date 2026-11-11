@@ -198,6 +198,18 @@ export const talk = sfx((seat = 1) => {
   [0, 3, -2].forEach((n, i) => tone({ delay: i * 0.07, f: midi(base + n), type: 'triangle', d: 0.06, v: 0.13 }));
 });
 // clearing a table: a run up the bars, two big chords and a shower of chips
+// The big one, for clearing a table or beating a boss: a roll up the scale, three rising hits, then a long
+// shimmering chord. `big` adds a fourth hit and a higher shimmer.
+export const victory = sfx((big = false) => {
+  for (let i = 0; i < 14; i++) tok(scale(i) + 12, { delay: i * 0.045, v: 0.16 + i * 0.012, d: 0.14, wet: 0.3 });
+  const hits = /** @type {[number, number[]][]} */ ([[0.7, [60, 67, 72]], [1.05, [62, 69, 74]], [1.4, [64, 72, 76, 79]]]);
+  if (big) hits.push([1.75, [67, 72, 76, 79, 84]]);
+  for (const [delay, notes] of hits) { for (const m of notes) tok(m + 12, { delay, v: 0.24, d: 0.5, wet: 0.5 }); thud(delay, 0.85); }
+  const end = hits.at(-1)[0] + 0.4;
+  for (const m of [60, 64, 67, 72, 76, 79, 84]) tok(m + 12, { delay: end, v: 0.26, d: 1.8, wet: 0.7 });
+  thud(end, 1);
+  for (let i = 0; i < (big ? 30 : 20); i++) tok(scale(5 + (i * 3) % 9) + 24, { delay: end + 0.15 + i * 0.065, v: 0.07, d: 0.08 });
+});
 export const fanfare = sfx(() => {
   for (let i = 0; i < 10; i++) tok(scale(i) + 12, { delay: i * 0.055, v: 0.2 + i * 0.012, d: 0.16, wet: 0.3 });
   for (const [delay, notes] of /** @type {[number, number[]][]} */ ([[0.62, [60, 67, 72, 76]], [1.0, [60, 64, 67, 72, 79, 84]]])) {
