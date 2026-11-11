@@ -143,6 +143,13 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .card.burn { position: absolute; left: 0; top: 0; animation: burn .38s ease-out both; filter: brightness(.8); }
 @keyframes burn { from { rotate: 0deg; transform: translate(-4.74em, -.12em) scale(1.36); filter: brightness(1); } }
 .card { position: relative; }
+/* A small rank-and-suit index in the bottom corner of your own cards, as on a real deck, so a
+   slight squeeze (which lifts the back from the bottom) is enough to read them. */
+.in .ix { display: none; }
+.seat.me .in.face { position: relative; }
+.seat.me .in .ix {
+  display: block; position: absolute; left: .2em; bottom: .16em; font-style: normal; font-size: .6em; line-height: .95; text-align: center; letter-spacing: -.04em;
+}
 /* squeeze: the back is clipped away from the bottom as you peel, showing the suit first, then the rank */
 .in.cover.sq { animation: none; clip-path: inset(0 0 calc(var(--peel, 0) * 100%) 0); transition: opacity .18s; }
 .cards.revealed .in.cover.sq { opacity: 0; }
