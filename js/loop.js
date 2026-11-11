@@ -1,3 +1,4 @@
+import { nextHeat, payout, stackFactor } from './build.js';
 import { rankCheck } from './rank.js';
 import { award, checkHandStickers, feats } from './achievements.js';
 import { decide, equity } from './ai.js';
@@ -52,8 +53,8 @@ export function startTable(n, saved) {
   S.mode = 'run'; S.aiRng = Math.random; S.ME = 0; ui.hidden = false;
   if (n === 1 && !saved) S.memory = {};
   if (saved?.mem) S.memory = saved.mem;
-  if (n === 1 && !saved) S.perks = {};
-  if (saved?.perks) S.perks = saved.perks;
+  if (n === 1 && !saved) { S.perks = {}; S.heat = 0; }
+  if (saved?.perks) { S.perks = saved.perks; S.heat = saved.heat || 0; }
   if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks: S.perks, owed: false })); // a perk is due for the table just cleared
   if (n === 1 && !saved) { S.habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); S.runStats = { ...RUN0, startBest: best(), seed: Math.floor(Math.random() * 1e9) + 1 }; }
   if (saved?.run) S.runStats = { ...RUN0, ...saved.run };
@@ -68,7 +69,7 @@ export function startTable(n, saved) {
   })];
   S.game = new Game({ players: S.cast, handsPerLevel: cfg.handsPerLevel + 2 * (S.perks.slowblinds || 0), chips: cfg.chips, variant: cfg.variant || 'holdem' });
   setVariantLook(S.game.variant);
-  S.game.players[S.ME].chips = Math.round(cfg.chips * (1 + 0.3 * (S.perks.bigstack || 0)));
+  S.game.players[S.ME].chips = Math.round(cfg.chips * stackFactor(S.perks));
   if (cfg.boss?.chips) S.game.players[1].chips = cfg.chips * cfg.boss.chips;
   if (DIFFICULTY[prefs.difficulty].stack !== 1) for (const p of S.game.players) if (!p.isHuman) p.chips = Math.round(p.chips * DIFFICULTY[prefs.difficulty].stack);
   S.twist = cfg.twist?.key || '';
@@ -77,7 +78,7 @@ export function startTable(n, saved) {
     S.game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     S.game.dealer = saved.dealer;
     S.game.handNo = saved.handNo;
-  } else writeSave({ table: n, boss: S.bossMode, habits: S.habits, run: S.runStats, perks: S.perks, mem: S.memory });
+  } else writeSave({ table: n, boss: S.bossMode, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
   $('app').style.setProperty('--mat', cfg.mat);
   audio.setVenue(n - 1);
   buildSeats();
@@ -244,11 +245,14 @@ export async function run() {
     }
     if (!friendly) checkHandStickers(g, kos);
     // bonuses are paid by the house, on top of the pot
-    const bonus = (S.twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (S.perks.hunter || 0) * kos
-      + (me.won > 0 ? Math.round(me.won * 0.1 * (S.perks.rakeback || 0)) : 0);
+    const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, category: Math.floor((me.score || 0) / 13 ** 5) }, S.heat);
+    if (!friendly) S.heat = nextHeat(S.heat, { won: me.won, showdown: g.result.showdown, folded: me.folded });
+    const bounty = S.twist === 'bounty' ? BOUNTY * kos : 0, bonus = bounty + paid.total;
     if (bonus > 0) {
       me.chips += bonus;
-      setTimeout(() => { fx.banner(`${kos ? 'Bounty' : 'Rakeback'} +${bonus}`, 'info'); audio.chips(5, 0, 4); }, 900);
+      const what = [bounty ? 'Bounty' : '', ...paid.parts.map(([name]) => name)].filter(Boolean);
+      const label = `${what.length > 2 ? 'Perks' : what.join(' + ')} +${bonus}${paid.mult > 1 && paid.total ? ` \u00b7 heat \u00d7${paid.mult.toFixed(1)}` : ''}`;
+      setTimeout(() => { fx.banner(label, 'info'); audio.chips(5, 0, 4); }, 900);
     }
     if (me.chips === 0 && S.perks.lifeline > 0) { // one more chance
       S.perks.lifeline--;
@@ -259,7 +263,7 @@ export async function run() {
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, mem: S.memory });
+    writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
     await sleep(500);
     if (S.mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
     else await prompt('continue');

@@ -223,7 +223,7 @@ export function render() {
     : S.mode === 'net' ? `<b>Online ${S.net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; ${S.net?.watch ? '<b>watching</b>' : `you are <b>${g.players[S.ME].name}</b>`}${g.watching && !S.net?.watch ? ` &middot; ${g.watching} watching` : ''}`
     : S.mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : S.mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
-    : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
+    : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left${S.mode === 'run' && S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
   ui.reveals = reveals;
   if (S.replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
   if (netOn('host') && S.net.started && !S.replaying && g === S.game) netBroadcast();
