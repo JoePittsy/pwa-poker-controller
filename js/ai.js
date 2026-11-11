@@ -48,7 +48,7 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant
 
 // human: { foldToBet, aggression } — observed tendencies of the human player, 0..1
 const K = JSON.parse(process.env.K || '{}');
-const RA = K.RA ?? 1, RB = K.RB ?? 0.2, SL = K.SL ?? 0.2, TB = K.TB ?? 0.3, TIGHT = K.C ?? 1.5, LOOSE_SPAN = K.LF ?? 10;
+const CA = K.CA ?? 1, CL = K.CL ?? 5, RA = K.RA ?? 1, RB = K.RB ?? 0.2, SL = K.SL ?? 0.2, TB = K.TB ?? 0.3, TIGHT = K.C ?? 1.5, LOOSE_SPAN = K.LF ?? 10;
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
@@ -110,7 +110,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     }
     if (s >= 6) {
       if (!raised) return rng() < openRaise ? raise(0.8) : passive();
-      return cost <= 3.5 ? passive() : giveUp();
+      return cost <= CA + CL * loose ? passive() : giveUp(); // a loose player pays to see a raise with a so-so hand, a tight one folds it
     }
     if (s >= 4.5) return cost <= 1 && rng() < 0.2 + 0.75 * loose ? passive() : giveUp();
     if (!raised && toCall > 0 && rng() < 0.08 * nerve * bluffy * (1 + position)) return raise(0.8, { bluff: true }); // steal
