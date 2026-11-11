@@ -7,7 +7,7 @@ import * as fx from './fx.js';
 import { line } from './banter.js';
 import { face } from './faces.js';
 import { shareCard } from './share.js';
-import { connectAny } from './net.js';
+import { connectAny, canEncrypt, newKeys, sharedKey, exportKey, importKey, seal, unseal } from './net.js';
 import { STICKERS, has as hasSticker, count as stickerCount, unlock as unlockSticker } from './stickers.js';
 
 const YOU = { name: 'You', isHuman: true };
@@ -280,8 +280,17 @@ function passDone() {
 //   <room>/dn/<pid>  host -> a guest  { t: 's' table | 'e' effect | 'lobby' | 'hold' | 'go' | 'hb' | 'end' | 'full' }
 let net = null; // { role: 'host' | 'guest', relay, code, base, ... }
 const netOn = (role) => net?.role === role;
-const sendUp = (msg) => net?.relay.publish(`${net.base}/up`, JSON.stringify({ ...msg, pid: net.pid }));
-const sendTo = (pid, msg) => net?.relay.publish(`${net.base}/dn/${pid}`, JSON.stringify(msg));
+// Everything is encrypted between the host and each guest (see net.js), so nobody listening on the
+// relay can read cards or act for someone else. Sends are queued so they go out in the order made.
+function sealed(key, topic, msg, extra = {}) {
+  const n = net;
+  if (!n || !key) return;
+  // (a message queued just before leaving still goes out, so goodbyes arrive)
+  n.outq = n.outq.then(async () => { const body = await seal(key, msg); n.relay.publish(topic, JSON.stringify({ ...extra, ...body })); }).catch(() => {});
+}
+const sendUp = (msg) => net && sealed(net.key, `${net.base}/up`, { ...msg, q: Date.now() }, { pid: net.pid });
+const sendTo = (pid, msg) => net && sealed(net.keys.get(pid)?.key, `${net.base}/dn/${pid}`, msg);
+const noCrypto = () => showOverlay({ title: 'Not <span>available</span>', body: '<p>Online play needs a secure (https) page so the game can be encrypted.</p>', items: [['OK', onlineMenu]] });
 const NET_TIMERS = [0, 15, 30, 45, 60, 90]; // seconds to act; 0 is no limit
 const NET_BOTS = ['Gus', 'Ivy', 'Dot', 'Mav', 'Rex'];
 const AWAY_AFTER = 12000; // ms of silence before someone counts as disconnected
@@ -307,7 +316,7 @@ function onlineMenu() {
   leaveOnline();
   showOverlay({
     title: 'Play <span>online</span>', closable: true, onClose: moreGames,
-    body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is relayed through a free public server, so treat it as a friendly game: it is not secured against someone determined to snoop.</p>`,
+    body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is encrypted between the host and each player, so nobody else can read the cards or act for you. Only the host's device knows every card, so let someone you trust host.</p><p class="ver">Version ${ver()}</p>`,
     items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`Name: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
   });
 }
@@ -337,6 +346,8 @@ function seatNames() {
   lobbyGuests().forEach((gu, i) => { gu.name = out[i + 1]; });
   return out;
 }
+// The short id of the build this device is running, shown online so a table can check everyone matches.
+const ver = () => (version ? version.slice(0, 7) : 'dev');
 const waiting = (title, text, cancel) => showOverlay({ title, body: `<p>${text}</p>`, items: [['Cancel', cancel]] });
 const twistName = (key) => TWISTS.find((t) => t.key === key)?.name || 'None';
 // One line describing the host's settings, shown to everyone in the lobby.
@@ -352,18 +363,20 @@ function askNameFirst(then) {
   return true;
 }
 async function hostOnline() {
+  if (!canEncrypt()) return noCrypto();
   if (askNameFirst(hostOnline)) return;
   waiting('Opening <span>room</span>', 'Finding a relay…', onlineMenu);
   let conn;
   try { conn = await connectAny(); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>None of the public relays answered. Check your connection and try again.</p>', items: [['Try again', hostOnline], [`${glyph('B')}Back`, onlineMenu]] }); }
+  const keys = await newKeys();
   if (!overlay || net) return conn.relay.close(); // cancelled while connecting
   const code = `${conn.index + 1}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`; // first digit says which relay
   net = {
-    role: 'host', relay: conn.relay, code, base: `padpoker1/${code}`, guests: new Map(), started: false, turn: 0, n: 0, waiter: null, hold: null,
+    role: 'host', relay: conn.relay, code, base: `padpoker2/${code}`, guests: new Map(), keys: new Map(), priv: keys.priv, pub: keys.pub, outq: Promise.resolve(), inq: Promise.resolve(), started: false, turn: 0, n: 0, waiter: null, hold: null,
     cfg: { timer: 45, seats: 4, venue: 0, back: prefs.back, twist: '', variant: 'holdem' },
   };
   net.relay.subscribe(`${net.base}/up`);
-  net.relay.onMessage = (_, text) => { try { hostHears(JSON.parse(text)); } catch { /* not ours */ } };
+  net.relay.onMessage = (_, text) => { const n = net; n.inq = n.inq.then(() => (net === n ? hostRaw(JSON.parse(text)) : 0)).catch(() => { /* not ours, or not readable */ }); };
   net.relay.onClose = () => { toast('Lost the relay. The game has ended.'); leaveOnline(false); startScreen(); };
   net.beat = setInterval(hostBeat, 3000);
   net.again = setInterval(() => { // whoever we are waiting on gets the table every second, in case their copy was lost
@@ -375,7 +388,7 @@ async function hostOnline() {
 const lobbyGuests = () => [...net.guests.values()].filter((gu) => !gu.kicked);
 function tellLobby() {
   const names = seatNames();
-  for (const [pid, x] of net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', names, you: x.name, info: cfgLine(net.cfg) });
+  for (const [pid, x] of net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', names, you: x.name, info: cfgLine(net.cfg), v: ver() });
 }
 function hostLobby(focus = 0) {
   const c = net.cfg, people = 1 + lobbyGuests().length;
@@ -387,7 +400,7 @@ function hostLobby(focus = 0) {
   const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
   showOverlay({
     title: `Room <span>${net.code}</span>`, compact: true,
-    body: `<p>Others join with this code from More games, Online, or by opening your link.</p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}</p>`,
+    body: `<p>Others join with this code from More games, Online, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}</p>`,
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {
@@ -457,6 +470,22 @@ function kickGuest(gu) {
   if (net.waiter?.seat === gu.seat) { const w = net.waiter; net.waiter = null; w.resolve(null); }
   holdCheck();
 }
+// A message off the relay. A guest's first message carries their public key and gets ours back; after
+// that only messages that decrypt with that guest's key are listened to.
+async function hostRaw(raw) {
+  if (!netOn('host') || typeof raw.pid !== 'string' || raw.pid.length > 24) return;
+  let e = net.keys.get(raw.pid);
+  if (raw.k) {
+    if (!e) { if (net.keys.size >= 40) return; e = { pub: raw.k, key: await sharedKey(net.priv, raw.k), last: 0 }; net.keys.set(raw.pid, e); }
+    else if (e.pub !== raw.k) return; // somebody else trying to take this player's place
+    return void net.relay.publish(`${net.base}/dn/${raw.pid}`, JSON.stringify({ k: net.pub }));
+  }
+  if (!e || !raw.c) return;
+  const m = await unseal(e.key, raw);
+  if (!(m.q > e.last)) return; // an old message played back
+  e.last = m.q;
+  hostHears({ ...m, pid: raw.pid });
+}
 function hostHears(m) {
   if (!netOn('host') || !m.pid) return;
   let gu = net.guests.get(m.pid);
@@ -466,6 +495,7 @@ function hostHears(m) {
     if (gu.away && m.t !== 'leave') { gu.away = false; toast(`${gu.name} is back`); sendTo(m.pid, tableFor(gu.seat)); holdCheck(); }
   }
   if (m.t === 'join') {
+    if (m.v !== ver() && m.v !== 'dev' && ver() !== 'dev') return void sendTo(m.pid, { t: 'ver', v: ver() }); // a different build would not understand our messages
     if (gu) { if (net.started) sendTo(m.pid, tableFor(gu.seat)); }
     else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
@@ -595,27 +625,35 @@ function joinEntry(code = [1, 0, 0, 0, 0], pos = 0) {
 }
 async function joinOnline(code) {
   if (!/^[1-9]\d{4}$/.test(code)) return joinEntry();
+  if (!canEncrypt()) return noCrypto();
   if (askNameFirst(() => joinOnline(code))) return;
   waiting('Joining <span>room</span>', `Looking for room ${code}…`, onlineMenu);
   let conn;
   try { conn = await connectAny(+code[0] - 1); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>Could not reach the relay for that room. Check the code and your connection.</p>', items: [['Try again', () => joinOnline(code)], [`${glyph('B')}Back`, onlineMenu]] }); }
   if (!overlay || net) return conn.relay.close();
   // Your seat is remembered on this device, so reopening the link or the app puts you back in it.
-  let pid = Math.random().toString(36).slice(2, 12);
-  try { const kept = JSON.parse(localStorage.getItem('padpoker.seat')); if (kept?.code === code) pid = kept.pid; localStorage.setItem('padpoker.seat', JSON.stringify({ code, pid })); } catch { /* private mode */ }
-  net = { role: 'guest', relay: conn.relay, code, base: `padpoker1/${code}`, pid, seen: false, lastN: 0, sent: null, tries: 0, hostSeen: performance.now(), lost: false, held: false };
+  let pid = Math.random().toString(36).slice(2, 12), key = null, mine = null;
+  try { const kept = JSON.parse(localStorage.getItem('padpoker.seat')); if (kept?.code === code && kept.key) { key = await importKey(kept.key); pid = kept.pid; } } catch { key = null; }
+  if (!key) mine = await newKeys(); // first time in this room: swap keys with the host
+  if (!overlay || net) return conn.relay.close();
+  net = { role: 'guest', relay: conn.relay, code, base: `padpoker2/${code}`, pid, key, mine, kept: !!key, hostPub: '', outq: Promise.resolve(), inq: Promise.resolve(), seen: false, lastN: 0, sent: null, tries: 0, hostSeen: performance.now(), lost: false, held: false };
   net.relay.subscribe(`${net.base}/dn/${pid}`);
-  net.relay.onMessage = (_, text) => { try { guestHears(JSON.parse(text)); } catch { /* not ours */ } };
+  net.relay.onMessage = (_, text) => { const n = net; n.inq = n.inq.then(() => (net === n ? guestRaw(JSON.parse(text)) : 0)).catch(() => { /* not ours, or not readable */ }); };
   net.relay.onClose = async () => { // one quiet attempt to get back in
     if (!netOn('guest')) return;
     toast('Connection lost. Reconnecting…');
-    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName() }); }
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), v: ver() }); }
     catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room. Open the link or enter the code again to return to your seat.</p>', items: [['OK', startScreen]] }); }
   };
   const knock = () => { // keep asking until the host answers; the relay does not store messages
     if (!netOn('guest') || net.seen) return clearInterval(net.joiner);
+    if (net.kept && net.tries === 4) { // the room no longer knows our old seat: come in as a new player
+      try { localStorage.removeItem('padpoker.seat'); } catch { /* private mode */ }
+      clearInterval(net.joiner); leaveOnline(false); waiting('Joining <span>room</span>', `Looking for room ${code}\u2026`, onlineMenu); return joinOnline(code);
+    }
     if (++net.tries > 8) { clearInterval(net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
-    sendUp({ t: 'join', name: myName() });
+    if (net.key) sendUp({ t: 'join', name: myName(), v: ver() });
+    else net.relay.publish(`${net.base}/up`, JSON.stringify({ pid, k: net.mine.pub }));
   };
   net.again = setInterval(() => { // keep sending our answer until the host's table shows it arrived
     if (netOn('guest') && net.sent && performance.now() - net.sent.at > 1200) { net.sent.at = performance.now(); sendUp({ t: 'act', stamp: net.sent.stamp, a: net.sent.a }); }
@@ -633,19 +671,41 @@ async function joinOnline(code) {
     }
   }, 4000);
 }
+async function guestRaw(raw) {
+  if (!netOn('guest')) return;
+  if (raw.k) { // the host's public key
+    if (net.hostPub && raw.k !== net.hostPub) { // two different hosts answered: someone is interfering
+      leaveOnline(false);
+      return showOverlay({ title: 'Not <span>safe</span>', body: '<p>Someone else answered as the host of this room, so the game cannot be trusted. Ask the host to open a new room.</p>', items: [['OK', onlineMenu]] });
+    }
+    if (net.key || !net.mine) return;
+    net.hostPub = raw.k;
+    net.key = await sharedKey(net.mine.priv, raw.k);
+    try { localStorage.setItem('padpoker.seat', JSON.stringify({ code: net.code, pid: net.pid, key: await exportKey(net.key) })); } catch { /* private mode */ }
+    return sendUp({ t: 'join', name: myName(), v: ver() });
+  }
+  if (!net.key || !raw.c) return;
+  guestHears(await unseal(net.key, raw));
+}
 function guestHears(m) {
   if (!netOn('guest')) return;
   net.seen = true; net.hostSeen = performance.now();
   if (net.lost) { net.lost = false; if (clock) clock.frozen = net.held; if (overlay?.hold && !net.held) closeOverlay(); }
   if (m.t === 'hb') return;
+  if (m.t === 'ver') {
+    const mineV = ver();
+    try { localStorage.removeItem('padpoker.seat'); } catch { /* private mode */ }
+    leaveOnline(false);
+    return showOverlay({ title: 'Different <span>version</span>', body: `<p>The host is on version <b>${m.v}</b> and this device is on <b>${mineV}</b>. Everyone needs the same one: fully close the game and open it again, on both devices if needed, then rejoin.</p>`, items: [['Reload now', () => location.reload()], [`${glyph('B')}Back`, onlineMenu]] });
+  }
   if (m.t === 'full') { leaveOnline(false); return showOverlay({ title: 'Room <span>full</span>', body: '<p>That game has already started or has no seats left.</p>', items: [['OK', onlineMenu]] }); }
   if (m.t === 'lobby') {
     net.lobbyMsg = m;
     if (overlay?.naming) return; // typing a name: the lobby is redrawn afterwards
     showOverlay({
       title: `Room <span>${net.code}</span>`,
-      body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}</p>`,
-      items: [['Change name', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
+      body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
+      items: [['Change name', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), v: ver() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
     });
     overlay.lobby = true;
     return;
@@ -2400,7 +2460,7 @@ startScreen();
   const join = new URLSearchParams(location.search).get('join');
   if (join) { window.history.replaceState(null, '', location.pathname); joinOnline(join); } // window.history: plain 'history' is the hand list here
 }
-window.__poker = { get game() { return game; }, ui, runCard, dailyCard };
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__poker = { get game() { return game; }, ui, runCard, dailyCard }; // a handle for tests only: not on the live site, where it would let a host read the table from the console
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

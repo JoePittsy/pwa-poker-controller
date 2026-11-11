@@ -532,6 +532,7 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .notebook small { display: block; font-size: .9rem; font-weight: 500; color: var(--sky); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14rem; }
 .notebook small.tell { color: var(--yellow); white-space: normal; }
 .notebook .unmet { opacity: .45; } .notebook .unmet .ava { background: none; border-style: dashed; color: var(--sky); border-color: var(--sky); }
+.ver { opacity: .6; font-size: 1.3rem; white-space: nowrap; }
 .namein { display: block; width: 22rem; max-width: 100%; margin-top: 1rem; padding: .7rem 1.1rem; font: inherit; font-size: 2.4rem; font-weight: 800; color: var(--ink);
   background: var(--paper); border: .3rem solid var(--ink); border-radius: 1.2rem; box-shadow: .3rem .3rem 0 var(--ink); outline: none; -webkit-user-select: text; user-select: text; }
 .namein:focus { background: var(--yellow); }

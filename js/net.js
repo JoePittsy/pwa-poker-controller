@@ -98,3 +98,32 @@ export async function connectAny(only = -1) {
   }
   throw new Error(last);
 }
+
+// ---------- encryption ----------
+// The relay is public, so everything between the host and each guest is encrypted end to end.
+// Each guest and the host swap public keys once (ECDH P-256) and derive a key only the two of
+// them know; every message after that is AES-GCM under that key. Someone listening on the relay
+// sees the public keys and scrambled messages, and cannot read cards or forge a player's action.
+const S = () => crypto.subtle;
+const b64 = (buf) => { let s = ''; for (const b of new Uint8Array(buf)) s += String.fromCharCode(b); return btoa(s); };
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const CURVE = { name: 'ECDH', namedCurve: 'P-256' };
+export const canEncrypt = () => !!globalThis.crypto?.subtle;
+export async function newKeys() {
+  const pair = await S().generateKey(CURVE, false, ['deriveKey']);
+  return { priv: pair.privateKey, pub: b64(await S().exportKey('raw', pair.publicKey)) };
+}
+export async function sharedKey(priv, theirPub) {
+  const pub = await S().importKey('raw', unb64(theirPub), CURVE, false, []);
+  return S().deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+export const exportKey = async (key) => b64(await S().exportKey('raw', key));
+export const importKey = (text) => S().importKey('raw', unb64(text), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+export async function seal(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await S().encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+  return { i: b64(iv), c: b64(data) };
+}
+export async function unseal(key, m) { // throws if it was not made with this key or was altered
+  return JSON.parse(new TextDecoder().decode(await S().decrypt({ name: 'AES-GCM', iv: unb64(m.i) }, key, unb64(m.c))));
+}
