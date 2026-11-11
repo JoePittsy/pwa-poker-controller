@@ -5,13 +5,13 @@ import * as audio from './audio.js';
 import { PERKS } from './build.js';
 import { LADDER } from './career.js';
 import { tableConfig } from './config.js';
-import { setNextTrip, startTable, writeSave } from './loop.js';
-import { showOverlay, startScreen } from './menus.js';
+import { loadSave, setNextTrip, startTable, writeSave } from './loop.js';
+import { pauseMenu, showOverlay, startScreen } from './menus.js';
 import { perkSummary, perkTag } from './perks.js';
 import { myRank } from './rank.js';
 import { toast } from './squeeze.js';
 import { S } from './state.js';
-import { PRICES, RISKY, dealOf, dealsFor, newTrip, spend } from './trip.js';
+import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, newTrip, spend } from './trip.js';
 import { $, glyph } from './util.js';
 
 const money = (n) => n.toLocaleString();
@@ -72,5 +72,39 @@ function wayOn(n, saved) {
       [`${glyph('A')}<span>The usual<small>${cfg.names.length} opponents, as they come.</small></span>`, go(false)],
       [`<span>The hard way<small>Sharper opponents with ${Math.round((RISKY.oppStack - 1) * 100)}% more chips. The cash-out pays ${Math.round((RISKY.cash - 1) * 100)}% more.</small></span>`, go(true)],
     ],
+  });
+}
+
+// Walking away: once half your opponents are out you may stand up with what you have won so far.
+// It pays no speed bonus and the table does not count as cleared; a boss must be beaten.
+export const walkOffer = () => (S.mode === 'run' && S.game && S.trip && canWalk(S.game.players, S.ME, S.bossMode) ? cashOut(S.trip, S.table, S.game.players[S.ME].chips) : -1);
+let toldAt = -1; // the table at which the player was last told they may walk
+export function walkHint() {
+  if (walkOffer() < 0 || toldAt === S.table) return;
+  toldAt = S.table;
+  toast('Half the table is out: you may walk away with your winnings from the menu');
+}
+export function walkAway() {
+  const g = S.game, me = g.players[S.ME], bank = walkOffer();
+  if (bank < 0) return;
+  const left = g.players.reduce((sum, p, seat) => sum + (seat === S.ME ? 0 : p.chips + p.total), 0);
+  const mid = ['betting', 'streetEnd'].includes(g.stage) && me.total > 0 && !me.folded;
+  showOverlay({
+    title: 'Walk <span>away?</span>', closable: true, onClose: pauseMenu,
+    body: `<p>Stand up now and bank <b>${money(bank)}</b>. There is no speed bonus, and Table ${S.table} will not count as cleared.</p><p>Stay and win it all for the ${money(left)} still on the table, at the risk of the run.${mid ? ' The hand in progress counts as folded.' : ''}</p>`,
+    items: [['Stay', pauseMenu], [`Walk away \u00b7 bank ${money(bank)}`, () => {
+      const t = S.trip;
+      S.runId++; // stops the game loop
+      t.pocket += bank; t.banked += bank; t.walked++;
+      for (const k of ['boost', 'bribe', 'risky']) if (t[k] === S.table) t[k] = 0;
+      const bossNext = S.table % 3 === 0;
+      writeSave({ table: bossNext ? S.table : S.table + 1, boss: bossNext, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: t, mem: S.memory, owed: true });
+      audio.musicLevel(0); audio.chips(8, 0, 6);
+      showOverlay({
+        title: 'Walked <span>away</span>',
+        body: `<p>You left Table ${S.table} with ${g.players.filter((p, seat) => seat !== S.ME && p.chips > 0).length} still sitting. It does not count as cleared.</p><p class="gain">Cashed out +${money(bank)}</p>${pocketHtml()}`,
+        items: [[`${glyph('A')}To the shop`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
+      });
+    }]],
   });
 }

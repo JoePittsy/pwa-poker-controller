@@ -14,21 +14,38 @@ export const dealOf = (trip) => DEALS[trip?.deal] || DEALS.regular;
 /** The deals in order, each marked locked if your career rank is too low for it. */
 export const dealsFor = (rank) => Object.entries(DEALS).map(([key, d]) => ({ key, ...d, locked: rank < d.rank }));
 /** A fresh trip on a deal. boost, bribe and risky hold the table number they apply to (0: none). */
-export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0 });
+export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0 });
 /** Makes a saved trip safe to use, whatever state it was saved in. */
 export function readTrip(t) {
   const n = (v) => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : 0);
-  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin) };
+  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin), walked: n(t?.walked) };
 }
 
 export const RISKY = { skill: 0.15, oppStack: 1.25, cash: 1.5 }; // the hard way to the next table
 export const BOOST = 1.25;
 const round = (v, to = 50) => Math.max(to, Math.round(v / to) * to);
 /** What clearing a table puts in your pocket: everything you won beyond your own buy-in, shaped by the deal and the route. */
-export function cashOut(trip, table, finalStack) {
+export function cashOut(trip, table, finalStack, bonus = 0) {
   const won = Math.max(0, finalStack - (trip.buyin || 0));
-  return Math.round(won * (dealOf(trip).cash || 1) * (trip.risky === table ? RISKY.cash : 1) / 10) * 10;
+  return Math.round(won * (dealOf(trip).cash || 1) * (trip.risky === table ? RISKY.cash : 1) * (1 + bonus) / 10) * 10;
 }
+// Every table ends with you holding all the chips, so the cash-out alone says nothing about how you played.
+// Two things do. Clearing it quickly pays extra: within FAST hands per opponent, half as much again; within
+// QUICK, a quarter. And once half your opponents are out you may walk away with what you have won so far,
+// for no bonus and without the table counting as cleared. Never against a boss.
+export const FAST = 8, QUICK = 13;
+export const fastPar = (opponents) => FAST * opponents;
+export const quickPar = (opponents) => QUICK * opponents;
+/** The bonus, as a share of the cash-out, for clearing a table of this many opponents in this many hands. */
+export const speedBonus = (hands, opponents) => (hands <= fastPar(opponents) ? 0.5 : hands <= quickPar(opponents) ? 0.25 : 0);
+/** May you walk away? players: the table as it stands, you in seat `me`. */
+export function canWalk(players, me, boss) {
+  if (boss) return false;
+  const others = players.filter((p, seat) => seat !== me), out = others.filter((p) => p.chips <= 0).length;
+  return players[me].chips > 0 && out >= Math.ceil(others.length / 2) && out < others.length;
+}
+/** How many tables of a run were truly cleared: the number reached, less those walked away from. */
+export const clearedCount = (trip, tablesPassed) => Math.max(0, tablesPassed - (trip?.walked || 0));
 /** Shop prices. Perks cost more the more you already hold; each reroll in one visit costs more than the last. */
 export const PRICES = {
   perk: (trip, held) => round((1200 + 400 * held) * (dealOf(trip).price || 1)),

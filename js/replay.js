@@ -1,4 +1,4 @@
-import { cashOut, dealOf, takeHome } from './trip.js';
+import { cashOut, clearedCount, dealOf, fastPar, quickPar, speedBonus, takeHome } from './trip.js';
 import { newRun, pocketHtml } from './tripui.js';
 import { addToBank } from './tables.js';
 import { rankHtml } from './rank.js';
@@ -177,6 +177,7 @@ function tripLine() {
   const t = S.trip, n = S.table, bits = [];
   if (!t) return '';
   if (t.deal !== 'regular') bits.push(`<b>${dealOf(t).name}:</b> ${dealOf(t).text}`);
+  if (!S.bossMode) { const opp = S.game.players.length - 1; bits.push(`<b>Speed:</b> clear it within ${fastPar(opp)} hands for half as much again, within ${quickPar(opp)} for a quarter. Once ${Math.ceil(opp / 2)} ${Math.ceil(opp / 2) === 1 ? 'is' : 'are'} out you may walk away from the menu.`); }
   if (t.risky === n) bits.push('<b>The hard way:</b> sharper opponents with more chips, and a bigger cash-out.');
   if (t.boost === n) bits.push('<b>Boosted:</b> you start with 25% more.');
   if (t.bribe === n && !S.bossMode) bits.push('<b>Paid off:</b> one opponent stayed away.');
@@ -226,10 +227,11 @@ export async function tableCleared() {
 const gainHtml = (xp) => `<p class="gain">+${xp} XP</p>${rankHtml()}`;
 // Clearing a table banks what you won there, and the one-table extras you bought for it are used up.
 function bankTable() {
-  const t = S.trip, gain = cashOut(t, S.table, S.game.players[S.ME].chips);
+  const t = S.trip, g = S.game, bonus = speedBonus(g.handNo, g.players.length - 1);
+  const gain = cashOut(t, S.table, g.players[S.ME].chips, bonus);
   t.pocket += gain; t.banked += gain;
   for (const k of ['boost', 'bribe', 'risky']) if (t[k] === S.table) t[k] = 0;
-  return `<p class="gain">Cashed out +${gain.toLocaleString()}</p>${pocketHtml()}`;
+  return `<p class="gain">Cashed out +${gain.toLocaleString()}${bonus ? ` &middot; ${bonus === 0.5 ? 'fast' : 'quick'} clear +${bonus * 100}%` : ''}</p>${pocketHtml()}`;
 }
 export function showCleared() {
   const banked = bankTable();
@@ -248,9 +250,9 @@ export function showCleared() {
   if (S.table >= 3) award('made_it');
   if (S.table >= 5) award('vault');
   if (S.game.handNo <= 15) award('speedrun');
-  const before = best();
-  try { localStorage.setItem('padpoker.best', String(Math.max(before, S.table))); } catch { /* private mode */ }
-  const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= S.table);
+  const before = best(); // tables walked away from do not count towards it
+  try { localStorage.setItem('padpoker.best', String(Math.max(before, clearedCount(S.trip, S.table)))); } catch { /* private mode */ }
+  const prize = Object.keys(BACKS).find((k) => BACKS[k] > before && BACKS[k] <= clearedCount(S.trip, S.table));
   const bossNext = S.table % 3 === 0;
   writeSave({ table: bossNext ? S.table : S.table + 1, boss: bossNext, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory, owed: true });
   stats.tables++; saveStats();
@@ -271,7 +273,7 @@ export function busted() {
   bustSummary();
 }
 export function bustSummary() {
-  const cleared = S.bossMode ? S.table : S.table - 1;
+  const cleared = clearedCount(S.trip, S.bossMode ? S.table : S.table - 1);
   const r = S.runStats;
   const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
   const record = cleared > r.startBest ? '<p class="venue">New best run!</p>' : `<p>Best run: ${tables(best())} cleared.</p>`;

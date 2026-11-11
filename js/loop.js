@@ -1,5 +1,5 @@
 import { newTrip, readTrip, tableMods } from './trip.js';
-import { shop } from './tripui.js';
+import { shop, walkHint } from './tripui.js';
 import { coachTip } from './tip.js';
 import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
@@ -321,6 +321,7 @@ export async function run() {
       }
       continue;
     }
+    if (S.mode === 'run') walkHint();
     if (me.chips === 0) return S.mode === 'daily' ? dailyDone() : S.mode === 'quick' ? quickDone() : S.mode === 'cash' ? cashBust() : busted();
     if (S.stale) return location.reload(); // new version deployed: pick it up between hands
   }
