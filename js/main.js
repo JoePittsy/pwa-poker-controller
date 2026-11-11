@@ -1103,7 +1103,14 @@ function settingsMenu(back) {
       [() => `Left-handed: ${onOff(prefs.lefty)}`, set(() => { prefs.lefty = !prefs.lefty; }), true],
       [() => `Sound: ${onOff(audio.settings.sfx)}`, () => audio.setSfx(!audio.settings.sfx), true],
       [() => `Music: ${onOff(audio.settings.music)}`, () => audio.setMusic(!audio.settings.music), true],
-      [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => { prefs.rumble = !prefs.rumble; if (prefs.rumble) setTimeout(() => fx.rumble(0.6, 0.6, 150), 30); }), true],
+      [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => {
+        prefs.rumble = !prefs.rumble;
+        if (!prefs.rumble) return;
+        setTimeout(() => fx.haptic('win1'), 30); // a test buzz, from wherever this device can make one
+        const how = fx.hapticSupport();
+        toast(how === 'controller' ? 'Rumbling the controller' : how === 'phone' ? 'No controller rumble: using the phone\u2019s vibration'
+          : how === 'taps' ? 'No controller rumble here: using light phone taps, where iOS allows' : 'This browser can\u2019t vibrate anything here');
+      }), true],
       [() => `Table talk: ${onOff(prefs.chatter)}`, set(() => { prefs.chatter = !prefs.chatter; }), true],
       [() => `Card back: ${prefs.back}`, set(() => {
         const mine = unlockedBacks();
