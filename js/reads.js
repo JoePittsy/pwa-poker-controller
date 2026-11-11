@@ -38,11 +38,13 @@ export function adjust(profile, m) {
     ...profile, // everything else known about you carries through unchanged
     foldToBet: Math.min(0.95, profile.foldToBet + (m.bully ? 0.25 : 0)), // bluff you more
     aggression: Math.min(0.95, profile.aggression + (m.wise ? 0.5 : 0)), // call you lighter
+    ...(m.wise ? { wise: true } : {}), // and never fold a pair to a bet of up to the pot (see decide in ai.js)
   };
 }
 /** For the notebook: what they currently think of you, in words. */
 export function readText(m) {
   if (!m) return '';
-  return [m.wise ? 'Calls your bets lighter now' : '',
-    m.bully ? 'Bets at you more now' : ''].filter(Boolean).join(' \u00b7 ');
+  const times = (n) => (n === 1 ? 'once' : `${n} times`);
+  return [m.wise ? `Folded to your bets ${times(m.gaveUp ?? READ_AT)}: calls you lighter now` : '',
+    m.bully ? `You folded to them ${times(m.pushed ?? READ_AT)}: bets at you more now` : ''].filter(Boolean).join(' \u00b7 ');
 }

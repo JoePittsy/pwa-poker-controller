@@ -2,7 +2,7 @@
 // shaded by a per-player style { loose: 0..1, aggr: 0..1, tell } and by how the human
 // has been playing. Each decision also reports how hard it was (`think`, 0..1) and
 // whether it is a `bluff` or a `strong` hand, which the UI turns into timing tells.
-import { scoreHand } from './cards.js';
+import { evaluate, scoreHand } from './cards.js';
 
 export function chen([a, b]) {
   let hi = a >> 2, lo = b >> 2;
@@ -23,6 +23,14 @@ function strength(cards) {
   let best = 0;
   for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) best = Math.max(best, chen([cards[i], cards[j]]));
   return best - 1;
+}
+
+// A pair or better that is ours, not one the board hands to everybody.
+const catOf = (v) => Math.floor(v / 13 ** 5);
+function madeHand(hole, board, short) {
+  const ranks = [...hole, ...board].map((c) => c >> 2);
+  if (hole.some((c) => ranks.filter((r) => r === c >> 2).length >= 2)) return true;
+  return catOf(evaluate([...hole, ...board], short)) > catOf(evaluate(board, short));
 }
 
 export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant = 'holdem') {
@@ -46,14 +54,13 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant
   return win / sims;
 }
 
-// human: { foldToBet, aggression } — observed tendencies of the human player, 0..1
-const SF = +process.env.SF || 7, SK = +process.env.SK || 0;
+// human: { foldToBet, aggression, shove } — observed tendencies of the human player, 0..1; wise: this opponent has stopped believing the human's bets
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
   const { loose = 0.5, aggr = 0.5, tell, skill = 1, cheat = 0, noBluff = false } = p.style || {};
   const sloppy = 1 - skill; // weaker players see their hands less clearly and call too much
-  const { foldToBet = 0.4, aggression = 0.3, shove: shoveRate = 0 } = human; // shove: how often the human moves all in
+  const { foldToBet = 0.4, aggression = 0.3, shove: shoveRate = 0, wise = false } = human; // shove: how often the human moves all in
   const pot = g.pot, toCall = L.toCall, bb = g.bb;
   const variant = g.variant || 'holdem';
   const opp = g.players.filter((q) => !q.folded && q !== p).length;
@@ -65,7 +72,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const fromHero = hero && g.aggressor === hero.seat;
   const lighter = fromHero ? (aggression - 0.3) * 0.2 : 0;
   const vsShover = fromHero ? Math.min(0.7, shoveRate) : 0; // someone who shoves all the time has any two cards
-  const nerve = Math.min(1, 3.3 * aggr ** 1.5 * loose * loose); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing: a maniac about 1, a steady player a third of that, a careful one a fifth
+  const nerve = Math.min(1, 8 * aggr ** 1.5 * loose ** 3); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing: a maniac 1, a steady player about 0.4, a careful one 0.15
   let think = 0.1 + rng() * 0.25;
 
   const out = (a, extra) => ({ ...a, think: Math.min(1, think), ...extra });
@@ -93,7 +100,10 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     // player wants more, a loose one less) and on who is betting: against a habitual shover, far less.
     if (cost > 12 || (shove && toCall > 5 * bb)) {
       think += 0.3;
-      return raw >= Math.max(SF - SK * loose, 10 + (0.5 - loose) * 3 - vsShover * 9) ? passive() : giveUp();
+      // ...but never below a middling hand (a shover's cards are random, so calling lighter than that loses chips),
+      // and a little more than that when it is not just the two of us.
+      const floor = 8 + (g.players.filter((q) => !q.out).length > 2 ? 1.5 : 0);
+      return raw >= Math.max(floor, 10 + (0.5 - loose) * 3 - vsShover * 9) ? passive() : giveUp();
     }
     const openRaise = Math.min(0.95, aggr * (1.5 + 0.3 * Math.max(0, Math.min(1, (rs - 6) / 6)))); // how often a hand worth playing is raised: mostly the character, a little the cards
     if (rs >= 10.5) {
@@ -122,7 +132,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (toCall === 0) {
     if (e > 0.7) return rng() < 0.45 + 0.5 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
     if (e > 0.5) return rng() < 0.1 + 0.6 * aggr ? raise(0.4 + rng() * 0.2) : passive();
-    if (opp <= 2 && rng() < 0.15 * nerve * bluffy * (g.street !== 'river' && e > 0.3 ? 1.6 : 0.6)) { think += 0.2; return raise(0.6, { bluff: true }); }
+    if (opp <= 2 && rng() < 0.22 * nerve * bluffy * (g.street !== 'river' && e > 0.3 ? 1.6 : 0.6)) { think += 0.2; return raise(0.6, { bluff: true }); }
     return passive();
   }
   const odds = toCall / (pot + toCall);
@@ -132,7 +142,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   // discounts much against a human who shoves constantly.
   const respect = 0.2 * Math.min(1.2, pressure) * (g.street === 'river' ? 1.25 : 1) * (1.15 - 0.6 * loose) * (1 - vsShover);
   e -= e * respect;
-  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter - sloppy * 0.05 - vsShover * 0.12;
+  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter - sloppy * 0.05 - vsShover * 0.12 - (loose - 0.5) * 0.3; // a loose player pays more readily
   // close decisions for a big share of the stack take longest
   const close = 1 - Math.min(1, Math.abs(e - need) / 0.22);
   const stake = Math.min(1, toCall / Math.max(1, 0.3 * (p.chips + p.bet)));
@@ -140,6 +150,8 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   strong = e > 0.75;
   if (e > 0.82 || (e > 0.68 && rng() < aggr * 0.5)) return raise(0.7 + rng() * 0.3, { strong });
   if (e >= need) return out({ type: 'call' }, { strong });
+  // Once they are wise to you, a bet of up to the pot does not move anyone who holds a pair or better: they call.
+  if (wise && fromHero && variant !== 'omaha' && pressure <= 1.1 && madeHand(p.cards, g.board, variant === 'short')) return out({ type: 'call' }, { strong });
   if (pressure < 0.6 && rng() < 0.06 * nerve * bluffy) return raise(0.8, { bluff: true });
   return giveUp();
 }

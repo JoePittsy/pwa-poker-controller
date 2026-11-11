@@ -35,9 +35,18 @@ test('a read that costs them is dropped, and can be earned again', () => {
   assert.equal(noteShowdownWon(mem, 'Mav', { youBet: false, youCalledThem: true }), 'stood');
   assert.equal(noteShowdownWon(mem, 'Nobody', { youBet: true, youCalledThem: true }), '');
 });
-test('the notebook says what they think of you', () => {
+test('a wise opponent is flagged to the AI, an ordinary one is not', () => {
+  assert.equal(adjust({ foldToBet: 0.4, aggression: 0.3 }, { wise: true }).wise, true);
+  assert.equal('wise' in adjust({ foldToBet: 0.4, aggression: 0.3 }, { bully: true }), false);
+});
+test('the notebook says what they think of you, with the real counts', () => {
   assert.equal(readText(undefined), '');
   assert.equal(readText({ ko: 2 }), '');
-  assert.match(readText({ wise: true }), /Calls your bets lighter/);
-  assert.match(readText({ wise: true, bully: true }), /Bets at you more/);
+  assert.equal(readText({ wise: true, gaveUp: 3 }), 'Folded to your bets 3 times: calls you lighter now');
+  assert.equal(readText({ wise: true, gaveUp: 5 }), 'Folded to your bets 5 times: calls you lighter now');
+  assert.equal(readText({ bully: true, pushed: 4 }), 'You folded to them 4 times: bets at you more now');
+  assert.match(readText({ wise: true, gaveUp: 3, bully: true, pushed: 3 }), /calls you lighter now.*bets at you more now/);
+  const mem = {};
+  for (let i = 0; i < READ_AT; i++) { noteGaveUp(mem, 'Rex'); notePushed(mem, 'Rex'); }
+  assert.match(readText(mem.Rex), new RegExp(`Folded to your bets ${READ_AT} times`));
 });

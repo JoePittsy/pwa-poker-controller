@@ -11,7 +11,7 @@ export const CHARACTERS = {
   Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.44, aggr: 0.7 } },
   // newcomers: they start turning up from Table 4
   Zed: { tag: 'Maniac', color: '#ff8a3d', voice: 9, style: { loose: 0.95, aggr: 0.95 } },
-  Flo: { tag: 'Nit', color: '#c7e36a', voice: 10, style: { loose: 0.1, aggr: 0.5, tell: 'slowStrong' } },
+  Flo: { tag: 'Nit', color: '#c7e36a', voice: 10, style: { loose: 0.25, aggr: 0.5, tell: 'slowStrong' } },
   Kit: { tag: 'Trickster', color: '#7ee0ff', voice: 11, style: { loose: 0.55, aggr: 0.6, tell: 'fastStrong' } },
   Bea: { tag: 'Banker', color: '#e6b8ff', voice: 12, style: { loose: 0.4, aggr: 0.4, tell: 'smallValue' } },
   Sol: { tag: 'Gambler', color: '#ffd98a', voice: 13, style: { loose: 0.7, aggr: 0.65, tell: 'fastBluff' } },
