@@ -7,6 +7,7 @@ import * as fx from './fx.js';
 import { line } from './banter.js';
 import { face } from './faces.js';
 import { shareCard } from './share.js';
+import { connectAny } from './net.js';
 import { STICKERS, has as hasSticker, count as stickerCount, unlock as unlockSticker } from './stickers.js';
 
 const YOU = { name: 'You', isHuman: true };
@@ -159,6 +160,7 @@ function dailyScreen() {
 }
 // Seat a one-off table (daily deal, quick table) outside the run.
 function seatSingle(kind, cfg, hud, saved) {
+  leaveOnline();
   ME = 0; ui.hidden = false;
   mode = kind; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random;
   cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
@@ -218,6 +220,7 @@ function quickDone() {
 const PASS_COLORS = ['var(--blue)', 'var(--red)', 'var(--mint)', 'var(--yellow)'];
 let passHumans = 2;
 function startPass(humans) {
+  leaveOnline();
   mode = 'pass'; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random; ME = 0;
   const people = Array.from({ length: humans }, (_, i) => ({ name: `P${i + 1}`, badge: String(i + 1), isHuman: true, tag: 'Player', color: PASS_COLORS[i] }));
   const bots = ['Gus', 'Ivy'].slice(0, Math.max(0, 4 - humans)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
@@ -268,12 +271,255 @@ function passDone() {
     items: [[`${glyph('A')}Play again`, () => startPass(passHumans)], ['Done', startScreen]],
   });
 }
+// ---------- online play ----------
+// One player hosts: their device runs the real game and is the only one that knows every
+// card. Everyone else is a guest: they are sent a picture of the table with only their own
+// cards filled in, and send back what they want to do. Messages go through a public relay
+// (see net.js) on topics named after the room code.
+//   <room>/up        guests -> host   { t: 'join' | 'act' | 'leave', pid, ... }
+//   <room>/dn/<pid>  host -> a guest  { t: 's' table | 'e' effect | 'lobby' | 'end' | 'full' }
+let net = null; // { role: 'host' | 'guest', relay, code, base, ... }
+const netOn = (role) => net?.role === role;
+const sendUp = (msg) => net?.relay.publish(`${net.base}/up`, JSON.stringify({ ...msg, pid: net.pid }));
+const sendTo = (pid, msg) => net?.relay.publish(`${net.base}/dn/${pid}`, JSON.stringify(msg));
+function leaveOnline(tell = true) {
+  if (!net) return;
+  if (tell && netOn('host')) for (const pid of net.guests.keys()) sendTo(pid, { t: 'end', text: 'The host closed the game.' });
+  if (tell && netOn('guest')) sendUp({ t: 'leave' });
+  clearInterval(net.joiner);
+  const r = net.relay; net = null;
+  setTimeout(() => r.close(), 300); // let the goodbye go out first
+  if (mode === 'net') { mode = 'run'; runId++; game = null; ME = 0; $('seats').innerHTML = ''; $('board').innerHTML = ''; $('burn').innerHTML = ''; $('pot').hidden = true; $('hud').innerHTML = ''; $('msg').classList.remove('show'); ui.mode = 'wait'; ui.resolve = null; renderActions(); }
+}
+function onlineMenu() {
+  leaveOnline();
+  showOverlay({
+    title: 'Play <span>online</span>', closable: true, onClose: moreGames,
+    body: `<p>Up to six people, each on their own device. One hosts and shares a five-digit room code or a link; the rest join.</p><p>The game is relayed through a free public server, so treat it as a friendly game: it is not secured against someone determined to snoop.</p>`,
+    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`${glyph('B')}Back`, moreGames]],
+  });
+}
+const waiting = (title, text, cancel) => showOverlay({ title, body: `<p>${text}</p>`, items: [['Cancel', cancel]] });
+
+// ----- hosting -----
+async function hostOnline() {
+  waiting('Opening <span>room</span>', 'Finding a relay\u2026', onlineMenu);
+  let conn;
+  try { conn = await connectAny(); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>None of the public relays answered. Check your connection and try again.</p>', items: [['Try again', hostOnline], [`${glyph('B')}Back`, onlineMenu]] }); }
+  if (!overlay || net) return conn.relay.close(); // cancelled while connecting
+  const code = `${conn.index + 1}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`; // first digit says which relay
+  net = { role: 'host', relay: conn.relay, code, base: `padpoker1/${code}`, guests: new Map(), started: false, bots: true, turn: 0, waiter: null };
+  net.relay.subscribe(`${net.base}/up`);
+  net.relay.onMessage = (_, text) => { try { hostHears(JSON.parse(text)); } catch { /* not ours */ } };
+  net.relay.onClose = () => { toast('Lost the relay. The game has ended.'); leaveOnline(false); startScreen(); };
+  hostLobby();
+}
+function hostLobby() {
+  const names = ['P1 (you)', ...[...net.guests.values()].map((gu) => gu.name)];
+  const link = `${location.origin}${location.pathname}?join=${net.code}`;
+  showOverlay({
+    title: `Room <span>${net.code}</span>`,
+    body: `<p>Others join with this code from More games, Online, Join a game, or by opening your link.</p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${net.guests.size ? 'Start when everyone is in.' : 'Waiting for someone to join\u2026'}</p>`,
+    items: [
+      [`${glyph('A')}Start game`, () => (net.guests.size ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
+      ['Share link', async () => {
+        try { if (navigator.share) await navigator.share({ title: 'Pad Poker', text: `Join my poker table: room ${net.code}`, url: link }); else { await navigator.clipboard.writeText(link); toast('Link copied'); } } catch { toast(`Room code ${net.code}`); }
+      }, true],
+      [() => `Computer players: ${net.bots ? 'On' : 'Off'}`, () => { net.bots = !net.bots; }, true],
+      ['Close room', onlineMenu],
+    ],
+  });
+}
+function hostHears(m) {
+  if (!netOn('host') || !m.pid) return;
+  const gu = net.guests.get(m.pid);
+  if (m.t === 'join') {
+    if (gu) { gu.gone = false; if (net.started) sendTo(m.pid, tableFor(gu.seat)); } // back after a drop
+    else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
+    else net.guests.set(m.pid, { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, gone: false });
+    if (!net.started) {
+      const names = ['P1', ...[...net.guests.values()].map((x) => x.name)];
+      for (const [pid, x] of net.guests) sendTo(pid, { t: 'lobby', names, you: x.name });
+      if (overlay) hostLobby();
+    }
+  } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.turn === net.turn) {
+    const w = net.waiter; net.waiter = null; clearTimeout(w.timer); w.resolve(m.a);
+  } else if (m.t === 'leave' && gu) {
+    gu.gone = true;
+    toast(`${gu.name} left`);
+    if (net.waiter?.seat === gu.seat) { const w = net.waiter; net.waiter = null; clearTimeout(w.timer); w.resolve(null); }
+    if (!net.started) { net.guests.delete(m.pid); if (overlay) hostLobby(); }
+  }
+}
+function startOnline() {
+  mode = 'net'; bossMode = false; twist = ''; perks = {}; table = 0; aiRng = Math.random; ME = 0; ui.hidden = false;
+  const people = [{ name: 'P1', badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
+    ...[...net.guests.values()].map((gu, i) => ({ name: gu.name, badge: String(i + 2), isHuman: true, remote: true, tag: 'Player', color: PASS_COLORS[(i + 1) % 4] }))];
+  const bots = net.bots ? ['Gus', 'Ivy', 'Dot'].slice(0, Math.max(0, 4 - people.length)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } })) : [];
+  cast = [...people, ...bots];
+  game = new Game({ players: cast, handsPerLevel: 6, chips: 1000 });
+  setVariantLook('holdem');
+  net.started = true; net.turn = 0;
+  $('app').style.setProperty('--mat', '#1d6f8f');
+  audio.setVenue(4);
+  buildSeats();
+  $('msg').textContent = ''; $('msg').classList.remove('show');
+  $('pot').hidden = true;
+  ui.mode = 'wait'; ui.resolve = null;
+  lastBB = 0; fast = false; audio.hush(false); squeeze = null; ui.squeezed = true;
+  runId++;
+  renderActions();
+  run();
+}
+// What one seat is allowed to see: the whole table, with other players' cards blanked until they are shown.
+function tableFor(seat) {
+  const g = game;
+  return {
+    t: 's', me: seat, turn: net.turn, settled,
+    handNo: g.handNo, dealer: g.dealer, sb: g.sb, bb: g.bb, street: g.street, stage: g.stage, toAct: g.toAct, board: g.board,
+    currentBet: g.currentBet, variant: g.variant, showCards: g.showCards, runout: g.runout, result: g.result,
+    legal: g.stage === 'betting' && g.toAct === seat ? g.legal(seat) : null,
+    cast: cast.map((c) => ({ name: c.name, tag: c.tag, color: c.color, badge: c.badge, isHuman: !!c.isHuman, voice: c.voice })),
+    players: g.players.map((p) => ({
+      name: p.name, isHuman: p.isHuman, chips: p.chips, bet: p.bet, total: p.total, folded: p.folded, allIn: p.allIn, out: p.out,
+      lastAction: p.lastAction, won: p.won, handName: p.handName, score: g.showCards && !p.folded ? p.score : 0,
+      cards: p.seat === seat || (g.showCards && !p.folded) ? p.cards : p.cards.map(() => -1),
+    })),
+  };
+}
+function netBroadcast() { for (const [pid, gu] of net.guests) if (!gu.gone) sendTo(pid, tableFor(gu.seat)); }
+function netEffect(k, extra = {}) { if (netOn('host') && net.started && !replaying) for (const [pid, gu] of net.guests) if (!gu.gone) sendTo(pid, { t: 'e', k, ...extra }); }
+// Wait for a guest to act. Someone who has dropped, or takes too long, checks or folds.
+function remoteAction(p) {
+  const gu = [...net.guests.values()].find((x) => x.seat === p.seat);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { if (net?.waiter?.seat === p.seat) { net.waiter = null; if (gu) gu.slow = true; resolve(null); } }, gu?.gone ? 1200 : gu?.slow ? 15000 : 45000);
+    net.waiter = { seat: p.seat, resolve, timer };
+  }).then((a) => {
+    if (a && gu) gu.slow = false;
+    const ok = a && ['fold', 'check', 'call', 'raise'].includes(a.type);
+    return ok ? { type: a.type, amount: Number(a.amount) || 0 } : { type: game.legal(p.seat).canCheck ? 'check' : 'fold' };
+  });
+}
+function netDone() {
+  const w = game.players.find((p) => p.chips > 0);
+  const text = `${w.name} wins the table after ${game.handNo} hands.`;
+  for (const pid of net.guests.keys()) sendTo(pid, { t: 'end', text, again: true });
+  audio.musicLevel(0); audio.fanfare(); fx.chipRain(40);
+  showOverlay({ title: `${w.name} <span>wins!</span>`, body: `<p>${text}</p>`, items: [[`${glyph('A')}Play again`, startOnline], ['Close room', () => { leaveOnline(); startScreen(); }]] });
+}
+
+// ----- joining -----
+function joinEntry(code = [1, 0, 0, 0, 0], pos = 0) {
+  const draw = () => {
+    const el = $('code-boxes');
+    if (el) el.innerHTML = code.map((d, i) => `<button class="${i === pos ? 'sel' : ''}" data-i="${i}">${d}</button>`).join('');
+  };
+  const bump = (d) => { const lo = pos === 0 ? 1 : 0, hi = pos === 0 ? 3 : 9, n = hi - lo + 1; code[pos] = lo + ((code[pos] - lo + d + n) % n); audio.tick(); draw(); };
+  showOverlay({
+    title: 'Join a <span>game</span>', closable: true, onClose: onlineMenu,
+    body: `<p>Enter the host's five-digit room code. Tap a digit to change it, or use the D-pad: left and right to move, up and down to change.</p><div id="code-boxes" class="code"></div>`,
+    items: [[`${glyph('A')}Join`, () => joinOnline(code.join(''))], [`${glyph('B')}Back`, onlineMenu]],
+  });
+  overlay.onKey = (b) => {
+    if (b === 'left' || b === 'right') { pos = (pos + (b === 'left' ? 4 : 1)) % 5; audio.tick(); draw(); return true; }
+    if (b === 'up' || b === 'down') { bump(b === 'up' ? 1 : -1); return true; }
+    return false;
+  };
+  draw();
+  $('code-boxes').onclick = (e) => { const i = e.target.dataset?.i; if (i !== undefined) { pos = +i; bump(1); } };
+}
+async function joinOnline(code) {
+  if (!/^[1-9]\d{4}$/.test(code)) return joinEntry();
+  waiting('Joining <span>room</span>', `Looking for room ${code}\u2026`, onlineMenu);
+  let conn;
+  try { conn = await connectAny(+code[0] - 1); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>Could not reach the relay for that room. Check the code and your connection.</p>', items: [['Try again', () => joinOnline(code)], [`${glyph('B')}Back`, onlineMenu]] }); }
+  if (!overlay || net) return conn.relay.close();
+  const pid = Math.random().toString(36).slice(2, 12);
+  net = { role: 'guest', relay: conn.relay, code, base: `padpoker1/${code}`, pid, seen: false, lastTurn: -1, tries: 0 };
+  net.relay.subscribe(`${net.base}/dn/${pid}`);
+  net.relay.onMessage = (_, text) => { try { guestHears(JSON.parse(text)); } catch { /* not ours */ } };
+  net.relay.onClose = async () => { // one quiet attempt to get back in
+    if (!netOn('guest')) return;
+    toast('Connection lost. Reconnecting\u2026');
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join' }); }
+    catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room.</p>', items: [['OK', startScreen]] }); }
+  };
+  const knock = () => { // keep asking until the host answers; the relay does not store messages
+    if (!netOn('guest') || net.seen) return clearInterval(net.joiner);
+    if (++net.tries > 8) { clearInterval(net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
+    sendUp({ t: 'join' });
+  };
+  net.joiner = setInterval(knock, 1500);
+  setTimeout(knock, 250);
+}
+function guestHears(m) {
+  if (!netOn('guest')) return;
+  net.seen = true;
+  if (m.t === 'full') { leaveOnline(false); return showOverlay({ title: 'Room <span>full</span>', body: '<p>That game has already started or has no seats left.</p>', items: [['OK', onlineMenu]] }); }
+  if (m.t === 'lobby') {
+    return showOverlay({
+      title: `Room <span>${net.code}</span>`,
+      body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p>`,
+      items: [['Leave', onlineMenu]],
+    });
+  }
+  if (m.t === 'end') {
+    audio.musicLevel(0);
+    const stay = m.again; // the host may deal again: stay connected and wait
+    if (!stay) leaveOnline(false);
+    return showOverlay({ title: 'Game <span>over</span>', body: `<p>${m.text}</p>${stay ? '<p>Stay here if the host is dealing again.</p>' : ''}`, items: [[stay ? 'Leave' : 'OK', () => { leaveOnline(); startScreen(); }]] });
+  }
+  if (m.t === 'e' && game) {
+    if (m.k === 'deal') { audio.tension(false); audio.newHand(); audio.musicLevel(1); ui.scatter = 0; fx.shuffle($('deck')); audio.shuffle(); game.players.forEach((p) => setMood(p.seat, 'idle')); }
+    else if (m.k === 'act') actionFx(game.players[m.seat], m.pot);
+    else if (m.k === 'collect') collectBets(tick);
+    else if (m.k === 'over') handOverFx();
+    else if (m.k === 'say') say(game.players[m.seat], m.moment);
+    return;
+  }
+  if (m.t === 's') showTable(m);
+}
+// A guest's stand-in for the game object: the same fields the renderer reads, filled from the host's picture.
+function showTable(m) {
+  const fresh = mode !== 'net' || !game || game.players.length !== m.players.length || m.handNo < game.handNo;
+  mode = 'net'; ME = m.me; settled = m.settled; cast = m.cast; peekSeat = -1; ui.hidden = false;
+  game = {
+    ...m, deck: [], dealt: null,
+    players: m.players.map((p, seat) => ({ ...p, seat, style: {} })),
+    get pot() { return this.players.reduce((sum, p) => sum + p.total, 0); },
+    legal: () => m.legal || { toCall: 0, canCheck: true, canRaise: false, minTo: 0, maxTo: 0 },
+  };
+  if (fresh) {
+    if (overlay) closeOverlay();
+    setVariantLook(m.variant);
+    $('app').style.setProperty('--mat', '#1d6f8f');
+    audio.setVenue(4);
+    squeeze = null; ui.squeezed = true; ui.mode = 'wait'; ui.resolve = null;
+    buildSeats();
+  }
+  if (m.board.length >= 3) audio.musicLevel(2);
+  if (m.stage === 'handOver' && !ui.squeezed) finishSqueeze();
+  render();
+  const myTurn = !!m.legal;
+  if (!myTurn && ['actions', 'raise', 'squeeze'].includes(ui.mode)) { if (ui.mode === 'squeeze') { ui.mode = 'wait'; renderActions(); } else finish(); } // the host moved on without us
+  if (myTurn && m.turn !== net.lastTurn) { net.lastTurn = m.turn; guestTurn(m.turn); }
+}
+async function guestTurn(turn) {
+  audio.turn(); fx.haptic('turn');
+  await waitForSqueeze();
+  if (!netOn('guest') || net.lastTurn !== turn) return;
+  if (game.stage !== 'betting' || game.toAct !== ME) return;
+  const a = await prompt('actions');
+  if (a && netOn('guest') && net.lastTurn === turn) sendUp({ t: 'act', turn, a });
+}
+
 function moreGames() {
   const d = dailyData(), done = d.scores[today()] !== undefined;
   showOverlay({
     title: 'More <span>games</span>', closable: true, onClose: startScreen,
-    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p><p><b>Pass &amp; play:</b> two to four people on one device.</p>`,
-    items: [['Daily deal', dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu], [`${glyph('B')}Back`, startScreen]],
+    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p><p><b>Pass &amp; play:</b> two to four people on one device. <b>Online:</b> each on their own.</p>`,
+    items: [['Daily deal', dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu], ['Online', onlineMenu], [`${glyph('B')}Back`, startScreen]],
   });
 }
 function dailyDone() {
@@ -315,7 +561,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 // Every pause in the game goes through here, so opening a menu really does pause play.
 const rawSleep = async (ms) => {
   await tick(fast ? 0 : ms);
-  while (overlay || replaying) await tick(120);
+  while ((overlay && mode !== 'net') || replaying) await tick(120); // an online game can't stop for one player's menu
 };
 const sleep = (ms) => rawSleep(ms * PACE[prefs.speed]); // game pauses stretch with the speed setting
 
@@ -556,11 +802,13 @@ function render() {
   const left = g.players.filter((p) => !mine(p) && !p.out && (p.chips > 0 || p.total > 0)).length;
   $('hud').innerHTML = mode === 'daily'
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
+    : mode === 'net' ? `<b>Online ${net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; you are <b>${g.players[ME].name}</b>`
     : mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
   ui.reveals = reveals;
   if (replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
+  if (netOn('host') && net.started && !replaying && g === game) netBroadcast();
   renderActions();
 }
 
@@ -896,11 +1144,11 @@ function pauseMenu() {
     title: TITLE, body: CONTROLS, closable: true,
     items: [
       ['Resume'],
-      ['Hands', () => handsScreen(pauseMenu)],
+      ...(mode === 'net' ? [] : [['Hands', () => handsScreen(pauseMenu)]]), // no replays while others are waiting on you
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
-      ['New run', () => startTable(1)],
+      mode === 'net' ? ['Leave game', () => { leaveOnline(); startScreen(); }] : ['New run', () => startTable(1)],
     ],
   });
 }
@@ -1216,6 +1464,7 @@ function onButton(b) {
     toast('Tap the screen once to turn sound on');
   }
   if (overlay) {
+    if (overlay.onKey?.(b)) return;
     if (b === 'up') overlayFocus(-overlay.cols);
     else if (b === 'down') overlayFocus(overlay.cols);
     else if (b === 'left') overlayFocus(-1);
@@ -1269,6 +1518,7 @@ function onButton(b) {
 // ---------- effects tied to game events ----------
 function actionFx(p, potBefore) {
   if (fast) return;
+  netEffect('act', { seat: p.seat, pot: potBefore });
   { // your own actions each have their own feel; other players' bets are a faint nudge
     const a0 = p.lastAction;
     const kind = a0 === 'Fold' ? 'fold' : a0 === 'Check' ? 'check' : a0.startsWith('Call') ? 'call' : a0.startsWith('All-in') ? '' : 'raise';
@@ -1303,6 +1553,7 @@ function actionFx(p, potBefore) {
 
 async function collectBets(wait = sleep) { // replays pass their own timer, since the game's is frozen during a replay
   if (fast) return;
+  netEffect('collect');
   const bets = seatEls.map((el) => el.querySelector('.bet')).filter((b) => !b.hidden);
   if (!bets.length) return;
   for (const b of bets) { fx.flyChips(b, $('pot'), 2, { stagger: 30 }); b.classList.add('leaving'); }
@@ -1312,6 +1563,7 @@ async function collectBets(wait = sleep) { // replays pass their own timer, sinc
 }
 
 function handOverFx() {
+  netEffect('over');
   const g = game, me = g.players[ME];
   lastWinner = g.result.winners[0];
   for (const p of g.players) {
@@ -1561,6 +1813,7 @@ function say(p, moment) {
   void el.offsetWidth; // restart the pop animation
   el.classList.add('show');
   audio.talk(cast[p.seat].voice);
+  netEffect('say', { seat: p.seat, moment });
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 2600);
 }
@@ -1569,7 +1822,7 @@ const EMOTES = [['up', '\u2191', 'Nice hand', 'nice', 'happy'], ['right', '\u219
 let lastTalk = 0, lastWinner = -1;
 function toggleEmotes(open = $('emotes').hidden) {
   const bar = $('emotes');
-  if (open && (!game || mode === 'pass' || !prefs.chatter)) return;
+  if (open && (!game || mode === 'pass' || mode === 'net' || !prefs.chatter)) return;
   bar.hidden = !open;
   if (!open) return;
   audio.tick();
@@ -1638,7 +1891,7 @@ function loadSave() {
   } catch { return null; }
 }
 function writeSave(s) {
-  if (mode === 'quick' || mode === 'pass') return;
+  if (mode === 'quick' || mode === 'pass' || mode === 'net') return;
   if (mode === 'daily') { // the daily deal keeps its own progress and never touches the run
     const d = dailyData();
     if (s) d.game = { date: today(), chips: s.chips, dealer: s.dealer, handNo: s.handNo }; else delete d.game;
@@ -1649,6 +1902,7 @@ function writeSave(s) {
 
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 function startTable(n, saved) {
+  leaveOnline();
   mode = 'run'; aiRng = Math.random; ME = 0; ui.hidden = false;
   if (n === 1 && !saved) memory = {};
   if (saved?.mem) memory = saved.mem;
@@ -1727,6 +1981,7 @@ async function run() {
     logStart(g, before);
     if (lastBB && g.bb !== lastBB) { fx.banner(`Blinds up \u2013 ${g.sb}/${g.bb}`, 'info'); audio.blindsUp(); fx.haptic('blinds'); }
     lastBB = g.bb;
+    netEffect('deal');
     fx.shuffle($('deck')); audio.shuffle();
     if (g.handNo === 1 && mode === 'run') { const again = g.players.find((p) => !p.isHuman && grudge(p.name)); if (again) setTimeout(() => say(again, 'again'), 1600); }
     render();
@@ -1768,14 +2023,18 @@ async function run() {
       }
       const p = g.players[g.toAct];
       let a;
-      if (p.isHuman) {
+      if (netOn('host')) { net.turn++; netBroadcast(); } // tells whoever is next that it is their move
+      if (p.isHuman && mode === 'net' && p.seat !== ME) { // someone else's device decides
+        a = await remoteAction(p);
+        if (id !== runId) return;
+      } else if (p.isHuman) {
         if (mode === 'pass') { await takeSeat(p); if (id !== runId) return; }
         audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== runId) return;
         a = await prompt('actions');
         noteHumanAction(a, g.legal(ME));
-        if (handLog && mode !== 'pass') { // what you knew when you chose: your rough chance to win and the price you were offered
+        if (handLog && mode !== 'pass' && a) { // what you knew when you chose: your rough chance to win and the price you were offered
           const L = g.legal(ME), opp = g.players.filter((q) => !mine(q) && !q.folded).length;
           handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
@@ -1785,7 +2044,7 @@ async function run() {
         }
         feats.lastAct = { type: a.type === 'call' && g.legal(ME).canCheck ? 'check' : a.type, street: g.street };
       } else {
-        const watching = mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded;
+        const watching = mode === 'net' || (mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded);
         if (!watching && !fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
         a = decide(g, p.seat, aiRng, humanProfile());
         noteDecision(g, p, a, g.legal(p.seat).toCall);
@@ -1830,12 +2089,13 @@ async function run() {
     if (slowmo) { $('app').classList.remove('zoom'); audio.tension(false); fx.shake(5, 300); }
     if (id !== runId) return;
     settled = true;
-    const kos = mode === 'pass' ? 0 : recordHand(g);
-    if (mode !== 'pass') noteHand(g);
+    const friendly = mode === 'pass' || mode === 'net'; // games among people: no stats, stickers or notes
+    const kos = friendly ? 0 : recordHand(g);
+    if (!friendly) noteHand(g);
     if (mode === 'run' && !bossMode && me.won > 0) { // they remember who took their last chip
       for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) memory[p.name] = { ko: grudge(p.name) + 1 };
     }
-    if (mode !== 'pass') checkHandStickers(g, kos);
+    if (!friendly) checkHandStickers(g, kos);
     // bonuses are paid by the house, on top of the pot
     const bonus = (twist === 'bounty' ? BOUNTY * kos : 0) + 100 * (perks.hunter || 0) * kos
       + (me.won > 0 ? Math.round(me.won * 0.1 * (perks.rakeback || 0)) : 0);
@@ -1854,13 +2114,15 @@ async function run() {
     setTimeout(handOverBanter, 700);
     writeSave({ table, boss: bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks, mem: memory });
     await sleep(500);
-    await prompt('continue');
+    if (mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
+    else await prompt('continue');
     if (id !== runId) return;
     if (mode === 'pass') { ui.hidden = true; continue; }
+    if (mode === 'net') continue;
     if (me.chips === 0) return mode === 'daily' ? dailyDone() : mode === 'quick' ? quickDone() : busted();
     if (stale) return location.reload(); // new version deployed: pick it up between hands
   }
-  if (mode === 'pass') passDone(); else if (mode === 'daily') dailyDone(); else if (mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
+  if (mode === 'net') { if (netOn('host')) netDone(); } else if (mode === 'pass') passDone(); else if (mode === 'daily') dailyDone(); else if (mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
 }
 
 // ---------- new-version check ----------
@@ -1894,8 +2156,13 @@ startInput(onButton, (on) => {
   document.body.classList.toggle('gp', on);
   toast(on ? 'Controller connected' : 'Controller disconnected');
 });
+addEventListener('pagehide', () => { if (netOn('guest')) sendUp({ t: 'leave' }); }); // closing the tab frees your seat's clock
 applyPrefs();
 startScreen();
+{ // opened from a shared link: go straight to that room
+  const join = new URLSearchParams(location.search).get('join');
+  if (join) { window.history.replaceState(null, '', location.pathname); joinOnline(join); } // window.history: plain 'history' is the hand list here
+}
 window.__poker = { get game() { return game; }, ui, runCard, dailyCard };
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
