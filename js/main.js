@@ -360,7 +360,7 @@ function cardEl(c, face, cls = '', cover = false) {
   const r = RANKS[c >> 2], s = c & 3;
   el.dataset.c = c;
   el.append(h('div', `in face s${s} ${s === 1 || s === 2 ? 'red' : 'black'}`,
-    `<span class="r">${r === 'T' ? '10' : r}</span><span class="s">${SUITS[s]}</span>`));
+    `<span class="r">${r === 'T' ? '10' : r}</span><span class="s">${SUITS[s]}</span><i class="ix">${r === 'T' ? '10' : r}<br>${SUITS[s]}</i>`));
   return el;
 }
 
@@ -670,7 +670,7 @@ function waitForSqueeze() {
   addEventListener('pointerdown', (e) => { if (squeeze && e.target.closest?.('.seat.me .cards')) y0 = e.clientY; });
   addEventListener('pointermove', (e) => {
     if (y0 === null || !squeeze) return;
-    squeeze.drag = Math.max(0, Math.min(1, (y0 - e.clientY) / (squeeze.el.offsetHeight * 0.7)));
+    squeeze.drag = Math.max(0, Math.min(1, (y0 - e.clientY) / (squeeze.el.offsetHeight * 1.1))); // a long, gentle drag so a finger can stop part-way
   });
   for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { y0 = null; if (squeeze) squeeze.drag = 0; });
 }
