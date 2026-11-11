@@ -17,7 +17,7 @@ export const cardsText = (cs) => cs.map(cardText).join(' ');
 
 export function logStart(g, before) {
   S.handLog = {
-    no: g.handNo, table: S.table, where: S.mode === 'daily' ? 'Daily deal' : S.mode === 'quick' ? 'Quick table' : S.bossMode ? 'Boss' : `Table ${S.table}`,
+    no: g.handNo, table: S.table, where: S.mode === 'daily' ? 'Daily deal' : S.mode === 'quick' ? 'Sit & go' : S.mode === 'cash' ? 'Cash game' : S.bossMode ? 'Boss' : `Table ${S.table}`,
     blinds: `${g.sb}/${g.bb}`, hole: [...g.players[S.ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
     // enough to play the hand back exactly: who sat where, the stacks, the shuffled deck and every action
     cast: g.players.map((p) => p.name), before, deck: g.dealt, variant: g.variant, actions: [], mine: [], net: 0, mat: getComputedStyle($('app')).getPropertyValue('--mat'),

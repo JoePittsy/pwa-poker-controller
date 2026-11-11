@@ -15,7 +15,7 @@ import './config.js';
 import './perks.js';
 import './util.js';
 import './daily.js';
-import './quick.js';
+import './tables.js';
 import './pass.js';
 import './online.js';
 import './menus.js';

@@ -8,7 +8,7 @@ import { notebookScreen } from './notebook.js';
 import { leaveOnline, onlineMenu } from './online.js';
 import { passMenu } from './pass.js';
 import { ui } from './prefs.js';
-import { quickMenu } from './quick.js';
+import { bankHtml, cashLeave, settleBank, tablesMenu } from './tables.js';
 import { helpMenu, howTo, replayHand, settingsMenu } from './replay.js';
 import { rankCheck, rankHtml, ranksScreen } from './rank.js';
 import { reviewScreen } from './review.js';
@@ -75,6 +75,7 @@ export const TITLE = '<span class="logo">Poker<span>Pad</span></span>';
 export const best = () => { try { return +localStorage.getItem('padpoker.best') || 0; } catch { return 0; } };
 export const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 export function startScreen() {
+  settleBank();
   const saved = loadSave();
   const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
   const d = dailyData(), days = streak(d.scores, today()), daily = `Daily deal${d.scores[today()] !== undefined ? ' \u2713' : ''}${days > 1 ? ` \u00b7 ${days} days` : ''}`;
@@ -83,8 +84,8 @@ export function startScreen() {
     : [[`${glyph('A')}Play`, firstPlay]];
   showOverlay({
     title: TITLE, compact: true,
-    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${rankHtml()}`,
-    items: [...run, ['Online', onlineMenu], [daily, dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu],
+    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${rankHtml()}${bankHtml()}`,
+    items: [...run, ['Online', onlineMenu], [daily, dailyScreen], ['Tables', tablesMenu], ['Pass & play', passMenu],
       ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
   rankCheck();
@@ -100,6 +101,7 @@ export function firstPlay() {
 export function exitToMenu() {
   const g = S.game, kind = S.mode;
   if (kind === 'net') leaveOnline();
+  else if (kind === 'cash' && g && S.cash) cashLeave(g);
   else if (g && (kind === 'run' || kind === 'daily') && ['betting', 'streetEnd'].includes(g.stage)) {
     const me = g.players[S.ME];
     const chips = g.players.map((p) => (p === me ? p.chips : p.chips + p.total));
@@ -129,7 +131,7 @@ export function pauseMenu() {
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
-      S.mode === 'net' ? ['Leave game', exitToMenu] : [S.mode === 'run' || S.mode === 'daily' ? 'Save & main menu' : 'Quit to menu', exitToMenu],
+      S.mode === 'net' ? ['Leave game', exitToMenu] : [S.mode === 'run' || S.mode === 'daily' ? 'Save & main menu' : S.mode === 'cash' ? 'Cash out' : 'Quit to menu', exitToMenu],
     ],
   });
 }

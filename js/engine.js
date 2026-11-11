@@ -6,7 +6,8 @@ import { newDeck, scoreHand, describe } from './cards.js';
 export const BLIND_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [50, 100], [75, 150], [100, 200], [150, 300], [200, 400]];
 
 export class Game {
-  constructor({ players, chips = 1000, handsPerLevel = 8, rng = Math.random, variant = 'holdem' }) {
+  constructor({ players, chips = 1000, handsPerLevel = 8, rng = Math.random, variant = 'holdem', startLevel = 0 }) {
+    this.startLevel = startLevel; // a cash game starts at its stake and stays there
     this.variant = variant; // 'holdem' | 'omaha' | 'short'
     this.rng = rng;
     this.handsPerLevel = handsPerLevel;
@@ -40,7 +41,7 @@ export class Game {
     const alive = this.players.filter((p) => !p.out);
     if (alive.length < 2) return false;
     this.handNo++;
-    const lvl = Math.min(Math.floor((this.handNo - 1) / this.handsPerLevel), BLIND_LEVELS.length - 1);
+    const lvl = Math.min(this.startLevel + Math.floor((this.handNo - 1) / this.handsPerLevel), BLIND_LEVELS.length - 1);
     [this.sb, this.bb] = BLIND_LEVELS[lvl];
     this.dealer = this.nextSeat(this.dealer, (p) => !p.out);
     this.deck = this.nextDeck || newDeck(this.rng, this.variant); // nextDeck: replay a recorded hand

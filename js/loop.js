@@ -17,7 +17,7 @@ import { leaveOnline, netBroadcast, netDone, netEffect, netOn, remoteAction, sta
 import { passDone, takeSeat } from './pass.js';
 import { grudge, pickPerk } from './perks.js';
 import { DIFFICULTY, prefs, ui } from './prefs.js';
-import { quickDone } from './quick.js';
+import { cashBust, cashHand, quickDone } from './tables.js';
 import { BURN_MS, buildSeats, dealOrder, render } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
 import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
@@ -54,7 +54,7 @@ function readAct(g, p, a) {
   if (said) setTimeout(() => { if (S.game === g) say(who, said); }, 900);
 }
 export function writeSave(s) {
-  if (S.mode === 'quick' || S.mode === 'pass' || S.mode === 'net') return;
+  if (S.mode === 'quick' || S.mode === 'cash' || S.mode === 'pass' || S.mode === 'net') return;
   if (S.mode === 'daily') { // the daily deal keeps its own progress and never touches the run
     const d = dailyData();
     if (s) d.game = { date: today(), chips: s.chips, dealer: s.dealer, handNo: s.handNo }; else delete d.game;
@@ -125,6 +125,7 @@ export async function run() {
       g.rng = mulberry(dailySeed(g.handNo + 1));
       S.aiRng = mulberry(dailySeed(g.handNo + 1) ^ 0x5bd1e995);
     }
+    if (S.mode === 'cash') cashHand(g);
     return g.startHand();
   };
   let before = null; // stacks and button just before each deal, for the hand history
@@ -300,7 +301,7 @@ export async function run() {
       }
       continue;
     }
-    if (me.chips === 0) return S.mode === 'daily' ? dailyDone() : S.mode === 'quick' ? quickDone() : busted();
+    if (me.chips === 0) return S.mode === 'daily' ? dailyDone() : S.mode === 'quick' ? quickDone() : S.mode === 'cash' ? cashBust() : busted();
     if (S.stale) return location.reload(); // new version deployed: pick it up between hands
   }
   if (S.mode === 'net') { if (netOn('host')) netDone(); } else if (S.mode === 'pass') passDone(); else if (S.mode === 'daily') dailyDone(); else if (S.mode === 'quick') quickDone(); else if (me.chips > 0) tableCleared(); else busted();
