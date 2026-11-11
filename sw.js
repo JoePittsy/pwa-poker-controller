@@ -1,6 +1,6 @@
 // Network-first with cache fallback: always fresh when online, fully playable offline.
 // 'no-cache' makes the browser revalidate with the server instead of trusting its own HTTP cache.
-const CACHE = 'pad-poker-v63';
+const CACHE = 'pad-poker-v64';
 const ASSETS = ['./', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/main.js', 'js/engine.js', 'js/cards.js', 'js/ai.js', 'js/input.js', 'js/audio.js', 'js/music.js', 'js/fx.js', 'js/banter.js', 'js/faces.js', 'js/stickers.js', 'js/share.js', 'js/net.js',
   'fonts/bricolage.woff2', 'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];

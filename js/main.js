@@ -512,7 +512,7 @@ function hostHears(m) {
     if (gu) { if (net.started) sendTo(m.pid, tableFor(gu.seat)); }
     else if (net.guests.size >= 16) return void sendTo(m.pid, { t: 'full' });
     else if (net.started || m.watch || lobbyGuests().length >= 5) { // no seat to give: they watch instead
-      gu = { name: 'Spectator', seat: -1, watch: true, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu);
+      gu = { name: 'Spectator', asked: cleanName(m.name), seat: -1, watch: true, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu);
       if (net.started) { toast('Someone is watching'); return void sendTo(m.pid, tableFor(-1)); }
     }
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
@@ -521,12 +521,13 @@ function hostHears(m) {
     if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(overlay.focus); }
   } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.stamp === stampOf(game)) {
     const w = net.waiter; net.waiter = null; w.resolve(m.a);
-  } else if (m.t === 'chat' && gu && !gu.watch && net.started && performance.now() - (gu.lastChat || 0) > 1500) { // show it here and pass it on to everyone else
+  } else if (m.t === 'chat' && gu && net.started && performance.now() - (gu.lastChat || 0) > 1500) { // show it here and pass it on to everyone else
     gu.lastChat = performance.now();
     const text = m.key ? EMOTES.find((e) => e[3] === m.key)?.[2] : cleanChat(m.text);
     if (!text) return;
-    showChat(gu.seat, text);
-    for (const [pid, x] of net.guests) if (x !== gu && !x.kicked && !x.away) sendTo(pid, { t: 'e', k: 'chat', seat: gu.seat, text });
+    const who = gu.watch ? gu.asked || 'Spectator' : ''; // a spectator has no seat to speak from, so their name goes with it
+    showChat(gu.seat, text, who);
+    for (const [pid, x] of net.guests) if (x !== gu && !x.kicked && !x.away) sendTo(pid, { t: 'e', k: 'chat', seat: gu.seat, text, who });
   } else if (m.t === 'leave' && gu) setAway(gu, m.pid);
 }
 function startOnline() {
@@ -754,7 +755,7 @@ function guestHears(m) {
     else if (m.k === 'collect') collectBets(tick);
     else if (m.k === 'over') handOverFx();
     else if (m.k === 'say') say(game.players[m.seat], m.moment);
-    else if (m.k === 'chat') showChat(m.seat, cleanChat(m.text));
+    else if (m.k === 'chat') showChat(m.seat, cleanChat(m.text), cleanName(m.who));
     else if (m.k === 'banner') { fx.banner(m.text, 'info'); audio.chips(5, 0, 4); }
     return;
   }
@@ -2150,8 +2151,17 @@ function bubble(seat, text, ms = 2600) {
   if (shift && !seatEls[seat].classList.contains('me')) el.style.marginLeft = `${shift}px`;
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms);
 }
-function showChat(seat, text) {
-  if (!prefs.chatter || !text || !game?.players[seat]) return; // table talk off: other players are muted too
+// Spectators speak from the rail: one bubble beside the table, with their name.
+function crowdSay(who, text) {
+  const el = $('crowd');
+  el.textContent = ''; el.append(h('b', '', `${who}: `), text); // names and messages are plain text
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2600 + text.length * 50);
+}
+function showChat(seat, text, who = '') {
+  if (!prefs.chatter || !text) return; // table talk off: other players are muted too
+  if (seat < 0) { crowdSay(who || 'Spectator', text); return audio.talk(3); }
+  if (!game?.players[seat]) return;
   bubble(seat, text, 2200 + text.length * 50);
   audio.talk(cast[seat]?.voice ?? seat);
   setMood(seat, 'happy', 1400);
@@ -2160,7 +2170,8 @@ function netSay(key, text) { // from this device to the rest of the table
   const now = performance.now();
   if (now - lastTalk < 1500 || !text) return;
   lastTalk = now;
-  bubble(ME, text, 2200 + text.length * 50); audio.talk(0);
+  if (net?.watch) crowdSay('You', text); else bubble(ME, text, 2200 + text.length * 50);
+  audio.talk(0);
   if (netOn('host')) netEffect('chat', { seat: ME, text });
   else sendUp(key ? { t: 'chat', key } : { t: 'chat', text });
 }
@@ -2179,7 +2190,7 @@ function chatEntry() {
 }
 function toggleEmotes(open = $('emotes').hidden) {
   const bar = $('emotes');
-  if (open && (!game || mode === 'pass' || !prefs.chatter || net?.watch)) return; // spectators only watch
+  if (open && (!game || mode === 'pass' || !prefs.chatter)) return;
   bar.hidden = !open;
   if (!open) return;
   audio.tick();
