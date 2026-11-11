@@ -680,3 +680,5 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 .dialog.wide .ware p { font-size: 1.15rem; margin-top: .35rem; }
 .ware em.fam { display: inline-block; margin-left: .5rem; padding: .02rem .55rem; border-radius: .6rem; font-style: normal; font-size: 1rem; font-weight: 700; color: var(--ink); vertical-align: middle; }
 .ware i.short { font-style: normal; color: var(--red); font-weight: 700; }
+
+.floatfx.lost { color: var(--red); }

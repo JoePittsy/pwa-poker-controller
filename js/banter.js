@@ -113,7 +113,7 @@ for (const [name, [nice, hurry, ouch, ha]] of Object.entries(REPLIES)) Object.as
 const last = {};
 // Lines anyone can say: used when a character has none of their own for the moment.
 const ANYONE = {
-  wise: ["I'm done folding to you.", "You can't have it every time.", 'Not this time. I see you.'],
+  wise: ['That is the last one you steal.', 'Next time, I call.', 'Enjoy it. I am watching you now.'], // said as they fold for the last time
   bully: ['You fold too easily.', "I'll keep betting, then.", 'Easy money.'],
   fooled: ['Fine. You had it.', 'Noted: sometimes you do have it.'],
   stood: ['So you do call.', 'All right, all right.'],

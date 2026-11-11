@@ -17,10 +17,11 @@ test('reads are kept per opponent', () => {
   for (let i = 0; i < READ_AT; i++) noteGaveUp(mem, 'Rex');
   assert.equal(mem.Dot, undefined);
   assert.equal(adjust({ foldToBet: 0.4, aggression: 0.3 }, mem.Dot).aggression, 0.3);
-  assert.equal(adjust({ foldToBet: 0.4, aggression: 0.3 }, mem.Rex).aggression, 0.55);
+  assert.equal(adjust({ foldToBet: 0.4, aggression: 0.3 }, mem.Rex).aggression, 0.8);
 });
 test('a read changes how they play you, within bounds', () => {
   assert.deepEqual(adjust({ foldToBet: 0.4, aggression: 0.3 }, { bully: true }), { foldToBet: 0.65, aggression: 0.3 });
+  assert.equal(adjust({ foldToBet: 0.4, aggression: 0.3, shove: 0.8 }, { ko: 1 }).shove, 0.8); // how often you shove is not forgotten once they know you
   assert.equal(adjust({ foldToBet: 0.9, aggression: 0.9 }, { bully: true, wise: true }).foldToBet, 0.95);
 });
 test('a read that costs them is dropped, and can be earned again', () => {

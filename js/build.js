@@ -15,7 +15,7 @@ export const PERKS = {
   showman: { name: 'Showman', text: 'Pots you win at a showdown pay 20% extra.', family: 'value', stack: true },
   madehand: { name: 'Made Hand', text: 'Winning a showdown with three of a kind or better pays 100.', family: 'value', stack: true },
   bigstack: { name: 'Big Stack', text: 'Start every table with 30% more chips.', family: 'guard', stack: true },
-  lifeline: { name: 'Lifeline', text: 'The next time you bust, stay in with a short stack instead.', family: 'guard', stack: true },
+  lifeline: { name: 'Lifeline', text: 'The next time you bust, stay in with 30% of a starting stack instead. Used up when it saves you.', family: 'guard', stack: true },
   slowblinds: { name: 'Slow Clock', text: 'Blinds take 2 more hands to rise.', family: 'guard', stack: true },
   peek: { name: 'Peek', text: 'Each hand, one opponent shows you one of their cards.' },
 };

@@ -7,8 +7,8 @@ export const CHARACTERS = {
   Mav: { tag: 'Wild', color: 'var(--red)', voice: 1, style: { loose: 0.8, aggr: 0.8, tell: 'fastBluff' } },
   Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.25, aggr: 0.3, tell: 'slowBluff' } },
   Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
-  Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
-  Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.38, aggr: 0.45 } },
+  Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.2, tell: 'slowStrong' } },
+  Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.38, aggr: 0.35 } },
   // newcomers: they start turning up from Table 4
   Zed: { tag: 'Maniac', color: '#ff8a3d', voice: 9, style: { loose: 0.95, aggr: 0.95 } },
   Flo: { tag: 'Nit', color: '#c7e36a', voice: 10, style: { loose: 0.1, aggr: 0.5, tell: 'slowStrong' } },

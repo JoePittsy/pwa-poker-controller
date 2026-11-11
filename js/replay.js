@@ -184,7 +184,7 @@ function tripLine() {
   const t = S.trip, n = S.table, bits = [];
   if (!t) return '';
   if (t.deal !== 'regular') bits.push(`<b>${dealOf(t).name}:</b> ${dealOf(t).text}`);
-  if (!S.bossMode) { const opp = S.game.players.length - 1, half = Math.ceil(opp / 2); bits.push(`<b>Bonus:</b> win the table in ${fastPar(opp)} hands or fewer and it pays ${SPEED.fast * 100}% extra (${quickPar(opp)} or fewer: ${SPEED.quick * 100}%).${opp > 1 ? ` <b>Walking away:</b> once ${half} opponent${half === 1 ? ' is' : 's are'} out, the menu button (\u2630) lets you leave with what you have won so far.` : ''}`); }
+  if (!S.bossMode) { const opp = S.game.players.length - 1, half = Math.ceil(opp / 2); bits.push(`<b>Bonus:</b> win the table in ${fastPar(opp)} hands or fewer and ${SPEED.fast * 100}% is added to what it puts in your pocket (${quickPar(opp)} or fewer: ${SPEED.quick * 100}%).${opp > 1 ? ` <b>Walking away:</b> once ${half} opponent${half === 1 ? ' is' : 's are'} out, the menu button (\u2630) lets you leave with what you have won so far.` : ''}`); }
   if (t.risky === n) bits.push('<b>The hard way:</b> sharper opponents with more chips, and a bigger cash-out.');
   if (t.boost === n) bits.push('<b>Boosted:</b> you start with 25% more.');
   if (t.bribe === n && !S.bossMode) bits.push('<b>Paid off:</b> one opponent stayed away.');
@@ -290,6 +290,6 @@ export function bustSummary() {
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot won')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('A')}New run`, newRun], ...(keyHands().length ? [['Review key hands', () => reviewScreen(keyHands(), 0, bustSummary)]] : []), ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)], ['Main menu', startScreen]],
+    items: [[`${glyph('A')}Again, same deal`, () => newRun(S.trip?.deal)], ['Change deal', () => newRun()], ...(keyHands().length ? [['Review key hands', () => reviewScreen(keyHands(), 0, bustSummary)]] : []), ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)], ['Main menu', startScreen]],
   });
 }

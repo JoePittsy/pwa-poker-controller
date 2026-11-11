@@ -83,27 +83,28 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     const s = strength(p.cards) + (loose - 0.5) * 6 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 0.6 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
+    const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves, without the character's wishful thinking
     const shove = toCall >= p.chips; // calling puts us all-in
     if (cost > 4) think += 0.35;
     // A big bet is a decision for the whole stack. How good a hand that takes depends on who we are (a careful
     // player wants more, a loose one less) and on who is betting: against a habitual shover, far less.
     if (cost > 12 || (shove && toCall > 5 * bb)) {
       think += 0.3;
-      const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves: wishful thinking does not count here
       return raw >= 10 + (0.5 - loose) * 3 - vsShover * 6 ? passive() : giveUp();
     }
     if (s >= 11) {
       const premium = s >= 13 + (0.5 - loose) * 3; // only the very best hands keep raising a raised pot
       if (cost > 6 && !premium) return passive();
+      if (raised && raw < 10) return passive(); // re-raising takes real cards, whoever you are
       return rng() > 0.85 ? passive() : raise(1, { strong: true });
     }
     if (s >= 8) {
-      if (!raised) return rng() < 0.4 + 0.5 * aggr ? raise(0.8) : passive();
+      if (!raised) return rng() < 0.1 + 0.85 * aggr ? raise(0.8) : passive(); // a passive character mostly just calls
       if (cost > 9) return giveUp();
-      return rng() < 0.15 * aggr ? raise(0.9) : passive();
+      return raw >= 9 && rng() < 0.15 * aggr ? raise(0.9) : passive();
     }
     if (s >= 6) {
-      if (!raised) return rng() < 0.25 * aggr ? raise(0.8) : passive();
+      if (!raised) return rng() < 0.3 * aggr * aggr ? raise(0.8) : passive();
       return cost <= 3.5 ? passive() : giveUp();
     }
     if (s >= 4.5) return cost <= 1 && rng() < 0.2 + 0.75 * loose ? passive() : giveUp();
@@ -111,12 +112,12 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     return giveUp();
   }
 
-  let e = equity(p.cards, g.board, Math.min(opp, 3), variant === 'omaha' ? 90 : 200, rng, variant) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
+  let e = equity(p.cards, g.board, Math.min(opp, 3), variant === 'omaha' ? 90 : 200, rng, variant) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2 * (0.4 + loose); // careful players misjudge least
   if (truth !== null) e = e * (1 - cheat) + truth * cheat;
   let strong = e > 0.75;
   if (toCall === 0) {
-    if (e > 0.7) return rng() < 0.6 + 0.35 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
-    if (e > 0.5) return rng() < 0.25 + 0.5 * aggr ? raise(0.4 + rng() * 0.2) : passive();
+    if (e > 0.7) return rng() < 0.45 + 0.5 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
+    if (e > 0.5) return rng() < 0.1 + 0.6 * aggr ? raise(0.4 + rng() * 0.2) : passive();
     if (opp <= 2 && rng() < 0.12 * aggr * bluffy) { think += 0.2; return raise(0.6, { bluff: true }); }
     return passive();
   }

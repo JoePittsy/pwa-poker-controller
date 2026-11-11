@@ -72,6 +72,10 @@ export function handOverFx() {
     const net = p.won - p.total; // what the hand actually made them, not the size of the pot
     if (net > 0) setTimeout(() => fx.floatText(plate, `+${net.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
   }
+  if (g.result.showdown && !me.folded && me.total > me.won) { // a showdown you lost: say what it cost you
+    const cost = me.total - me.won;
+    setTimeout(() => fx.floatText(S.seatEls[S.ME].querySelector('.plate'), `\u2212${cost.toLocaleString()}`, 'lost'), 350);
+  }
   if (me.won > 0) {
     const size = me.won >= total && me.won > 40 * g.bb ? 3 : me.won > 12 * g.bb ? 2 : 1;
     audio.win(size);

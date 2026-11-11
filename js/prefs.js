@@ -28,6 +28,6 @@ export const cycle = (obj, cur) => { const k = Object.keys(obj); return k[(k.ind
 /* runId: see state.js */
 /* seatEls: see state.js */
 // mode: 'wait' | 'actions' | 'raise' | 'continue'
-export const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false, throwPower: 0, scatter: 0, revealGap: 0 };
+export const ui = { mode: 'wait', focus: 1, raiseTo: 0, resolve: null, shown: '', reveals: 0, boardShown: 0, slowRiver: false, squeezed: true, hidden: false, noAnim: false, throwPower: 0, scatter: 0, revealGap: 0 };
 /* settled: see state.js */ // false between the last action of a hand and the moment the result is shown
 /* overlay: see state.js */

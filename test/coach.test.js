@@ -46,9 +46,16 @@ test('a call just short of its price is marginal, not fair', () => {
   assert.equal(habitOf(D('call', 0.25, 0.29)), 'looseCall');
   assert.equal(judge(D('call', 0.3, 0.29))[0], 'good');
 });
-test('the chance shown is marked down when facing a bet, by the size of the bet', () => {
+test('the chance shown is marked down when facing a bet, by its size and the street', () => {
   assert.equal(facingBet(0.5, 0, 100), 0.5);
-  assert.ok(Math.abs(facingBet(0.5, 100, 200) - 0.4) < 1e-9); // a pot-sized bet: a fifth off
+  assert.ok(Math.abs(facingBet(0.5, 100, 200) - 0.3) < 1e-9); // a pot-sized bet on the flop: four tenths off
   assert.ok(facingBet(0.5, 20, 120) > facingBet(0.5, 100, 200));
-  assert.ok(facingBet(0.5, 5000, 5100) >= 0.5 * (1 - 0.24) - 1e-9); // capped
+  assert.ok(facingBet(0.5, 100, 200, 'river') < facingBet(0.5, 100, 200, 'flop'));
+  assert.ok(facingBet(0.5, 5000, 5100, 'river') >= 0.5 * 0.4 - 1e-9); // never more than six tenths off
+});
+test('folding to a big river bet with a modest hand is not called a mistake', () => {
+  // 375 into 460 on the river holding a hand that beats random cards 71% of the time
+  const eq = facingBet(0.71, 375, 835, 'river');
+  assert.ok(eq < 0.45, `still ${eq}`);
+  assert.equal(judge(D('fold', eq, 375 / (835 + 375)))[0], 'good');
 });

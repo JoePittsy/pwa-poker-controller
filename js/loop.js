@@ -24,7 +24,7 @@ import { passDone, takeSeat } from './pass.js';
 import { grudge } from './perks.js';
 import { DIFFICULTY, prefs, ui, PACE } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
-import { BURN_MS, buildSeats, dealOrder, render, seenBoard } from './render.js';
+import { BURN_MS, buildSeats, dealOrder, render, seenBoard, coachOdds } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
 import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
 import { S } from './state.js';
@@ -44,6 +44,7 @@ export function loadSave() {
     return s;
   } catch { return null; }
 }
+let lastCoach = null;
 // What has happened between you and each opponent in the hand being played (see reads.js).
 let duel = { hand: -1, bet: false, called: new Set() };
 function readAct(g, p, a) {
@@ -214,6 +215,7 @@ export async function run() {
         audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== S.runId) return;
+        lastCoach = prefs.coach ? coachOdds(g) / 100 : null; // what the coach is showing for this decision: the review must agree with it
         a = await prompt('actions');
         noteHumanAction(a, g.legal(S.ME));
         if (S.handLog && S.mode !== 'pass' && a) { // what you knew when you chose: your rough chance to win and the price you were offered
@@ -221,7 +223,7 @@ export async function run() {
           S.handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
             to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
-            eq: facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot + L.toCall), need: L.toCall / (g.pot + L.toCall),
+            eq: lastCoach !== null ? lastCoach : facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot, g.street), need: L.toCall / (g.pot + L.toCall),
           });
         }
         feats.lastAct = { type: a.type === 'call' && g.legal(S.ME).canCheck ? 'check' : a.type, street: g.street };
@@ -316,7 +318,7 @@ export async function run() {
     await sleep(500);
     if (S.mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
     else if (prefs.autoNext && me.chips > 0 && g.players.filter((p) => p.chips > 0).length > 1) { // carries on by itself; the button skips the wait
-      await Promise.race([prompt('continue'), autoNext(g.result.showdown ? 3600 : 1900)]);
+      await Promise.race([prompt('continue'), autoNext(g.result.showdown ? 3000 : 1400)]);
       if (ui.mode === 'continue') finish();
     } else await prompt('continue'); // the end of a table or of your chips always waits for you
     if (id !== S.runId) return;

@@ -19,8 +19,9 @@ const money = (n) => n.toLocaleString();
 export const pocketHtml = (explain = false) => `<p class="bank">Pocket <b>${money(S.trip?.pocket || 0)}</b>${explain ? ' <small>this run\u2019s winnings so far, to spend in the shop between tables</small>' : ''}${S.trip && S.trip.deal !== 'regular' ? ` &middot; ${dealOf(S.trip).name}` : ''}</p>`;
 
 // A new run starts by choosing the deal it is played on.
-export function newRun() {
+export function newRun(same = '') { // same: a deal to start on straight away, skipping the picker
   const deals = dealsFor(myRank().index);
+  if (same && deals.some((d) => d.key === same && !d.locked)) { setNextTrip(newTrip(same)); return startTable(1); }
   showOverlay({
     title: 'Pick your <span>deal</span>', perky: true, closable: true, onClose: startScreen,
     body: '<p>A run costs nothing. Chips you win go in your <b>pocket</b> to spend in the shop; a quarter of what is left at the end joins your <b>bankroll</b>.</p>',

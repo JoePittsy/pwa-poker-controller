@@ -159,7 +159,7 @@ export function render() {
     if (!p.folded && face && known && turned.length >= 3) {
       const v = scoreHand(p.cards, turned, g.variant);
       hand = describe(v, g.variant === 'short');
-      if (mine(p) && g.stage !== 'handOver' && onBoard(v, turned, g.variant === 'short')) hand += ' <i class="shared">on the board</i>'; // everyone has it
+      if (mine(p) && onBoard(v, turned, g.variant === 'short')) hand += ' (on the board)'; // everyone has it
     }
     const handEl = el.querySelector('.hand');
     if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
@@ -195,8 +195,9 @@ export function render() {
     const slow = ui.slowRiver && i === 4;
     const wait = BURN_MS + k * 170;
     if (ui.noAnim) { board.append(cardEl(g.board[i], true)); ui.boardShown = i + 1; continue; }
+    const dealtIn = g.handNo;
     setTimeout(() => { // the card has landed and turned: now it may be named
-      if (S.game !== g || g.board.length <= i) return;
+      if (S.game !== g || g.handNo !== dealtIn || g.board.length <= i) return; // (a timer left over from an earlier hand must not count)
       ui.boardShown = Math.max(ui.boardShown ?? 0, i + 1);
       render();
     }, wait + (slow ? 1300 : 560)); // putting a table back: no dealing, no sound
@@ -223,7 +224,7 @@ export function render() {
   S.seatEls.forEach((s, i) => { for (const el of s.querySelectorAll('.card[data-c]')) mark(el, `${i}:${el.dataset.c}`); });
 
   $('pot').hidden = !g.pot || over;
-  fx.roll($('pot-n'), over ? 0 : g.pot, { dur: 300 });
+  fx.roll($('pot-n'), over ? 0 : Math.max(0, g.pot), { dur: 300 });
   if (g.pot && !over) setPile($('pot-chips'), chipCount(g.pot, 3, 16));
   const msg = over ? g.result.text : '';
   if ($('msg').textContent !== msg) {
@@ -261,6 +262,6 @@ export function coachOdds(g) {
   const opp = g.players.filter((p) => !mine(p) && !p.folded).length, board = seenBoard(g);
   const L = g.stage === 'betting' && g.toAct === S.ME ? g.legal(S.ME) : { toCall: 0 };
   const key = `${S.table}:${g.handNo}:${board.length}:${opp}:${L.toCall}`;
-  if (S.coachCache.key !== key) S.coachCache = { key, pct: Math.round(facingBet(equity(g.players[S.ME].cards, board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant), L.toCall, g.pot + L.toCall) * 100) };
+  if (S.coachCache.key !== key) S.coachCache = { key, pct: Math.round(facingBet(equity(g.players[S.ME].cards, board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant), L.toCall, g.pot, g.street) * 100) };
   return S.coachCache.pct;
 }

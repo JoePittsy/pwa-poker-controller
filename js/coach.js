@@ -5,7 +5,7 @@
 export function judge(d) {
   const e = Math.round(d.eq * 100), n = Math.round(d.need * 100);
   if (d.type === 'fold') {
-    return d.eq > d.need + 0.1 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
+    return d.eq > d.need + 0.15 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
       : ['good', 'Fold', `A sound fold: about ${e}% to win against the ${n}% the call needed.`];
   }
   if (d.type === 'call') {
@@ -78,11 +78,13 @@ export function worstOf(hand) {
 
 /**
  * A chance worked out against random cards runs high when someone is betting: people bet with more than
- * random cards. This marks it down by how big the bet is against the pot (nothing to call: no change;
- * a pot-sized bet: about a fifth off), so the number shown at the table can be trusted when it matters.
+ * random cards, and the bigger the bet and the later the street, the more they have. This marks the chance
+ * down accordingly. toCall is what you must put in; pot is everything in the middle including that bet;
+ * street is 'preflop' | 'flop' | 'turn' | 'river'. A pot-sized bet takes off about four tenths, more on the river.
  */
-export function facingBet(eq, toCall, pot) {
+export function facingBet(eq, toCall, pot, street = 'flop') {
   if (!(toCall > 0)) return eq;
-  const size = Math.min(1.2, toCall / Math.max(1, pot - toCall));
-  return eq * (1 - 0.2 * size);
+  const size = Math.min(1.2, toCall / Math.max(1, pot - toCall)); // the bet as a share of what was there before it
+  const late = street === 'river' ? 1.25 : street === 'turn' ? 1.1 : 1;
+  return eq * (1 - Math.min(0.6, 0.4 * size * late));
 }

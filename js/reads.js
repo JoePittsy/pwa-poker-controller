@@ -35,8 +35,9 @@ export function noteShowdownWon(mem, name, { youBet, youCalledThem }) {
 export function adjust(profile, m) {
   if (!m) return profile;
   return {
+    ...profile, // everything else known about you carries through unchanged
     foldToBet: Math.min(0.95, profile.foldToBet + (m.bully ? 0.25 : 0)), // bluff you more
-    aggression: Math.min(0.95, profile.aggression + (m.wise ? 0.25 : 0)), // call you lighter
+    aggression: Math.min(0.95, profile.aggression + (m.wise ? 0.5 : 0)), // call you lighter
   };
 }
 /** For the notebook: what they currently think of you, in words. */
