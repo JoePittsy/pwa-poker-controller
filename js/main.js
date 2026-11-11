@@ -396,10 +396,11 @@ async function hostOnline() {
   }, 1000);
   hostLobby();
 }
-const lobbyGuests = () => [...net.guests.values()].filter((gu) => !gu.kicked);
+const lobbyGuests = () => [...net.guests.values()].filter((gu) => !gu.kicked && !gu.watch); // the people with a seat
+const watchers = () => [...net.guests.values()].filter((gu) => gu.watch);
 function tellLobby() {
   const names = seatNames();
-  for (const [pid, x] of net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', names, you: x.name, info: cfgLine(net.cfg), v: ver() });
+  for (const [pid, x] of net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', names, you: x.name, watch: !!x.watch, watching: watchers().length, info: cfgLine(net.cfg), v: ver() });
 }
 function hostLobby(focus = 0) {
   const c = net.cfg, people = 1 + lobbyGuests().length;
@@ -411,7 +412,7 @@ function hostLobby(focus = 0) {
   const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
   showOverlay({
     title: `Room <span>${net.code}</span>`, compact: true,
-    body: `<p>Others join with this code from More games, Online, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}</p>`,
+    body: `<p>Others join with this code from More games, Online, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>`,
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {
@@ -442,6 +443,7 @@ function hostBeat() {
 }
 function setAway(gu, pid) {
   if (gu.away || gu.kicked) return;
+  if (gu.watch) { net.guests.delete(pid); if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(overlay.focus); } return; } // a spectator leaving changes nothing
   if (!net.started) { net.guests.delete(pid); tellLobby(); if (overlay?.lobby) hostLobby(); return; } // just frees the seat in the lobby
   gu.away = true;
   toast(`${gu.name} lost connection`);
@@ -451,7 +453,7 @@ function setAway(gu, pid) {
 // or when the host replaces them with a computer player.
 function holdCheck() {
   if (!netOn('host') || !net.started) return;
-  const missing = [...net.guests.values()].filter((gu) => gu.away && !gu.kicked && game && !game.players[gu.seat].out && game.players[gu.seat].chips + game.players[gu.seat].total > 0);
+  const missing = [...net.guests.values()].filter((gu) => gu.away && !gu.kicked && !gu.watch && game && !game.players[gu.seat].out && game.players[gu.seat].chips + game.players[gu.seat].total > 0);
   if (!missing.length) {
     if (!net.hold) return;
     if (clock) clock.end += performance.now() - net.hold.since; // the clock did not run while we waited
@@ -508,13 +510,18 @@ function hostHears(m) {
   if (m.t === 'join') {
     if (m.v !== ver() && m.v !== 'dev' && ver() !== 'dev') return void sendTo(m.pid, { t: 'ver', v: ver() }); // a different build would not understand our messages
     if (gu) { if (net.started) sendTo(m.pid, tableFor(gu.seat)); }
-    else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
+    else if (net.guests.size >= 16) return void sendTo(m.pid, { t: 'full' });
+    else if (net.started || m.watch || lobbyGuests().length >= 5) { // no seat to give: they watch instead
+      gu = { name: 'Spectator', seat: -1, watch: true, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu);
+      if (net.started) { toast('Someone is watching'); return void sendTo(m.pid, tableFor(-1)); }
+    }
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
     gu.asked = cleanName(m.name); gu.face = FACES.includes(m.face) ? m.face : '';
+    if (!net.started && !!m.watch !== !!gu.watch && (m.watch || lobbyGuests().length < 5)) { gu.watch = !!m.watch; gu.seat = gu.watch ? -1 : 0; if (gu.watch) gu.name = 'Spectator'; } // changed their mind in the lobby
     if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(overlay.focus); }
   } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.stamp === stampOf(game)) {
     const w = net.waiter; net.waiter = null; w.resolve(m.a);
-  } else if (m.t === 'chat' && gu && net.started && performance.now() - (gu.lastChat || 0) > 1500) { // show it here and pass it on to everyone else
+  } else if (m.t === 'chat' && gu && !gu.watch && net.started && performance.now() - (gu.lastChat || 0) > 1500) { // show it here and pass it on to everyone else
     gu.lastChat = performance.now();
     const text = m.key ? EMOTES.find((e) => e[3] === m.key)?.[2] : cleanChat(m.text);
     if (!text) return;
@@ -555,7 +562,7 @@ const stampOf = (g) => `${g.handNo}|${g.street}|${g.toAct}|${g.players.map((p) =
 function tableFor(seat) {
   const g = game, c = net.cfg;
   return {
-    t: 's', me: seat, n: ++net.n, stamp: stampOf(g), settled, held: !!net.hold,
+    t: 's', me: Math.max(0, seat), watch: seat < 0, watching: watchers().length, n: ++net.n, stamp: stampOf(g), settled, held: !!net.hold,
     look: { mat: VENUES[c.venue][1], venue: c.venue, back: c.back },
     clock: clock ? { seat: clock.seat, left: Math.max(0, clock.end - performance.now()), total: clock.total } : null,
     handNo: g.handNo, dealer: g.dealer, sb: g.sb, bb: g.bb, street: g.street, stage: g.stage, toAct: g.toAct, board: g.board,
@@ -659,7 +666,7 @@ async function joinOnline(code) {
   net.relay.onClose = async () => { // one quiet attempt to get back in
     if (!netOn('guest')) return;
     toast('Connection lost. Reconnecting…');
-    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() }); }
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!net.wantWatch, v: ver() }); }
     catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room. Open the link or enter the code again to return to your seat.</p>', items: [['OK', startScreen]] }); }
   };
   const knock = () => { // keep asking until the host answers; the relay does not store messages
@@ -669,7 +676,7 @@ async function joinOnline(code) {
       clearInterval(net.joiner); leaveOnline(false); waiting('Joining <span>room</span>', `Looking for room ${code}\u2026`, onlineMenu); return joinOnline(code);
     }
     if (++net.tries > 8) { clearInterval(net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
-    if (net.key) sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() });
+    if (net.key) sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!net.wantWatch, v: ver() });
     else net.relay.publish(`${net.base}/up`, JSON.stringify({ pid, k: net.mine.pub }));
   };
   net.again = setInterval(() => { // keep sending our answer until the host's table shows it arrived
@@ -699,7 +706,7 @@ async function guestRaw(raw) {
     net.hostPub = raw.k;
     net.key = await sharedKey(net.mine.priv, raw.k);
     try { localStorage.setItem('padpoker.seat', JSON.stringify({ code: net.code, pid: net.pid, key: await exportKey(net.key) })); } catch { /* private mode */ }
-    return sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() });
+    return sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!net.wantWatch, v: ver() });
   }
   if (!net.key || !raw.c) return;
   guestHears(await unseal(net.key, raw));
@@ -721,8 +728,8 @@ function guestHears(m) {
     if (overlay?.naming) return; // typing a name: the lobby is redrawn afterwards
     showOverlay({
       title: `Room <span>${net.code}</span>`,
-      body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
-      items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
+      body: `<p>${m.watch ? 'You are <b>watching</b>: you will see the table, and cards only at showdown.' : `You are <b>${m.you}</b>.`} Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}${m.watching ? ` &middot; ${m.watching} watching` : ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
+      items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!net.wantWatch, v: ver() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], [m.watch ? 'Take a seat' : 'Watch only', () => { net.wantWatch = !m.watch; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!net.wantWatch, v: ver() }); }], ['Leave', onlineMenu]],
     });
     overlay.lobby = true;
     return;
@@ -758,9 +765,10 @@ function showTable(m) {
   if (m.n <= net.lastN) return; // an older picture that arrived late
   net.lastN = m.n;
   if (net.sent && net.sent.stamp !== m.stamp) net.sent = null; // the host has our answer
-  const fresh = mode !== 'net' || !game || game.players.length !== m.players.length || m.handNo < game.handNo
+  const fresh = mode !== 'net' || !game || game.players.length !== m.players.length || m.handNo < game.handNo || !!m.watch !== !!net.watch
     || m.cast.some((x, i) => x.isHuman !== cast[i]?.isHuman); // someone was replaced by a computer player
-  mode = 'net'; ME = m.me; settled = m.settled; cast = m.cast; peekSeat = -1; ui.hidden = false;
+  mode = 'net'; ME = m.me; settled = m.settled; cast = m.cast; peekSeat = -1;
+  ui.hidden = !!m.watch; // a spectator sits behind the host's chair and sees no cards until a showdown
   game = {
     ...m, deck: [], dealt: null,
     players: m.players.map((p, seat) => ({ ...p, seat, style: {} })),
@@ -768,6 +776,7 @@ function showTable(m) {
     legal: () => m.legal || { toCall: 0, canCheck: true, canRaise: false, minTo: 0, maxTo: 0 },
   };
   clock = m.clock ? { seat: m.clock.seat, end: performance.now() + m.clock.left, total: m.clock.total, lastTick: clock?.seat === m.clock.seat ? clock.lastTick : 0, frozen: m.held } : null;
+  net.watch = !!m.watch;
   if (fresh) {
     const mid = game.handNo > 0 && !overlay?.lobby; // rejoining a table in progress: no dealing animation
     if (overlay && !overlay.hold) closeOverlay();
@@ -976,7 +985,7 @@ function render() {
         cards.style.setProperty('--dx', `${dr.left + dr.width / 2 - cr.left - cr.width / 2}px`);
         cards.style.setProperty('--dy', `${dr.top + dr.height / 2 - cr.top - cr.height / 2}px`);
         // every card starts exactly on top of the deck, at the deck's size, and slides off it
-        const sq = mine(p) && prefs.squeeze && mode !== 'pass' && !ui.noAnim && !replaying; // your cards stay face down until you squeeze them
+        const sq = mine(p) && prefs.squeeze && mode !== 'pass' && !ui.hidden && !ui.noAnim && !replaying; // your cards stay face down until you squeeze them
         const els = p.cards.map((c, k) => {
           const e = cardEl(c, ui.noAnim ? seen(k) : sq || (seen(k) && !mine(p)), '', sq);
           if (sq) e.firstChild.classList.add('sq');
@@ -992,7 +1001,7 @@ function render() {
           e.classList.add('deal');
         });
         if (sq) startSqueeze(cards, sig);
-        if (mine(p) && !sq && !ui.noAnim && mode !== 'pass') { // your cards land face down, then turn over by themselves
+        if (mine(p) && !sq && !ui.noAnim && mode !== 'pass' && !ui.hidden) { // your cards land face down, then turn over by themselves
           setTimeout(() => {
             if (cards.dataset.sig !== sig) return;
             cards.replaceChildren(...p.cards.map((c, k) => {
@@ -1026,7 +1035,7 @@ function render() {
       const pct = `${Math.round(odds[i] * 100)}%`;
       const html = `${hand ? `${hand} ` : ''}<b>${pct}</b>`;
       if (handEl.innerHTML !== html) { handEl.innerHTML = html; fx.pop(handEl, 1.3); }
-    } else if (mine(p) && mode !== 'pass' && prefs.coach && known && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
+    } else if (mine(p) && mode !== 'pass' && !ui.hidden && prefs.coach && known && !p.folded && p.cards.length && g.stage !== 'handOver' && g.stage !== 'idle') {
       const html = `${hand ? `${hand} ` : ''}<b>${coachOdds(g)}%</b>`; // coach: rough chance your hand is best
       if (handEl.innerHTML !== html) handEl.innerHTML = html;
     } else if (handEl.textContent !== hand || handEl.children.length) handEl.textContent = hand;
@@ -1086,7 +1095,7 @@ function render() {
   const left = g.players.filter((p) => !mine(p) && !p.out && (p.chips > 0 || p.total > 0)).length;
   $('hud').innerHTML = mode === 'daily'
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
-    : mode === 'net' ? `<b>Online ${net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; you are <b>${g.players[ME].name}</b>`
+    : mode === 'net' ? `<b>Online ${net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; ${net?.watch ? '<b>watching</b>' : `you are <b>${g.players[ME].name}</b>`}${g.watching && !net?.watch ? ` &middot; ${g.watching} watching` : ''}`
     : mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${bossMode ? '<b>Boss</b>' : `Table <b>${table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`;
@@ -2170,7 +2179,7 @@ function chatEntry() {
 }
 function toggleEmotes(open = $('emotes').hidden) {
   const bar = $('emotes');
-  if (open && (!game || mode === 'pass' || !prefs.chatter)) return;
+  if (open && (!game || mode === 'pass' || !prefs.chatter || net?.watch)) return; // spectators only watch
   bar.hidden = !open;
   if (!open) return;
   audio.tick();
