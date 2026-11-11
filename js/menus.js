@@ -1,4 +1,4 @@
-import { newRun } from './tripui.js';
+import { newRun, walkAway, walkOffer } from './tripui.js';
 import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
@@ -131,6 +131,7 @@ export function pauseMenu() {
     title: TITLE, body: '', closable: true, compact: true,
     items: [
       ['Resume'],
+      ...(walkOffer() >= 0 ? [[`Walk away \u00b7 bank ${walkOffer().toLocaleString()}`, walkAway]] : []),
       [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
       [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],
       ...(S.mode === 'net' && S.net?.watch ? [['Take a seat', askSeat]] : []),

@@ -19,6 +19,7 @@ an exit code.
 | `layout-iphone` | Nothing overlaps or runs off screen at iPhone 14 landscape size |
 | `single-player-soak` | A run plays on hand after hand without errors |
 | `run-deal-shop-route` | A run from the deal picker through a cleared table, the shop, the route choice, a reload and a bust |
+| `run-walk-away-and-speed` | Walking away once half the table is out, and the bonus for a fast clear |
 | `replay` | A recorded hand plays back and the live game resumes exactly |
 | `pass-and-play` | Players sharing a device never see each other's cards |
 | `backup` | A backup made on one device restores on another |

@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST } from '../js/trip.js';
+import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST, speedBonus, canWalk, clearedCount, fastPar, quickPar } from '../js/trip.js';
 
 test('a regular trip starts with an empty pocket; Backed starts with money', () => {
-  assert.deepEqual(newTrip(), { deal: 'regular', pocket: 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0 });
+  assert.deepEqual(newTrip(), { deal: 'regular', pocket: 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0 });
   assert.equal(newTrip('backed').pocket, 2000);
   assert.equal(newTrip('nonsense').deal, 'regular');
 });
@@ -53,4 +53,27 @@ test('a saved trip is made safe to use', () => {
   assert.deepEqual(readTrip(undefined), newTrip());
   assert.deepEqual(readTrip({ deal: 'short', pocket: '1500', spent: -4, risky: 'x', boost: 2.9 }), { ...newTrip('short'), pocket: 1500, boost: 2 });
   for (const d of Object.values(DEALS)) assert.ok(d.name && d.text);
+});
+
+test('a fast clear pays more, scaled to the size of the table', () => {
+  assert.deepEqual([fastPar(3), quickPar(3)], [24, 39]);
+  assert.deepEqual([24, 25, 39, 40].map((h) => speedBonus(h, 3)), [0.5, 0.25, 0.25, 0]);
+  assert.equal(speedBonus(30, 5), 0.5);
+  assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.5), 4500);
+});
+test('you may walk away once half your opponents are out, but not before, not at the end, and never from a boss', () => {
+  const T = (...chips) => chips.map((c) => ({ chips: c }));
+  assert.equal(canWalk(T(2000, 1000, 1000, 0), 0, false), false); // one of three
+  assert.equal(canWalk(T(3000, 1000, 0, 0), 0, false), true); // two of three
+  assert.equal(canWalk(T(2500, 0, 800, 700, 0), 0, false), true); // two of four
+  assert.equal(canWalk(T(4000, 0, 0, 0), 0, false), false); // it is already won
+  assert.equal(canWalk(T(0, 1000, 0, 0), 0, false), false); // nothing to walk with
+  assert.equal(canWalk(T(1500, 500), 0, true), false); // a boss
+  assert.equal(canWalk(T(900, 0, 1100), 2, false), true); // your seat need not be 0
+});
+test('tables you walked away from do not count as cleared', () => {
+  assert.equal(clearedCount({ walked: 1 }, 3), 2);
+  assert.equal(clearedCount(null, 3), 3);
+  assert.equal(clearedCount({ walked: 5 }, 2), 0);
+  assert.equal(readTrip({ walked: 2 }).walked, 2);
 });
