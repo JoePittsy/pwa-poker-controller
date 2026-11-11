@@ -23,7 +23,7 @@ export async function drawCard({ kicker, title, sub, tiles, accent = C.blue }) {
   // logo
   ctx.save(); ctx.translate(90, 150); ctx.rotate(-0.05);
   ctx.font = font(92); ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = C.ink; ctx.fillText('PAD POKER', 8, 8);
+  ctx.fillStyle = C.ink; ctx.fillText('POKERPAD', 8, 8);
   ctx.fillStyle = C.paper; ctx.fillText('PAD ', 0, 0);
   ctx.fillStyle = C.yellow; ctx.fillText('POKER', ctx.measureText('PAD ').width, 0);
   ctx.restore();
@@ -53,13 +53,13 @@ export async function drawCard({ kicker, title, sub, tiles, accent = C.blue }) {
 }
 
 // Returns 'shared', 'saved' or 'failed'.
-export async function shareCard(card, filename = 'pad-poker.png') {
+export async function shareCard(card, filename = 'pokerpad.png') {
   const cv = await drawCard(card);
   const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
   if (!blob) return 'failed';
   const file = new File([blob], filename, { type: 'image/png' });
   try {
-    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'Pad Poker' }); return 'shared'; }
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'PokerPad' }); return 'shared'; }
   } catch (e) {
     if (e?.name === 'AbortError') return 'shared'; // they closed the sheet
     // fall through to a download, e.g. when the press did not count as a tap

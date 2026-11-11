@@ -1,6 +1,6 @@
 {
-  "name": "Pad Poker",
-  "short_name": "Pad Poker",
+  "name": "PokerPad",
+  "short_name": "PokerPad",
   "description": "Texas Hold'em against AI, playable with a game controller.",
   "start_url": "./",
   "scope": "./",

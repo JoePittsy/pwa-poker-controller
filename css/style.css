@@ -94,11 +94,11 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .card.deal { animation: deal .55s cubic-bezier(.3, .7, .3, 1) both; }
 .card.drop { animation: drop .62s ease-out both; }
 .card.slam { animation: slam 1.25s cubic-bezier(.5, 0, .8, .4) both; z-index: 3; }
-@keyframes slam { /* hangs over the table as an ink silhouette, then lands and shows its face */
-  from { opacity: 0; transform: translateY(-2.6em) rotate(-16deg) scale(2.2); filter: brightness(0); }
-  25% { opacity: 1; transform: translateY(-2.2em) rotate(8deg) scale(2); filter: brightness(0); }
-  78% { transform: translateY(-2em) rotate(-5deg) scale(2.1); filter: brightness(0); }
-  80% { transform: translateY(0) rotate(0deg) scale(.92); filter: brightness(1); }
+@keyframes slam { /* hangs over the table face down, then lands and shows its face */
+  from { opacity: 0; transform: translateY(-2.6em) rotate(-16deg) scale(2.2); }
+  25% { opacity: 1; transform: translateY(-2.2em) rotate(8deg) scale(2); }
+  78% { transform: translateY(-2em) rotate(-5deg) scale(2.1); }
+  80% { transform: translateY(0) rotate(0deg) scale(.92); }
   90% { transform: scale(1.1); }
 }
 .card.flip { animation: flip .45s ease-out both; }
@@ -156,6 +156,8 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 .seat.me .cards { scale: calc(1 + var(--peel, 0) * .07); touch-action: none; }
 .cards.revealed { --peel: 0; }
 .in.cover { position: absolute; inset: 0; z-index: 1; animation: uncover .62s linear both; }
+.card.slam .in.cover { animation: slamcover 1.25s linear both; } /* the back stays on until the card hits the table */
+@keyframes slamcover { 0%, 79% { opacity: 1; } 80%, 100% { opacity: 0; } }
 @keyframes uncover { 0%, 64% { opacity: 1; } 65%, 100% { opacity: 0; } }
 #pot {
   position: absolute; right: calc(100% + 1.6rem); top: 1.3rem; text-align: right; line-height: 1;
