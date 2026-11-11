@@ -111,8 +111,15 @@ const REPLIES = {
 for (const [name, [nice, hurry, ouch, ha]] of Object.entries(REPLIES)) Object.assign(LINES[name], { nice: [nice], hurry: [hurry], ouch: [ouch], ha: [ha] });
 
 const last = {};
+// Lines anyone can say: used when a character has none of their own for the moment.
+const ANYONE = {
+  wise: ["I'm done folding to you.", "You can't have it every time.", 'Not this time. I see you.'],
+  bully: ['You fold too easily.', "I'll keep betting, then.", 'Easy money.'],
+  fooled: ['Fine. You had it.', 'Noted: sometimes you do have it.'],
+  stood: ['So you do call.', 'All right, all right.'],
+};
 export function line(name, moment) {
-  const opts = LINES[name]?.[moment];
+  const opts = LINES[name]?.[moment] || ANYONE[moment];
   if (!opts) return '';
   let pick = opts[Math.floor(Math.random() * opts.length)];
   if (opts.length > 1 && pick === last[name + moment]) pick = opts[(opts.indexOf(pick) + 1) % opts.length];
