@@ -61,19 +61,37 @@ const lower = (t) => t.replace(/^(Two Pair|Pair|Full House|Straight Flush|Straig
 // cards.js keeps its rank names private; describe() of a bare high card, "Nine high", is the one way to get one out.
 const rankName = (r) => describe(r * 13 ** 4).replace(/ high$/, '');
 const ranksOf = (score) => { const ks = []; for (let i = 0; i < 5; i++) { ks.unshift(score % 13); score = Math.floor(score / 13); } return ks; };
+const named = (r) => `${/^[AE]/.test(rankName(r)) ? 'an' : 'a'} ${rankName(r)}`;
+// Flushes are decided by the next card down, straights never by a kicker (a different score is a different name).
+const decider = (score) => (Math.floor(score / 13 ** 5) === 5 ? 'next' : 'kicker');
+const noKicker = (score) => [4, 8].includes(Math.floor(score / 13 ** 5));
+// Whether the banners may explain this showdown: the player is in it, and it is not a game among people sharing a device.
+const explainable = (g) => { const me = g?.players[S.ME]; return !!me && !!g.result?.showdown && !me.folded && S.mode !== 'pass' && S.mode !== 'net'; };
 export function beatLine(g) {
   const me = g?.players[S.ME];
-  if (!me || !g.result?.showdown || me.folded || me.total <= me.won || S.mode === 'pass' || S.mode === 'net') return '';
+  if (!explainable(g) || me.total <= me.won) return '';
   const w = g.players[g.result.winners.find((s) => s !== S.ME)];
   if (!w?.handName || !me.handName) return '';
   let theirs = lower(w.handName), mine = lower(me.handName);
   if (theirs === mine) { // the same hand, so the fifth card or the kicker decided it
     const a = ranksOf(w.score), b = ranksOf(me.score), i = a.findIndex((r, k) => r !== b[k]);
-    if (i < 0) return ''; // a split pot
-    const named = (r) => `${/^[AE]/.test(rankName(r)) ? 'an' : 'a'} ${rankName(r)}`;
-    theirs += ` with ${named(a[i])} kicker`; mine += ` with ${named(b[i])}`;
+    if (i < 0 || noKicker(w.score)) return ''; // a split pot
+    const word = decider(w.score);
+    theirs += ` with ${named(a[i])} ${word}`; mine += ` with ${named(b[i])}`;
   }
   return `${w.name} had ${theirs}; you had ${mine}.`;
+}
+// The same, when you win: "Same pair of Fours: your Queen kicker beat their Two."
+export function kickerLine(g) {
+  const me = g?.players[S.ME];
+  if (!explainable(g) || !(me.won > 0) || !me.handName || noKicker(me.score)) return '';
+  const rivals = g.players.filter((p) => p !== me && !p.folded && !p.out);
+  if (rivals.some((p) => p.score >= me.score)) return ''; // a split pot, or someone beat you
+  const same = rivals.filter((p) => p.handName === me.handName).sort((x, y) => y.score - x.score)[0];
+  if (!same) return '';
+  const a = ranksOf(me.score), b = ranksOf(same.score), i = a.findIndex((r, k) => r !== b[k]);
+  if (i < 0) return '';
+  return `Same ${lower(me.handName).replace(/^a /, '')}: your ${rankName(a[i])} ${decider(me.score)} beat their ${rankName(b[i])}.`;
 }
 // The floats (+15, \u221210) are unlabelled, so the first three times ever the player's own says what it is.
 const floatHint = () => {
@@ -84,6 +102,18 @@ const floatHint = () => {
     return ' this hand';
   } catch { return ''; }
 };
+
+// Puts a sentence in a banner a moment after the result lands, waiting out any banner already on screen (a bonus or lifeline).
+function explain(g, text) {
+  if (!text) return;
+  let tries = 0;
+  const show = () => {
+    if (S.game !== g) return;
+    if (document.querySelector('#fx .bannerfx') && tries++ < 6) return void setTimeout(show, 500);
+    fx.banner(text, 'info beat');
+  };
+  setTimeout(show, 1200);
+}
 
 export function handOverFx() {
   netEffect('over');
@@ -105,18 +135,10 @@ export function handOverFx() {
   if (me.total > me.won) { // any hand that cost you chips, folded or not: say what it cost
     const cost = me.total - me.won, hint = floatHint();
     setTimeout(() => fx.floatText(S.seatEls[S.ME].querySelector('.plate'), `\u2212${cost.toLocaleString()}${hint}`, 'lost'), 350);
-    const text = beatLine(g);
-    if (text) {
-      let tries = 0; // wait for the end of any banner already on screen (a bonus or lifeline) rather than overlap it
-      const show = () => {
-        if (S.game !== g) return;
-        if (document.querySelector('#fx .bannerfx') && tries++ < 6) return void setTimeout(show, 500);
-        fx.banner(text, 'info beat');
-      };
-      setTimeout(show, 1200);
-    }
+    explain(g, beatLine(g));
   }
   if (me.won > 0) {
+    explain(g, kickerLine(g));
     const size = me.won >= total && me.won > 40 * g.bb ? 3 : me.won > 12 * g.bb ? 2 : 1;
     audio.win(size);
     setTimeout(() => {

@@ -7,7 +7,7 @@ const D = (type, eq, need, extra = {}) => ({ type, street: 'flop', eq, need, toC
 test('a call is judged against its price', () => {
   assert.equal(judge(D('call', 0.15, 0.3))[0], 'bad');
   assert.equal(judge(D('call', 0.4, 0.3))[0], 'good');
-  assert.equal(judge(D('call', 0.8, 0.3))[0], 'meh');
+  assert.equal(judge(D('call', 0.9, 0.3))[0], 'meh');
 });
 test('a fold is only a mistake when the price was clearly good', () => {
   assert.equal(judge(D('fold', 0.6, 0.2))[0], 'bad');
@@ -17,7 +17,7 @@ test('each decision falls into one habit', () => {
   assert.equal(habitOf(D('call', 0.15, 0.3)), 'looseCall');
   assert.equal(habitOf(D('fold', 0.6, 0.2)), 'tightFold');
   assert.equal(habitOf(D('check', 0.8, 0)), 'missedValue');
-  assert.equal(habitOf(D('call', 0.8, 0.3)), 'missedValue');
+  assert.equal(habitOf(D('call', 0.9, 0.3)), 'missedValue');
   assert.equal(habitOf(D('raise', 0.2, 0)), 'bluff');
   assert.equal(habitOf(D('raise', 0.5, 0)), 'thinBet');
   assert.equal(habitOf(D('raise', 0.7, 0)), 'sound');
@@ -108,4 +108,67 @@ test('rangeEquity is repeatable for a seed and leaves its inputs alone', () => {
 test('omaha falls back to random hands', () => {
   const hole = hands('As Ad Kh Kd');
   assert.equal(rangeEquity(hole, [], [careful], 100, mulberry32(5), 'omaha'), equity(hole, [], 1, 100, mulberry32(5), 'omaha'));
+});
+
+// ---- advice wording ----
+test('a bet is judged against an average hand\'s share for the number of opponents', () => {
+  const R = (eq, opp, extra = {}) => judge(D('raise', eq, 0, { toCall: 0, opp, ...extra }));
+  assert.equal(R(0.42, 3)[0], 'good'); // fair is 25%, 33% needed
+  assert.match(R(0.42, 3)[2], /Betting for value at about 42% to win, against 3 opponents\./);
+  assert.match(R(0.7, 1)[2], /against 1 opponent\./);
+  assert.equal(R(0.3, 3)[0], 'meh'); // between 15% and 33%
+  assert.match(R(0.3, 3)[2], /A thin bet at about 30%: fine if they fold often, costly if called\./);
+  assert.equal(R(0.1, 3)[0], 'bluff');
+  assert.equal(R(0.38, 1)[0], 'bluff'); // heads-up fair is 50%, bluff below 40%
+  assert.equal(R(0.45, 1)[0], 'meh');
+  assert.equal(R(0.58, 1)[0], 'good');
+});
+test('without opp a bet is judged as against one opponent', () => {
+  assert.equal(judge(D('raise', 0.57, 0))[0], 'meh');
+  assert.equal(judge(D('raise', 0.58, 0))[0], 'good');
+  assert.equal(judge(D('raise', 0.39, 0))[0], 'bluff');
+});
+test('a normal preflop open is a standard raise, not a thin bet', () => {
+  const open = (eq, extra = {}) => judge({ type: 'raise', street: 'preflop', eq, need: 0.1, toCall: 10, pot: 30, to: 60, opp: 3, ...extra });
+  assert.equal(open(0.3)[0], 'good'); // fair 25%, +5
+  assert.equal(open(0.3)[2], 'A standard raise with a hand that is ahead of the field.');
+  assert.equal(open(0.28)[0], 'meh');
+  assert.equal(open(0.3, { toCall: 100, pot: 150 })[0], 'meh'); // a re-raise is not an open
+  assert.equal(open(0.3, { street: 'flop' })[0], 'meh');
+});
+test('an all-in is judged as an all-in', () => {
+  const A = (eq, extra = {}) => judge(D('raise', eq, 0, { allin: true, ...extra }));
+  assert.deepEqual(A(0.56).slice(0, 2), ['good', 'All in']);
+  assert.equal(A(0.56)[2], 'All in as the favourite: about 56% to win if called.');
+  assert.equal(A(0.54)[0], 'meh'); // a heads-up shove at 54% is a coin-flip
+  assert.equal(A(0.5)[0], 'meh');
+  assert.match(A(0.5)[2], /A coin-flip all-in: about 50% if called\. Fine when the blinds are high, reckless when they are not\./);
+  assert.equal(A(0.35)[0], 'bluff');
+  assert.equal(A(0.35)[2], 'An all-in bluff: about 35% if called, so it needed a fold.');
+  assert.equal(A(0.28, { opp: 3 })[0], 'meh'); // fair 25%
+  assert.equal(A(0.3, { opp: 3 })[0], 'good');
+  assert.equal(judge(D('raise', 0.54, 0))[0], 'meh'); // not flagged all-in: the ordinary bet rule
+});
+test('a call is only a raise opportunity above 85%', () => {
+  assert.equal(judge(D('call', 0.72, 0.3))[0], 'good');
+  assert.equal(judge(D('call', 0.72, 0.3))[2], 'A good call: about 72% to win for a price that needed 30%.');
+  assert.equal(judge(D('call', 0.85, 0.3))[0], 'good');
+  assert.equal(judge(D('call', 0.86, 0.3))[0], 'meh');
+  assert.match(judge(D('call', 0.86, 0.3))[2], /a raise would have built a bigger pot/);
+});
+test('the close-call band does not excuse a call with almost no chance', () => {
+  const [kind, , why] = judge(D('call', 0.06, 0.11));
+  assert.equal(kind, 'bad');
+  assert.match(why, /^Too loose/);
+  assert.equal(habitOf(D('call', 0.06, 0.11)), 'looseCall');
+  assert.equal(judge(D('call', 0.16, 0.2))[0], 'meh'); // still a close call from 15% up
+  assert.match(judge(D('call', 0.16, 0.2))[2], /close call/);
+  assert.equal(judge(D('call', 0.14, 0.18))[0], 'bad');
+});
+test('the coach does not scold a small preflop call', () => {
+  const call = (eq, need, toCall, pot, street = 'preflop') => ({ type: 'call', street, eq, need, toCall, pot, to: 0 });
+  assert.equal(worstOf({ mine: [call(0.14, 0.4, 10, 100)] }), null); // 26 points short, price under a quarter of the pot
+  assert.equal(worstOf({ mine: [call(0.14, 0.4, 25, 100)] })?.street, 'preflop'); // a quarter of the pot or more
+  assert.equal(worstOf({ mine: [call(0.05, 0.4, 10, 100)] })?.street, 'preflop'); // 35 points short
+  assert.equal(worstOf({ mine: [call(0.14, 0.4, 10, 100, 'flop')] })?.street, 'flop'); // only preflop is excused
 });

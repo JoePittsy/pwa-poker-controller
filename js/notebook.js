@@ -20,7 +20,7 @@ export const saveNotes = () => { try { localStorage.setItem('padpoker.notes', JS
 export function noteDecision(g, p, a, toCall) {
   const fl = S.handFlags[p.seat] ||= {};
   if (g.street === 'preflop' && ((a.type === 'call' && toCall > 0) || a.type === 'raise')) fl.vpip = true;
-  if (a.type === 'raise') fl.raised = true;
+  if (a.type === 'raise' && g.street === 'preflop') fl.raised = true;
   const tell = p.style?.tell;
   if ((a.bluff && ['fastBluff', 'slowBluff', 'bigBluff'].includes(tell) && a.type === 'raise')
     || (a.strong && ['slowStrong', 'fastStrong', 'smallValue'].includes(tell))) fl.clue = true;
@@ -47,7 +47,7 @@ export function notebookScreen(back) {
     const tell = c.trick ? c.trick
       : !c.style.tell ? (n.hands >= 20 ? 'No tell that you can see' : 'Still watching\u2026')
         : n.clues >= CLUES_NEEDED ? TELLS[c.style.tell] : `Tell: ${n.clues} of ${CLUES_NEEDED} clues (a clue is a telltale move they made, seen when they showed their cards)`;
-    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>${n.hands >= 10 ? `Plays ${pct(n.vpip, n.hands)} of hands &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands` : `${n.hands} hands seen so far`}</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
+    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>${n.hands >= 10 ? `Plays ${pct(n.vpip, n.hands)} of hands &middot; raises ${pct(Math.min(n.raised, n.vpip), n.hands)} before the flop &middot; ${n.hands} hands` : `${n.hands} hands seen so far`}</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
   }).join('') + (unmet ? `<p class="more">${unmet} more to meet</p>` : '');
   showOverlay({
     title: 'Notebook', wide: true, closable: true, onClose: back,
