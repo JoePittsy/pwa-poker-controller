@@ -1,0 +1,23 @@
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const errs = [];
+  const p = await (await b.newContext({ viewport: { width: 750, height: 369 } })).newPage(); p.on('pageerror', (e) => errs.push(e.message));
+  await p.addInitScript(() => { if (localStorage.getItem('padpoker.seen')) return; localStorage.setItem('padpoker.seen', '1'); localStorage.setItem('padpoker.prefs', JSON.stringify({ speed: 'Fast' })); localStorage.setItem('padpoker.save', JSON.stringify({ table: 2, owed: true, perks: { rakeback: 1 }, trip: { deal: 'regular', pocket: 2600, banked: 3900 } })); });
+  await p.goto('http://localhost:8080/'); await p.waitForTimeout(600);
+  const tap = async (label) => { await p.evaluate((label) => [...document.querySelectorAll('#overlay .btn')].find((x) => x.textContent.includes(label)).click(), label); await p.waitForTimeout(250); };
+  const ware = () => p.evaluate(() => document.getElementById('ware')?.innerText.replace(/\n+/g, ' / '));
+  const btns = () => p.evaluate(() => [...document.querySelectorAll('#overlay .btn')].map((x) => x.innerText + (x.classList.contains('focus') ? ' [selected]' : '') + (x.classList.contains('off') ? ' (off)' : '')).join(' | '));
+  const S = (f) => p.evaluate(async (f) => { const { S } = await import('/js/state.js'); return new Function('S', `return ${f}`)(S); }, f);
+  await tap('Continue');
+  console.log('shop opens:', await btns()); console.log('  shows:', await ware(), '| dialog', await p.evaluate(() => { const d = document.querySelector('#overlay .dialog').getBoundingClientRect(); return `${Math.round(d.top)}..${Math.round(d.bottom)}`; }));
+  await p.screenshot({ path: 'shopsel1.png' });
+  const second = await p.evaluate(() => [...document.querySelectorAll('#overlay .btn')][1].innerText.split(' · ')[0]);
+  await tap(second); console.log(`tapped "${second}" once: pocket`, await S('S.trip.pocket'), '| shows:', (await ware()).slice(0, 160));
+  await tap('One fewer'); console.log('tapped One fewer once: shows:', await ware()); await p.screenshot({ path: 'shopsel2.png' });
+  await tap('The hard way'); console.log('tapped hard way once: shows:', await ware(), '| still in shop:', await p.evaluate(() => document.querySelector('#overlay h1').textContent));
+  await tap(second); await tap(second); console.log(`tapped "${second}" twice: pocket`, await S('S.trip.pocket'), 'perks', JSON.stringify(await S('S.perks')), '|', await btns());
+  await p.keyboard.press('ArrowDown'); await p.waitForTimeout(150); console.log('arrow key moves selection, shows:', (await ware()).slice(0, 70));
+  await tap('Next table'); await tap('Next table'); await p.waitForTimeout(400);
+  console.log('after choosing Next table:', await p.evaluate(() => document.querySelector('#overlay h1')?.textContent), errs);
+  await b.close();
+})();

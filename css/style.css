@@ -673,3 +673,10 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 .dialog.wide p.note b { color: var(--yellow); }
 
 .dialog.wide.compact .wares p { margin-top: .3rem; font-size: 1.15rem; } .dialog.wide.compact p.note { font-size: 1.02rem; margin-top: .5rem; }
+
+/* the shop describes one thing at a time: whatever is selected */
+.ware { margin-top: .7rem; padding: .8rem 1rem; min-height: 9.5rem; border: .2rem solid var(--sky); border-radius: 1rem; }
+.ware > b { font-size: 1.55rem; color: var(--yellow); }
+.dialog.wide .ware p { font-size: 1.15rem; margin-top: .35rem; }
+.ware em.fam { display: inline-block; margin-left: .5rem; padding: .02rem .55rem; border-radius: .6rem; font-style: normal; font-size: 1rem; font-weight: 700; color: var(--ink); vertical-align: middle; }
+.ware i.short { font-style: normal; color: var(--red); font-weight: 700; }
