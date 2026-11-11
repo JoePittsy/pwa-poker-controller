@@ -1,3 +1,5 @@
+import { addFriend, readChallenge } from './dailystats.js';
+import { dailyData, dailyScreen, saveDaily, today } from './daily.js';
 import * as audio from './audio.js';
 import { onButton } from './controls.js';
 import { startInput } from './input.js';
@@ -50,6 +52,13 @@ addEventListener('pagehide', () => { if (netOn('guest')) sendUp({ t: 'leave' });
 applyPrefs();
 startScreen();
 { // opened from a shared link: go straight to that room
+  const shared = readChallenge(new URLSearchParams(location.search).get('daily'));
+  if (shared) { // a friend's daily score, sent as a link
+    window.history.replaceState(null, '', location.pathname);
+    saveDaily(addFriend(dailyData(), shared, today()));
+    dailyScreen();
+    toast(shared.date === today() ? `${shared.name}'s score added` : `${shared.name}'s score was for another day`);
+  }
   const join = new URLSearchParams(location.search).get('join');
   if (join) { window.history.replaceState(null, '', location.pathname); joinOnline(join); } // window.history: plain 'history' is the hand list here
 }

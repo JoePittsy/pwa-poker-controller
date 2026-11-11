@@ -1,4 +1,5 @@
 import { award } from './achievements.js';
+import { bestStreak, board, makeChallenge, medal, streak } from './dailystats.js';
 import * as audio from './audio.js';
 import { CHARACTERS, YOU, setVariantLook } from './config.js';
 import { Game } from './engine.js';
@@ -6,10 +7,10 @@ import * as fx from './fx.js';
 import { run } from './loop.js';
 import { moreGames, showOverlay, startScreen } from './menus.js';
 import { leaveOnline } from './online.js';
-import { ui } from './prefs.js';
+import { prefs, ui } from './prefs.js';
 import { buildSeats } from './render.js';
 import { dailyCard, share } from './results.js';
-import { renderActions } from './squeeze.js';
+import { renderActions, toast } from './squeeze.js';
 import { S } from './state.js';
 import { $, glyph } from './util.js';
 
@@ -32,10 +33,27 @@ export function dailyCalendar() {
     const dt = new Date(); dt.setDate(dt.getDate() - i);
     const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
     const sc = d.scores[key];
-    days.push(`<div class="${sc === undefined ? 'none' : ''}${i === 0 ? ' now' : ''}"><i>${dt.getDate()}/${dt.getMonth() + 1}</i><b>${sc === undefined ? '\u2013' : sc.toLocaleString()}</b></div>`);
+    days.push(`<div class="${sc === undefined ? 'none' : medal(sc).toLowerCase()}${i === 0 ? ' now' : ''}"><i>${dt.getDate()}/${dt.getMonth() + 1}</i><b>${sc === undefined ? '\u2013' : sc.toLocaleString()}</b></div>`);
   }
   const all = Object.values(d.scores);
-  return `<div class="cal">${days.join('')}</div><p>Days played: <b>${all.length}</b> &middot; Best: <b>${all.length ? Math.max(...all).toLocaleString() : '\u2013'}</b></p>`;
+  const run = streak(d.scores, today());
+  return `<div class="cal">${days.join('')}</div><p>Streak: <b>${run} day${run === 1 ? '' : 's'}</b> (best ${bestStreak(d.scores)}) &middot; Days played: <b>${all.length}</b> &middot; Best: <b>${all.length ? Math.max(...all).toLocaleString() : '\u2013'}</b></p>
+    <p class="medals">Finish with <b class="bronze">1,000</b> for bronze, <b class="silver">1,500</b> for silver, <b class="gold">2,500</b> for gold.</p>`;
+}
+// You against the friends whose scores you have been sent. Theirs stay hidden until you have played.
+export function dailyBoard() {
+  const b = board(dailyData(), today(), prefs.name || 'You');
+  const friends = b.rows.filter((r) => !r.me);
+  if (!friends.length) return '';
+  if (!b.played) return `<p class="who"><b>${friends.map((f) => f.name).join('</b>, <b>')}</b> ${friends.length === 1 ? 'has' : 'have'} played today. Play the deal to see how you compare.</p>`;
+  return `<div class="dboard">${b.rows.map((r, i) => `<span class="${r.me ? 'me' : ''}"><i>${i + 1}</i>${r.name}<b>${r.score.toLocaleString()}</b></span>`).join('')}</div>`;
+}
+// Send today's score to a friend as a link. Opening it adds the score to their daily screen.
+export async function challenge() {
+  const d = dailyData(), t = today();
+  const url = `${location.origin}${location.pathname}?daily=${makeChallenge(t, d.scores[t] ?? 0, prefs.name)}`;
+  const text = `I made ${(d.scores[t] ?? 0).toLocaleString()} on today's PokerPad daily deal. Same cards for everyone: can you beat it?`;
+  try { if (navigator.share) await navigator.share({ title: 'PokerPad daily deal', text, url }); else { await navigator.clipboard.writeText(`${text} ${url}`); toast('Challenge copied'); } } catch { /* the share sheet was closed */ }
 }
 export function dailyScreen() {
   const d = dailyData(), t = today();
@@ -43,8 +61,8 @@ export function dailyScreen() {
   const mid = d.game && d.game.date === t;
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true, closable: true, onClose: moreGames,
-    body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyCalendar()}`,
-    items: done ? [['Share', () => share(dailyCard(), 'pokerpad-daily.png'), true], [`${glyph('B')}Back`, moreGames]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, moreGames]],
+    body: `<p>${done ? `Today's score: <b>${d.scores[t].toLocaleString()}</b>. A new deal arrives tomorrow.` : `The same ${DAILY_HANDS} hands for everyone today, against all five regulars. Start with 1,000 and finish with as many chips as you can. One attempt.`}</p>${dailyBoard()}${dailyCalendar()}`,
+    items: done ? [['Challenge a friend', challenge, true], ['Share picture', () => share(dailyCard(), 'pokerpad-daily.png'), true], [`${glyph('B')}Back`, moreGames]] : [[`${glyph('A')}${mid ? 'Carry on' : "Play today's deal"}`, () => startDaily(mid ? d.game : null)], [`${glyph('B')}Back`, moreGames]],
   });
 }
 // Seat a one-off table (daily deal, quick table) outside the run.
@@ -86,7 +104,7 @@ export function dailyDone() {
   if (me.chips > DAILY_CFG.chips) { audio.win(2); fx.burst($('center'), 40); } else audio.lose();
   showOverlay({
     title: 'Daily <span>deal</span>', wide: true,
-    body: `<p class="venue">You finished with ${me.chips.toLocaleString()} chips${me.chips === 0 ? '' : ` after ${S.game.handNo} hands`}.</p>${dailyCalendar()}`,
-    items: [[`${glyph('A')}Done`, startScreen], ['Share', () => share(dailyCard(), 'pokerpad-daily.png'), true]],
+    body: `<p class="venue">You finished with ${me.chips.toLocaleString()} chips${me.chips === 0 ? '' : ` after ${S.game.handNo} hands`}${medal(me.chips) ? ` &middot; <b class="${medal(me.chips).toLowerCase()}">${medal(me.chips)}</b>` : ''}.</p>${dailyBoard()}${dailyCalendar()}`,
+    items: [[`${glyph('A')}Done`, startScreen], ['Challenge a friend', challenge, true], ['Share picture', () => share(dailyCard(), 'pokerpad-daily.png'), true]],
   });
 }

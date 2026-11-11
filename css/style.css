@@ -598,3 +598,12 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 em.fam.aggro { background: var(--red); color: var(--paper); } em.fam.value { background: var(--yellow); } em.fam.guard { background: var(--mint); }
 i.set { font-style: normal; color: var(--yellow); font-weight: 700; }
 #hud .heat { color: var(--red); }
+
+/* daily deal: medals on the calendar, and the table of friends' scores */
+.cal div.gold { background: var(--yellow); } .cal div.silver { background: #d9dde6; } .cal div.bronze { background: #e0a878; }
+b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: #e0a878; }
+.dialog.wide p.medals { font-size: 1.05rem; opacity: .85; margin-top: .2rem; }
+.dboard { display: flex; flex-wrap: wrap; gap: .5rem; margin: .7rem 0 .2rem; }
+.dboard span { display: flex; align-items: baseline; gap: .5rem; padding: .25rem .8rem; border-radius: .7rem; border: .16rem solid var(--sky); font-size: 1.2rem; }
+.dboard span i { font-style: normal; opacity: .6; font-size: 1rem; } .dboard span b { font-weight: 800; }
+.dboard .me { background: var(--yellow); color: var(--ink); border-color: var(--ink); }
