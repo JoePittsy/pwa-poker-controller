@@ -269,6 +269,7 @@ export function coachOdds(g) {
     const them = g.players.filter((p) => !mine(p) && !p.folded).map((p) => ({
       loose: p.style?.loose ?? 0.5,
       pressure: L.toCall > 0 && p.seat === g.aggressor ? Math.min(1, 0.3 + 0.7 * size) : p.total > 3 * g.bb ? 0.3 : 0,
+      entered: !!S.handFlags?.[p.seat]?.vpip || (L.toCall > 0 && p.seat === g.aggressor), // false for a blind who has only checked, or someone yet to act
     }));
     const eq = plain && them.length ? rangeEquity(hole, board, them, 400) : facingBet(equity(hole, board, Math.max(1, opp), 150, Math.random, g.variant), L.toCall, g.pot, g.street);
     S.coachCache = { key, pct: Math.round(eq * 100) };
