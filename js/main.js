@@ -5,7 +5,7 @@ import { RANKS, SUITS, describe, scoreHand, bestFiveOf } from './cards.js';
 import * as audio from './audio.js';
 import * as fx from './fx.js';
 import { line } from './banter.js';
-import { face } from './faces.js';
+import { face, FACES } from './faces.js';
 import { shareCard } from './share.js';
 import { connectAny, canEncrypt, newKeys, sharedKey, exportKey, importKey, seal, unseal } from './net.js';
 import { STICKERS, has as hasSticker, count as stickerCount, unlock as unlockSticker } from './stickers.js';
@@ -317,24 +317,35 @@ function onlineMenu() {
   showOverlay({
     title: 'Play <span>online</span>', closable: true, onClose: moreGames,
     body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is encrypted between the host and each player, so nobody else can read the cards or act for you. Only the host's device knows every card, so let someone you trust host.</p><p class="ver">Version ${ver()}</p>`,
-    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`Name: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
+    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`You: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
   });
 }
 // Names are typed by players and shown on every device, so only plain letters, digits and spaces get through.
 const cleanName = (n) => String(n || '').replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 10);
 const myName = () => cleanName(prefs.name);
+const myFace = () => (FACES.includes(prefs.face) ? prefs.face : '');
 function nameEntry(back = onlineMenu) {
+  const tiles = ['', ...FACES];
   showOverlay({
-    title: 'Your <span>name</span>', closable: true, onClose: back,
-    body: `<p>Shown to everyone at an online table. Up to ten letters.</p><input id="name-in" class="namein" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Your name" value="${myName()}">`,
+    title: 'Your <span>player</span>', closable: true, onClose: back,
+    body: `<p>Your name and face, shown to everyone at an online table.</p><input id="name-in" class="namein" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Your name" value="${myName()}"><div id="face-row" class="faces"></div>`,
     items: [[`${glyph('A')}Save`, () => { prefs.name = cleanName($('name-in')?.value ?? prefs.name); applyPrefs(); back(); }], [`${glyph('B')}Back`, back]],
   });
   overlay.naming = true;
+  const row = $('face-row');
+  const draw = () => { row.innerHTML = tiles.map((n, i) => `<button class="ava${n === myFace() ? ' sel' : ''}" data-i="${i}">${n ? face(n) : '#'}</button>`).join(''); };
+  const pick = (i) => { prefs.face = tiles[(i + tiles.length) % tiles.length]; audio.tick(); draw(); };
+  row.onclick = (e) => { const b = e.target.closest('button'); if (b) pick(+b.dataset.i); };
+  overlay.onKey = (b) => { // a controller steps through the faces
+    if (b === 'left' || b === 'right') { pick(tiles.indexOf(myFace()) + (b === 'left' ? -1 : 1)); return true; }
+    return false;
+  };
+  draw();
   const el = $('name-in');
   const keep = () => { prefs.name = cleanName(el.value); };
   el.oninput = keep;
   el.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { keep(); applyPrefs(); closeOverlay(); back(); } }; // typing must not drive the menu
-  setTimeout(() => el.focus(), 50);
+  if (!myName()) setTimeout(() => el.focus(), 50);
 }
 // Nobody shares a name at the table: a clash, or no name at all, falls back to the seat number.
 function seatNames() {
@@ -412,7 +423,7 @@ function hostLobby(focus = 0) {
       [`Card back: ${c.back}`, again(5, () => { c.back = next(backs, c.back); if (backs.length === 1) toast('Clear tables in a run to unlock more card backs'); })],
       [`Twist: ${twistName(c.twist)}`, again(6, () => { c.twist = next(['', ...TWISTS.map((t) => t.key)], c.twist); })],
       [`Game: ${VARIANTS[c.variant].name}`, again(7, () => { c.variant = next(Object.keys(VARIANTS), c.variant); })],
-      [`Name: ${myName() || 'not set'}`, () => nameEntry(() => { tellLobby(); hostLobby(8); })],
+      [`You: ${myName() || 'not set'}`, () => nameEntry(() => { tellLobby(); hostLobby(8); })],
       ['Close room', onlineMenu],
     ],
   });
@@ -499,10 +510,16 @@ function hostHears(m) {
     if (gu) { if (net.started) sendTo(m.pid, tableFor(gu.seat)); }
     else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
-    gu.asked = cleanName(m.name);
+    gu.asked = cleanName(m.name); gu.face = FACES.includes(m.face) ? m.face : '';
     if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(overlay.focus); }
   } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.stamp === stampOf(game)) {
     const w = net.waiter; net.waiter = null; w.resolve(m.a);
+  } else if (m.t === 'chat' && gu && net.started && performance.now() - (gu.lastChat || 0) > 1500) { // show it here and pass it on to everyone else
+    gu.lastChat = performance.now();
+    const text = m.key ? EMOTES.find((e) => e[3] === m.key)?.[2] : cleanChat(m.text);
+    if (!text) return;
+    showChat(gu.seat, text);
+    for (const [pid, x] of net.guests) if (x !== gu && !x.kicked && !x.away) sendTo(pid, { t: 'e', k: 'chat', seat: gu.seat, text });
   } else if (m.t === 'leave' && gu) setAway(gu, m.pid);
 }
 function startOnline() {
@@ -512,8 +529,8 @@ function startOnline() {
   // seats are renumbered in case someone left the lobby
   lobbyGuests().forEach((gu, i) => { gu.seat = i + 1; gu.away = false; gu.seen = performance.now(); });
   const names = seatNames();
-  const people = [{ name: names[0], badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
-    ...lobbyGuests().map((gu, i) => ({ name: gu.name, badge: String(i + 2), isHuman: true, remote: true, tag: 'Player', color: PASS_COLORS[(i + 1) % 4] }))];
+  const people = [{ name: names[0], face: myFace(), badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
+    ...lobbyGuests().map((gu, i) => ({ name: gu.name, face: gu.face, badge: String(i + 2), isHuman: true, remote: true, tag: 'Player', color: PASS_COLORS[(i + 1) % 4] }))];
   const bots = NET_BOTS.slice(0, Math.max(0, c.seats - people.length)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
   cast = [...people, ...bots];
   game = new Game({ players: cast, handsPerLevel: c.twist === 'turbo' ? 2 : 6, chips: Math.round(1000 * (c.twist === 'short' ? 0.5 : c.twist === 'deep' ? 2 : 1)), variant: c.variant });
@@ -544,7 +561,7 @@ function tableFor(seat) {
     handNo: g.handNo, dealer: g.dealer, sb: g.sb, bb: g.bb, street: g.street, stage: g.stage, toAct: g.toAct, board: g.board,
     currentBet: g.currentBet, variant: g.variant, showCards: g.showCards, runout: g.runout, result: g.result,
     legal: g.stage === 'betting' && g.toAct === seat ? g.legal(seat) : null,
-    cast: cast.map((x) => ({ name: x.name, tag: x.tag, color: x.color, badge: x.badge, isHuman: !!x.isHuman, voice: x.voice })),
+    cast: cast.map((x) => ({ name: x.name, tag: x.tag, color: x.color, badge: x.badge, face: x.face, isHuman: !!x.isHuman, voice: x.voice })),
     players: g.players.map((p) => ({
       name: p.name, isHuman: p.isHuman, chips: p.chips, bet: p.bet, total: p.total, folded: p.folded, allIn: p.allIn, out: p.out,
       lastAction: p.lastAction, won: p.won, handName: p.handName, score: g.showCards && !p.folded ? p.score : 0,
@@ -642,7 +659,7 @@ async function joinOnline(code) {
   net.relay.onClose = async () => { // one quiet attempt to get back in
     if (!netOn('guest')) return;
     toast('Connection lost. Reconnecting…');
-    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), v: ver() }); }
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() }); }
     catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room. Open the link or enter the code again to return to your seat.</p>', items: [['OK', startScreen]] }); }
   };
   const knock = () => { // keep asking until the host answers; the relay does not store messages
@@ -652,7 +669,7 @@ async function joinOnline(code) {
       clearInterval(net.joiner); leaveOnline(false); waiting('Joining <span>room</span>', `Looking for room ${code}\u2026`, onlineMenu); return joinOnline(code);
     }
     if (++net.tries > 8) { clearInterval(net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
-    if (net.key) sendUp({ t: 'join', name: myName(), v: ver() });
+    if (net.key) sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() });
     else net.relay.publish(`${net.base}/up`, JSON.stringify({ pid, k: net.mine.pub }));
   };
   net.again = setInterval(() => { // keep sending our answer until the host's table shows it arrived
@@ -682,7 +699,7 @@ async function guestRaw(raw) {
     net.hostPub = raw.k;
     net.key = await sharedKey(net.mine.priv, raw.k);
     try { localStorage.setItem('padpoker.seat', JSON.stringify({ code: net.code, pid: net.pid, key: await exportKey(net.key) })); } catch { /* private mode */ }
-    return sendUp({ t: 'join', name: myName(), v: ver() });
+    return sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() });
   }
   if (!net.key || !raw.c) return;
   guestHears(await unseal(net.key, raw));
@@ -705,7 +722,7 @@ function guestHears(m) {
     showOverlay({
       title: `Room <span>${net.code}</span>`,
       body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
-      items: [['Change name', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), v: ver() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
+      items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), v: ver() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
     });
     overlay.lobby = true;
     return;
@@ -730,6 +747,7 @@ function guestHears(m) {
     else if (m.k === 'collect') collectBets(tick);
     else if (m.k === 'over') handOverFx();
     else if (m.k === 'say') say(game.players[m.seat], m.moment);
+    else if (m.k === 'chat') showChat(m.seat, cleanChat(m.text));
     else if (m.k === 'banner') { fx.banner(m.text, 'info'); audio.chips(5, 0, 4); }
     return;
   }
@@ -900,7 +918,7 @@ function buildSeats(keepBoard = false) {
   seatEls = game.players.map((p) => {
     const el = h('div', `seat ${mine(p) ? 's0 me' : 'ai'}`,
       `<div class="cards"></div><div class="badge"></div>
-       <div class="plate"><div class="ava" data-mood="idle">${p.isHuman ? (cast[p.seat].badge || p.name[0]) : face(p.name)}</div>
+       <div class="plate"><div class="ava" data-mood="idle">${cast[p.seat].face ? face(cast[p.seat].face) : p.isHuman || cast[p.seat].badge ? (cast[p.seat].badge || p.name[0]) : face(p.name)}</div>
          <div class="who"><div class="name"></div><div class="chips"></div></div><div class="hand"></div></div>
        <div class="bet" hidden><span></span><em class="pile"></em></div><div class="say"></div><div class="clock"><i></i><b></b></div>`);
     const c = cast[p.seat];
@@ -1767,7 +1785,7 @@ function onButton(b) {
   if (replaying) { if (['a', 'b', 'x', 'start'].includes(b)) stopReplay(); return; }
   if (!$('emotes').hidden) { // table talk is open: a direction says it, anything else closes it
     const e = EMOTES.find((x) => x[0] === b);
-    if (e) sendEmote(e[3]); else toggleEmotes(false);
+    if (e) sendEmote(e[3]); else if (b === 'a' && mode === 'net') chatEntry(); else toggleEmotes(false);
     return;
   }
   if (b === 'rb' && ui.mode !== 'raise') return toggleEmotes(true);
@@ -2111,9 +2129,48 @@ function say(p, moment) {
 // ---------- table talk: say something, and someone answers in character ----------
 const EMOTES = [['up', '\u2191', 'Nice hand', 'nice', 'happy'], ['right', '\u2192', 'Hurry up', 'hurry', 'think'], ['down', '\u2193', 'Ouch', 'ouch', 'idle'], ['left', '\u2190', 'Ha!', 'ha', 'happy']];
 let lastTalk = 0, lastWinner = -1;
+// Online, what a player says goes to everyone at the table: the quick lines, or anything they type.
+const cleanChat = (t) => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+function bubble(seat, text, ms = 2600) {
+  const el = seatEls[seat]?.querySelector('.say');
+  if (!el) return;
+  el.textContent = text; el.style.marginLeft = ''; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  // keep a long line on the screen when the speaker sits at the edge
+  const seat0 = seatEls[seat].getBoundingClientRect(), mid = seat0.left + seat0.width / 2, half = el.offsetWidth / 2, pad = 8;
+  const shift = Math.min(0, innerWidth - pad - (mid + half)) + Math.max(0, pad - (mid - half));
+  if (shift && !seatEls[seat].classList.contains('me')) el.style.marginLeft = `${shift}px`;
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+function showChat(seat, text) {
+  if (!prefs.chatter || !text || !game?.players[seat]) return; // table talk off: other players are muted too
+  bubble(seat, text, 2200 + text.length * 50);
+  audio.talk(cast[seat]?.voice ?? seat);
+  setMood(seat, 'happy', 1400);
+}
+function netSay(key, text) { // from this device to the rest of the table
+  const now = performance.now();
+  if (now - lastTalk < 1500 || !text) return;
+  lastTalk = now;
+  bubble(ME, text, 2200 + text.length * 50); audio.talk(0);
+  if (netOn('host')) netEffect('chat', { seat: ME, text });
+  else sendUp(key ? { t: 'chat', key } : { t: 'chat', text });
+}
+function chatEntry() {
+  toggleEmotes(false);
+  if (overlay || mode !== 'net') return;
+  const send = () => { const text = cleanChat($('chat-in')?.value); closeOverlay(); netSay('', text); };
+  showOverlay({
+    title: 'Say <span>something</span>', closable: true,
+    body: '<p>Everyone at the table sees it. Up to 40 letters.</p><input id="chat-in" class="namein chatin" maxlength="40" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" placeholder="Type a message">',
+    items: [[`${glyph('A')}Send`, send], [`${glyph('B')}Cancel`, null]],
+  });
+  const el = $('chat-in');
+  el.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') send(); if (e.key === 'Escape') closeOverlay(); };
+  setTimeout(() => el.focus(), 50);
+}
 function toggleEmotes(open = $('emotes').hidden) {
   const bar = $('emotes');
-  if (open && (!game || mode === 'pass' || mode === 'net' || !prefs.chatter)) return;
+  if (open && (!game || mode === 'pass' || !prefs.chatter)) return;
   bar.hidden = !open;
   if (!open) return;
   audio.tick();
@@ -2123,9 +2180,11 @@ function toggleEmotes(open = $('emotes').hidden) {
     b.onclick = () => sendEmote(key);
     bar.append(b);
   }
+  if (mode === 'net') { const b = h('button', 'btn sm type', `${glyph('A')}Type a message`); b.onclick = chatEntry; bar.append(b); }
 }
 function sendEmote(key) {
   toggleEmotes(false);
+  if (mode === 'net') return netSay(key, EMOTES.find((e) => e[3] === key)[2]);
   const now = performance.now();
   if (now - lastTalk < 2500) return;
   lastTalk = now;

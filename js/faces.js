@@ -27,6 +27,7 @@ const EXTRA = {
   Sol: '<g><rect x="6.6" y="11" width="8.2" height="5.6" rx="1.8"/><rect x="17.2" y="11" width="8.2" height="5.6" rx="1.8"/><path d="M14.8 13 L17.2 13" fill="none"/></g>', // sunglasses
   Gus: '<path d="M9.5 19.5 Q12.5 16.5 16 19 Q19.5 16.5 22.5 19.5 Q19.5 21 16 19.6 Q12.5 21 9.5 19.5 Z"/>', // moustache
 };
+export const FACES = Object.keys(EXTRA);
 export function face(name) {
   return `<svg viewBox="0 0 32 32" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <g class="eyes">${EYES}</g>${EXTRA[name] || ''}<g ${name === 'Gus' ? 'transform="translate(0 2.2)"' : ''}>${MOUTHS}</g></svg>`;
