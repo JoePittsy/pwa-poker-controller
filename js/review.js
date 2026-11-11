@@ -1,31 +1,11 @@
+import { judge, leaks } from './coach.js';
 import { showOverlay } from './menus.js';
 import { replayHand } from './replay.js';
 import { cardsText, history } from './stats.js';
 import { glyph } from './util.js';
 
 // ---------- review: how did you play it? ----------
-// Judges each of your decisions in a hand from two numbers taken at the time: your rough
-// chance of winning (against random cards for everyone still in) and the price of a call.
-export function judge(d) {
-  const e = Math.round(d.eq * 100), n = Math.round(d.need * 100);
-  if (d.type === 'fold') {
-    return d.eq > d.need + 0.1 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
-      : ['good', 'Fold', `A sound fold: about ${e}% to win against the ${n}% the call needed.`];
-  }
-  if (d.type === 'call') {
-    if (d.eq < d.need - 0.08) return ['bad', `Call ${d.toCall}`, `Too loose: about ${e}% to win, but the call needed ${n}%.`];
-    if (d.eq > 0.7) return ['meh', `Call ${d.toCall}`, `Fine, but at about ${e}% to win a raise would have built a bigger pot.`];
-    return ['good', `Call ${d.toCall}`, `A fair call: about ${e}% to win for a price that needed ${n}%.`];
-  }
-  if (d.type === 'check') {
-    return d.eq > 0.7 ? ['meh', 'Check', `Missed value: you were about ${e}% to have the best hand and bet nothing.`]
-      : ['good', 'Check', `Nothing to bet with at about ${e}%. ${d.street === 'river' ? 'Checking was fine.' : 'Taking a free card was fine.'}`];
-  }
-  const what = `${d.toCall ? 'Raise to' : 'Bet'} ${d.to}`;
-  if (d.eq < 0.35) return ['bluff', what, `A bluff: only about ${e}% to win if called, so it needed them to fold.`];
-  if (d.eq > 0.6) return ['good', what, `Betting for value at about ${e}% to win.`];
-  return ['meh', what, `A thin bet at about ${e}%: fine against few players, risky against many.`];
-}
+// (How a decision is judged, and how the judgements add up into leaks, is in coach.js.)
 export const MARK = { good: '\u2713', meh: '!', bad: '\u2717', bluff: '~' };
 // hands: a list to step through (most interesting first); back: where B goes
 export function reviewScreen(hands, at, back) {
@@ -46,3 +26,17 @@ export function reviewScreen(hands, at, back) {
 }
 // The hands that mattered most: the biggest swings, losses first.
 export const keyHands = () => [...history].filter((x) => x.mine.length).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).slice(0, 5).sort((a, b) => a.net - b.net);
+
+// The coach's report: every decision in the hands you have played this session, added up into
+// what you do well and what is costing you, worst first.
+export function coachReport(back) {
+  const r = leaks(history);
+  const rows = r.list.map((l) => `<tr><td><span class="mark ${l.kind}">${MARK[l.kind]}</span></td><td><b>${l.name}</b><br>${l.count} time${l.count === 1 ? '' : 's'}${l.cost ? ` &middot; ${l.cost.toLocaleString()} chips` : ''}</td><td>${l.tip}</td></tr>`).join('');
+  showOverlay({
+    title: 'Coach <span>report</span>', wide: true, closable: true, onClose: back,
+    body: r.total ? `<p>${r.total} decisions over ${r.hands} hand${r.hands === 1 ? '' : 's'} this session &middot; <b>${Math.round(r.sound * 100)}%</b> sound. ${r.headline}</p><table class="log review">${rows}</table>
+      <p class="note">Chances are estimates that assume everyone else holds random cards, so they run high when someone is betting strongly.</p>`
+      : '<p>Play a few hands and the coach will have something to say.</p>',
+    items: [...(keyHands().length ? [[`${glyph('A')}Review key hands`, () => reviewScreen(keyHands(), 0, () => coachReport(back))]] : []), [`${glyph('B')}Back`, back]],
+  });
+}

@@ -11,7 +11,7 @@ import { ui } from './prefs.js';
 import { bankHtml, cashLeave, settleBank, tablesMenu } from './tables.js';
 import { helpMenu, howTo, replayHand, settingsMenu } from './replay.js';
 import { rankCheck, rankHtml, ranksScreen } from './rank.js';
-import { reviewScreen } from './review.js';
+import { coachReport, reviewScreen } from './review.js';
 import { renderActions, toast } from './squeeze.js';
 import { S } from './state.js';
 import { cardsText, history, stats } from './stats.js';
@@ -161,6 +161,7 @@ export function handsScreen(back, at = history.length - 1) {
   const items = [];
   if (hnd) items.push([`${glyph('A')}Replay`, () => replayHand(hnd, () => handsScreen(back, at))]);
   if (hnd) items.push(['Review', () => reviewScreen([hnd], 0, () => handsScreen(back, at))]);
+  if (hnd) items.push(['Coach report', () => coachReport(() => handsScreen(back, at))]);
   if (at > 0) items.push(['Older hand', () => handsScreen(back, at - 1)]);
   if (at < history.length - 1) items.push(['Newer hand', () => handsScreen(back, at + 1)]);
   items.push([`${glyph('B')}Back`, back]);
