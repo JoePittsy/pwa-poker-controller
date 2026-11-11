@@ -19,11 +19,13 @@ export const bluffers = new Set(); // seats that have bluff-raised this hand
 export function noteHumanAction(a, L) {
   S.habits.acts++;
   if (a.type === 'raise') S.habits.raises++;
+  if (a.type === 'raise' && a.amount >= L.maxTo && L.maxTo > 0) S.habits.shoves = (S.habits.shoves || 0) + 1; // moved all in
   if (L.toCall > 0) { S.habits.facing++; if (a.type === 'fold') S.habits.folds++; }
 }
 export const humanProfile = () => ({
   foldToBet: (S.habits.folds + 2) / (S.habits.facing + 5),
   aggression: (S.habits.raises + 1.5) / (S.habits.acts + 5),
+  shove: (S.habits.shoves || 0) / Math.max(6, S.habits.acts), // someone who shoves most hands gets called much wider
 });
 
 // Each opponent's pause before acting: longer for hard decisions, bent by their personal tell.

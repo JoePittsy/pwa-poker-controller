@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { judge, habitOf, leaks, worstOf } from '../js/coach.js';
+import { judge, habitOf, leaks, worstOf, facingBet } from '../js/coach.js';
 
 const D = (type, eq, need, extra = {}) => ({ type, street: 'flop', eq, need, toCall: 50, to: 100, ...extra });
 test('a call is judged against its price', () => {
@@ -38,4 +38,17 @@ test('the coach picks the worst mistake in a hand, or stays quiet', () => {
   assert.equal(w.street, 'river');
   assert.equal(worstOf({ mine: [D('fold', 0.2, 0.3), D('raise', 0.2, 0)] }), null);
   assert.equal(worstOf(null), null);
+});
+
+test('a call just short of its price is marginal, not fair', () => {
+  assert.equal(judge(D('call', 0.25, 0.29))[0], 'meh');
+  assert.match(judge(D('call', 0.25, 0.29))[2], /marginal/);
+  assert.equal(habitOf(D('call', 0.25, 0.29)), 'looseCall');
+  assert.equal(judge(D('call', 0.3, 0.29))[0], 'good');
+});
+test('the chance shown is marked down when facing a bet, by the size of the bet', () => {
+  assert.equal(facingBet(0.5, 0, 100), 0.5);
+  assert.ok(Math.abs(facingBet(0.5, 100, 200) - 0.4) < 1e-9); // a pot-sized bet: a fifth off
+  assert.ok(facingBet(0.5, 20, 120) > facingBet(0.5, 100, 200));
+  assert.ok(facingBet(0.5, 5000, 5100) >= 0.5 * (1 - 0.24) - 1e-9); // capped
 });

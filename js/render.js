@@ -1,7 +1,8 @@
+import { facingBet } from './coach.js';
 import { cashHud } from './tables.js';
 import { equity } from './ai.js';
 import * as audio from './audio.js';
-import { RANKS, SUITS, bestFiveOf, describe, scoreHand } from './cards.js';
+import { RANKS, SUITS, bestFiveOf, describe, scoreHand, onBoard } from './cards.js';
 import { VARIANTS } from './config.js';
 import { DEAL_GAP, REVEAL_GAP, SHUFFLE_MS, mine } from './core.js';
 import { DAILY_HANDS } from './daily.js';
@@ -154,7 +155,12 @@ export function render() {
     }
     let hand = '';
     const known = !mine(p) || ui.squeezed; // don't name a hand you haven't looked at yet
-    if (!p.folded && face && known && g.board.length >= 3) hand = describe(scoreHand(p.cards, g.board, g.variant), g.variant === 'short');
+    const turned = seenBoard(g); // only the cards that have actually been turned over
+    if (!p.folded && face && known && turned.length >= 3) {
+      const v = scoreHand(p.cards, turned, g.variant);
+      hand = describe(v, g.variant === 'short');
+      if (mine(p) && g.stage !== 'handOver' && onBoard(v, turned, g.variant === 'short')) hand += ' <i class="shared">on the board</i>'; // everyone has it
+    }
     const handEl = el.querySelector('.hand');
     if (ui.slowRiver && g.board.length === 5 && g.stage !== 'handOver') { /* river still in the air: don't give it away */ }
     else if (odds && odds[i] !== undefined) { // all-in: show each player's chance of winning
@@ -184,10 +190,16 @@ export function render() {
   if (board.children.length > g.board.length) { board.innerHTML = ''; $('burn').innerHTML = ''; }
   const fresh = g.board.length - board.children.length;
   if (fresh > 0 && !ui.noAnim) burnCard();
+  if ((ui.boardShown ?? 0) > g.board.length) ui.boardShown = g.board.length; // a new hand
   for (let i = board.children.length, k = 0; i < g.board.length; i++, k++) {
     const slow = ui.slowRiver && i === 4;
     const wait = BURN_MS + k * 170;
-    if (ui.noAnim) { board.append(cardEl(g.board[i], true)); continue; } // putting a table back: no dealing, no sound
+    if (ui.noAnim) { board.append(cardEl(g.board[i], true)); ui.boardShown = i + 1; continue; }
+    setTimeout(() => { // the card has landed and turned: now it may be named
+      if (S.game !== g || g.board.length <= i) return;
+      ui.boardShown = Math.max(ui.boardShown ?? 0, i + 1);
+      render();
+    }, wait + (slow ? 1300 : 560)); // putting a table back: no dealing, no sound
     const e = cardEl(g.board[i], true, slow ? 'slam' : 'drop', true);
     // each board card slides out from the deck, which sits just right of the fifth slot
     e.style.setProperty('--dx', `${17.59 - i * 3.382}em`);
@@ -224,8 +236,8 @@ export function render() {
     : S.mode === 'net' ? `<b>Online ${S.net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; ${S.net?.watch ? '<b>watching</b>' : `you are <b>${g.players[S.ME].name}</b>`}${g.watching && !S.net?.watch ? ` &middot; ${g.watching} watching` : ''}`
     : S.mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : S.mode === 'cash' ? cashHud(g)
-    : S.mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
-    : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left${S.mode === 'run' && S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
+    : S.mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; vs <b>${left}</b>`
+    : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; vs <b>${left}</b>${S.mode === 'run' && S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
   ui.reveals = reveals;
   if (S.replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
   if (netOn('host') && S.net.started && !S.replaying && g === S.game) netBroadcast();
@@ -243,9 +255,12 @@ export function burnCard() {
 
 // Coach: your chance of winning against the opponents still in, assuming they hold random cards.
 /* coachCache: see state.js */
+// The board as the player can see it: a card counts once it has landed and turned, not when it is dealt.
+export const seenBoard = (g) => g.board.slice(0, Math.min(g.board.length, ui.boardShown ?? g.board.length));
 export function coachOdds(g) {
-  const opp = g.players.filter((p) => !mine(p) && !p.folded).length;
-  const key = `${S.table}:${g.handNo}:${g.board.length}:${opp}`;
-  if (S.coachCache.key !== key) S.coachCache = { key, pct: Math.round(equity(g.players[S.ME].cards, g.board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant) * 100) };
+  const opp = g.players.filter((p) => !mine(p) && !p.folded).length, board = seenBoard(g);
+  const L = g.stage === 'betting' && g.toAct === S.ME ? g.legal(S.ME) : { toCall: 0 };
+  const key = `${S.table}:${g.handNo}:${board.length}:${opp}:${L.toCall}`;
+  if (S.coachCache.key !== key) S.coachCache = { key, pct: Math.round(facingBet(equity(g.players[S.ME].cards, board, Math.max(1, opp), g.variant === 'omaha' ? 150 : 400, Math.random, g.variant), L.toCall, g.pot + L.toCall) * 100) };
   return S.coachCache.pct;
 }

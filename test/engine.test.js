@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, describe } from '../js/cards.js';
+import { evaluate, describe, onBoard } from '../js/cards.js';
 import { Game } from '../js/engine.js';
 import { decide } from '../js/ai.js';
 
@@ -146,4 +146,42 @@ test('a cash game starts at its stake and the blinds never move', () => {
     assert.deepEqual([g.sb, g.bb], [25, 50]);
     while (g.stage !== 'handOver') { if (g.stage === 'betting') g.act(g.legal(g.toAct).canCheck ? 'check' : 'fold'); else g.nextStreet(); }
   }
+});
+
+// Opponents facing an all-in before the flop, with a middling hand and the same chips as the shover.
+function shoveSpot(cards) {
+  const g = new Game({ players: [{ name: 'You', isHuman: true }, { name: 'Bot', style: { loose: 0.5, aggr: 0.5, skill: 1 } }], chips: 1000 });
+  g.startHand();
+  const bot = g.players[1], you = g.players[0];
+  bot.cards = cards;
+  if (g.toAct !== 0) g.act('call');
+  g.act('raise', g.legal(0).maxTo); // the human moves all in
+  assert.equal(g.toAct, 1);
+  assert.ok(you.allIn);
+  return g;
+}
+test('opponents call a habitual shover with far more hands than a rare one', () => {
+  const hands = ['Ah 7c', 'Kd Jc', '8s 8d', 'Qh Ts', 'Ac 4d', '6h 6c', 'Kh 9h', 'Jd Tc'].map(C);
+  const calls = (profile) => hands.filter((h) => decide(shoveSpot(h), 1, () => 0.5, profile).type === 'call').length;
+  const rare = calls({ shove: 0 }), often = calls({ shove: 0.7 });
+  assert.ok(rare <= 4, `called ${rare} of 8 against a rare shover`);
+  assert.ok(often >= 6 && often - rare >= 3, `called ${often} of 8 against a habitual shover, ${rare} against a rare one`);
+});
+test('a careful opponent wants a better hand for all its chips than a loose one', () => {
+  const g1 = shoveSpot(C('Ad Jc')), g2 = shoveSpot(C('Ad Jc'));
+  g1.players[1].style = { loose: 0.2, aggr: 0.3, skill: 1 };
+  g2.players[1].style = { loose: 0.85, aggr: 0.8, skill: 1 };
+  assert.equal(decide(g1, 1, () => 0.5, {}).type, 'fold');
+  assert.equal(decide(g2, 1, () => 0.5, {}).type, 'call');
+});
+
+test('a pair that is only on the board is recognised as everyone\'s', () => {
+  const v = (s) => evaluate(C(s));
+  assert.equal(onBoard(v('7h 9c 2s 2d Td 8c 4h'), C('2s 2d Td 8c 4h')), true); // the twos are on the board
+  assert.equal(onBoard(v('2h 9c 2s Kd Td 8c 4h'), C('2s Kd Td 8c 4h')), false); // one of the twos is yours
+  assert.equal(onBoard(v('Ah Kc Ts Td Tc 4s 3h'), C('Ts Td Tc 4s 3h')), true); // three tens on the board
+  assert.equal(onBoard(v('Th Kc Ts Td 5c 4s 3h'), C('Ts Td 5c 4s 3h')), false);
+  assert.equal(onBoard(v('Ah Kc 7s 7d 5c 5s 3h'), C('7s 7d 5c 5s 3h')), true); // both pairs on the board
+  assert.equal(onBoard(v('Ah 7c 7s 2d 5c 5s 3h'), C('7s 2d 5c 5s 3h')), false);
+  assert.equal(onBoard(v('Ah Kc Qs 9d 5c 4s 3h'), C('Qs 9d 5c 4s 3h')), false); // high card
 });

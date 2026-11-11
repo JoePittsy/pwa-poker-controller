@@ -13,7 +13,7 @@ const KEY = 'padpoker.bank';
 export const bank = () => { try { return readBank(localStorage.getItem(KEY)); } catch { return readBank(null); } };
 const save = (b) => { try { localStorage.setItem(KEY, JSON.stringify(b)); } catch { /* private mode */ } return b; };
 export function addToBank(n) { const b = bank(); b.chips += Math.max(0, Math.floor(n)); save(b); }
-export const bankHtml = () => `<p class="bank">Bankroll <b>${bank().chips.toLocaleString()}</b></p>`;
+export const bankHtml = () => `<p class="bank">Bankroll <b>${bank().chips.toLocaleString()}</b> <small>yours to keep</small></p>`;
 // Called whenever the menus open: chips left on a cash table (the app was closed mid-session) come home,
 // and a player who cannot afford anything is staked again.
 export function settleBank() {
@@ -29,7 +29,7 @@ export function tablesMenu() {
   showOverlay({
     title: 'Tables', closable: true, onClose: moreGames,
     body: `${bankHtml()}<p><b>Cash game:</b> sit down with a buy-in, leave when you like, keep what you have. Blinds never rise.</p>
-      <p><b>Sit &amp; go:</b> six players, ${SNG.buyin} each; the top three are paid ${SNG.prizes.join(', ')}.</p>
+      <p><b>Sit &amp; go:</b> a six-player knockout. Entry ${SNG.buyin}; the top three are paid ${SNG.prizes.join(', ')}.</p>
       <p><b>Heads-up ladder:</b> one on one against each regular in turn. Rung ${Math.min(b.rung + 1, rungs.length)} of ${rungs.length}.</p>`,
     items: [[`${glyph('A')}Cash game`, cashMenu], ['Sit & go', sngMenu], ['Heads-up ladder', ladderMenu], [`${glyph('B')}Back`, moreGames]],
   });
@@ -81,7 +81,7 @@ const SNG_CFG = { names: REGULARS, skill: 0.7, venue: 'Sit & go', kind: 'sng', m
 function sngMenu() {
   showOverlay({
     title: 'Sit <span>&amp; go</span>', closable: true, onClose: tablesMenu,
-    body: `${bankHtml()}<p>Six players, ${SNG.buyin} each. First takes ${SNG.prizes[0]}, second ${SNG.prizes[1]}, third ${SNG.prizes[2]}.</p><p><b>Short deck:</b> ${VARIANTS.short.rules}</p><p><b>Omaha:</b> ${VARIANTS.omaha.rules}</p>`,
+    body: `${bankHtml()}<p>Entry costs <b>${SNG.buyin}</b> from your bankroll, paid when you sit down and not returned if you quit. Six players start with 1,000 chips each and play until one has them all. First place pays ${SNG.prizes[0]}, second ${SNG.prizes[1]}, third ${SNG.prizes[2]}.</p><p><b>Short deck:</b> ${VARIANTS.short.rules}</p><p><b>Omaha:</b> ${VARIANTS.omaha.rules}</p>`,
     items: [[`${glyph('A')}Hold'em`, () => startSng('holdem')], ['Short deck', () => startSng('short')], ['Omaha', () => startSng('omaha')], [`${glyph('B')}Back`, tablesMenu]],
   });
 }

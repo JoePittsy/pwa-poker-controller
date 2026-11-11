@@ -3,7 +3,7 @@ import * as fx from './fx.js';
 // ---------- player preferences ----------
 export const PACE = { Relaxed: 1.4, Normal: 1, Fast: 0.5 };
 export const STACKS = { Short: 500, Standard: 1000, Deep: 2000 };
-export const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false, squeeze: true, difficulty: 'Standard' };
+export const prefs = { speed: 'Normal', stack: 'Standard', lefty: false, rumble: true, chatter: true, coach: false, back: 'Spade', fourColour: false, squeeze: false, autoNext: true, difficulty: 'Standard' };
 // Difficulty shifts how well the opponents play, and in Shark gives them a bigger stack. The daily deal ignores it.
 export const DIFFICULTY = { Casual: { skill: -0.25, stack: 1 }, Standard: { skill: 0, stack: 1 }, Shark: { skill: 0.25, stack: 1.25 } };
 // Card backs, and how many tables your best run must have cleared to unlock each.

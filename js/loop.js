@@ -3,7 +3,7 @@ import { shop, walkHint } from './tripui.js';
 import { coachTip } from './tip.js';
 import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
-import { worstOf } from './coach.js';
+import { facingBet, worstOf } from './coach.js';
 import { adjust, noteGaveUp, notePushed, noteShowdownWon } from './reads.js';
 import { nextHeat, payout, stackFactor } from './build.js';
 import { rankCheck } from './rank.js';
@@ -22,9 +22,9 @@ import { noteDecision, noteHand } from './notebook.js';
 import { leaveOnline, netBroadcast, netDone, netEffect, netOn, remoteAction, startClock, netBetweenHands } from './online.js';
 import { passDone, takeSeat } from './pass.js';
 import { grudge } from './perks.js';
-import { DIFFICULTY, prefs, ui } from './prefs.js';
+import { DIFFICULTY, prefs, ui, PACE } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
-import { BURN_MS, buildSeats, dealOrder, render } from './render.js';
+import { BURN_MS, buildSeats, dealOrder, render, seenBoard } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
 import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
 import { S } from './state.js';
@@ -58,6 +58,11 @@ function readAct(g, p, a) {
     }
   } else if (a.type === 'fold' && facing && by === S.ME) { who = p; said = noteGaveUp(S.memory, p.name); }
   if (said) setTimeout(() => { if (S.game === g) say(who, said); }, 900);
+}
+// Resolves once the pause after a hand is over and nothing is waiting to be read.
+async function autoNext(ms) {
+  const t0 = performance.now(), wait = ms * PACE[prefs.speed];
+  while (performance.now() - t0 < wait || S.overlay || !$('coachtip').hidden) await tick(150);
 }
 export function writeSave(s) {
   if (S.mode === 'quick' || S.mode === 'cash' || S.mode === 'pass' || S.mode === 'net') return;
@@ -96,7 +101,7 @@ export function startTable(n, saved) {
   S.game = new Game({ players: S.cast, handsPerLevel: Math.max(2, Math.round((cfg.handsPerLevel + 2 * (S.perks.slowblinds || 0)) * mods.blinds)), chips: cfg.chips, variant: cfg.variant || 'holdem' });
   setVariantLook(S.game.variant);
   S.game.players[S.ME].chips = Math.round(cfg.chips * stackFactor(S.perks) * mods.stack);
-  if (!saved?.chips) S.trip.buyin = S.game.players[S.ME].chips; // what you sat down with: the cash-out is what you win beyond it
+  if (!saved?.chips) S.trip.buyin = Math.min(S.game.players[S.ME].chips, cfg.chips); // the cash-out is what you win beyond the table's ordinary stack
   if (cfg.boss?.chips) S.game.players[1].chips = cfg.chips * cfg.boss.chips;
   if (DIFFICULTY[prefs.difficulty].stack !== 1) for (const p of S.game.players) if (!p.isHuman) p.chips = Math.round(p.chips * DIFFICULTY[prefs.difficulty].stack);
   if (mods.oppStack !== 1) for (const p of S.game.players) if (!p.isHuman) p.chips = Math.round(p.chips * mods.oppStack);
@@ -216,7 +221,7 @@ export async function run() {
           S.handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
             to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
-            eq: equity(g.players[S.ME].cards, g.board, Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), need: L.toCall / (g.pot + L.toCall),
+            eq: facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot + L.toCall), need: L.toCall / (g.pot + L.toCall),
           });
         }
         feats.lastAct = { type: a.type === 'call' && g.legal(S.ME).canCheck ? 'check' : a.type, street: g.street };
@@ -270,7 +275,7 @@ export async function run() {
     const friendly = S.mode === 'pass' || S.mode === 'net'; // games among people: no stats, stickers or notes
     const kos = friendly ? 0 : recordHand(g);
     rankCheck();
-    if (!friendly && prefs.coach) { // the coach has a word about the hand's worst mistake, if there was one
+    if (!friendly && prefs.coach && !(me.won > 0)) { // the coach has a word about the hand's worst mistake, unless you won it anyway
       const w = worstOf(S.lastHand);
       if (w) setTimeout(() => { if (S.game === g) coachTip(w.street === 'preflop' ? 'before the flop' : `on the ${w.street}`, `${w.what}. ${w.why}`); }, 700); // stays until dismissed
     }
@@ -310,7 +315,10 @@ export async function run() {
     writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
     await sleep(500);
     if (S.mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
-    else await prompt('continue');
+    else if (prefs.autoNext && me.chips > 0 && g.players.filter((p) => p.chips > 0).length > 1) { // carries on by itself; the button skips the wait
+      await Promise.race([prompt('continue'), autoNext(g.result.showdown ? 3600 : 1900)]);
+      if (ui.mode === 'continue') finish();
+    } else await prompt('continue'); // the end of a table or of your chips always waits for you
     if (id !== S.runId) return;
     if (S.mode === 'pass') { ui.hidden = true; continue; }
     if (S.mode === 'net') {

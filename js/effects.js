@@ -69,7 +69,8 @@ export function handOverFx() {
     const p = g.players[s], plate = S.seatEls[s].querySelector('.plate');
     const n = Math.max(4, Math.min(14, Math.round(p.won / g.bb / 2)));
     fx.flyChips($('center'), plate, n, { stagger: 50, onLand: (i) => { if (i % 2 === 0) audio.chips(1, 0, i / 2); } });
-    setTimeout(() => fx.floatText(plate, `+${p.won.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
+    const net = p.won - p.total; // what the hand actually made them, not the size of the pot
+    if (net > 0) setTimeout(() => fx.floatText(plate, `+${net.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
   }
   if (me.won > 0) {
     const size = me.won >= total && me.won > 40 * g.bb ? 3 : me.won > 12 * g.bb ? 2 : 1;

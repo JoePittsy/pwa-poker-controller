@@ -34,7 +34,7 @@ export function coachReport(back) {
   const rows = r.list.map((l) => `<tr><td><span class="mark ${l.kind}">${MARK[l.kind]}</span></td><td><b>${l.name}</b><br>${l.count} time${l.count === 1 ? '' : 's'}${l.cost ? ` &middot; ${l.cost.toLocaleString()} chips` : ''}</td><td>${l.tip}</td></tr>`).join('');
   showOverlay({
     title: 'Coach <span>report</span>', wide: true, closable: true, onClose: back,
-    body: r.total ? `<p>${r.total} decisions over ${r.hands} hand${r.hands === 1 ? '' : 's'} this session &middot; <b>${Math.round(r.sound * 100)}%</b> sound. ${r.headline}</p><table class="log review">${rows}</table>
+    body: r.total ? `<p>${r.total} decision${r.total === 1 ? '' : 's'} over ${r.hands} hand${r.hands === 1 ? '' : 's'} this session &middot; <b>${Math.round(r.sound * 100)}%</b> were solid. ${r.headline}</p><table class="log review">${rows}</table>
       <p class="note">Chances are estimates that assume everyone else holds random cards, so they run high when someone is betting strongly.</p>`
       : '<p>Play a few hands and the coach will have something to say.</p>',
     items: [...(keyHands().length ? [[`${glyph('A')}Review key hands`, () => reviewScreen(keyHands(), 0, () => coachReport(back))]] : []), [`${glyph('B')}Back`, back]],

@@ -164,7 +164,7 @@ export class Game {
     for (const p of this.players) p.bet = 0;
     this.toAct = -1;
     this.stage = 'handOver';
-    this.result = { winners: [w.seat], showdown: false, text: `${w.name} ${w.isHuman ? 'win' : 'wins'} ${amt}` };
+    this.result = { winners: [w.seat], showdown: false, text: `${w.name} ${w.isHuman ? 'win' : 'wins'} the ${amt} pot` };
   }
 
   _showdown() {
@@ -197,7 +197,7 @@ export class Game {
     this.stage = 'handOver';
     this.result = {
       winners: winners.map((p) => p.seat), showdown: true,
-      text: winners.map((p) => `${p.name} ${p.isHuman ? 'win' : 'wins'} ${p.won}`).join(' · ') + ` — ${winners[0].handName}`,
+      text: (winners.length === 1 ? `${winners[0].name} ${winners[0].isHuman ? 'win' : 'wins'} the ${winners[0].won} pot` : winners.map((p) => `${p.name} ${p.isHuman ? 'take' : 'takes'} ${p.won}`).join(' · ')) + ` — ${winners[0].handName}`,
     };
   }
 }

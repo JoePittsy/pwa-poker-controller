@@ -69,7 +69,7 @@ export function onlineMenu() {
   leaveOnline();
   showOverlay({
     title: 'Play <span>online</span>', closable: true, onClose: moreGames,
-    body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is encrypted between the host and each player, so nobody else can read the cards or act for you. Only the host's device knows every card, so let someone you trust host.</p><p class="ver">Version ${ver()}</p>`,
+    body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is encrypted between the host and each player, so nobody else can read the cards or act for you. Only the host's device knows every card, so let someone you trust host.</p>${S.version ? `<p class="ver">Version ${ver()}</p>` : ''}`,
     items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], ['History', historyScreen], [`You: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
   });
 }
@@ -202,7 +202,7 @@ export function hostLobby(focus = 0) {
   const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
   showOverlay({
     title: `Room <span>${S.net.code}</span>`, compact: true,
-    body: `<p>Others join with this code from Online on the main menu, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>${standHtml(standing())}`,
+    body: `<p>Others join with this code from Online on the main menu, or by opening your link. ${S.version ? `<span class="ver">Version ${ver()}</span>` : ''}</p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>${standHtml(standing())}`,
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {

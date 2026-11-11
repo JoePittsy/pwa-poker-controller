@@ -101,6 +101,23 @@ export function scoreHand(hole, board, variant = 'holdem') {
   return top;
 }
 
+/**
+ * True when a pair, two pair, three of a kind, full house or four of a kind is made by the board alone,
+ * so everyone still in has it. v is the hand's score; board is the shared cards on the table.
+ */
+export function onBoard(v, board, short = false) {
+  const ks = [];
+  for (let i = 0; i < 5; i++) { ks.unshift(v % 13); v = Math.floor(v / 13); }
+  if (short && (v === 5 || v === 6)) v = 11 - v;
+  const n = (rank) => board.filter((c) => c >> 2 === rank).length;
+  const [a, b] = ks;
+  if (v === 1) return n(a) >= 2;
+  if (v === 2) return n(a) >= 2 && n(b) >= 2;
+  if (v === 3) return n(a) >= 3;
+  if (v === 6) return n(a) >= 3 && n(b) >= 2;
+  if (v === 7) return n(a) >= 4;
+  return false;
+}
 export function describe(v, short = false) {
   const ks = [];
   for (let i = 0; i < 5; i++) { ks.unshift(v % 13); v = Math.floor(v / 13); }
