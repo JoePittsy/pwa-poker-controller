@@ -1,3 +1,4 @@
+import { cashHud } from './tables.js';
 import { equity } from './ai.js';
 import * as audio from './audio.js';
 import { RANKS, SUITS, bestFiveOf, describe, scoreHand } from './cards.js';
@@ -222,6 +223,7 @@ export function render() {
     ? `<b>Daily</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> of ${DAILY_HANDS}`
     : S.mode === 'net' ? `<b>Online ${S.net?.code || ''}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; ${S.net?.watch ? '<b>watching</b>' : `you are <b>${g.players[S.ME].name}</b>`}${g.watching && !S.net?.watch ? ` &middot; ${g.watching} watching` : ''}`
     : S.mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
+    : S.mode === 'cash' ? cashHud(g)
     : S.mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left`
     : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; <b>${left}</b> left${S.mode === 'run' && S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
   ui.reveals = reveals;

@@ -71,7 +71,7 @@ export function seatSingle(kind, cfg, hud, saved) {
   S.ME = 0; ui.hidden = false;
   S.mode = kind; S.bossMode = false; S.twist = ''; S.perks = {}; S.table = 0; S.aiRng = Math.random;
   S.cast = [YOU, ...cfg.names.map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: cfg.skill } }))];
-  S.game = new Game({ players: S.cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips, variant: cfg.variant || 'holdem' });
+  S.game = new Game({ players: S.cast, handsPerLevel: cfg.handsPerLevel, chips: cfg.chips, variant: cfg.variant || 'holdem', startLevel: cfg.startLevel || 0 });
   setVariantLook(S.game.variant);
   S.habits = { facing: 0, folds: 0, acts: 0, raises: 0 };
   if (saved) {

@@ -138,3 +138,12 @@ test('variants: self-play conserves chips and terminates', () => {
     }
   }
 });
+
+test('a cash game starts at its stake and the blinds never move', () => {
+  const g = new Game({ players: [{ name: 'A' }, { name: 'B' }, { name: 'C' }], chips: 5000, handsPerLevel: Infinity, startLevel: 3 });
+  for (let i = 0; i < 12; i++) {
+    g.startHand();
+    assert.deepEqual([g.sb, g.bb], [25, 50]);
+    while (g.stage !== 'handOver') { if (g.stage === 'betting') g.act(g.legal(g.toAct).canCheck ? 'check' : 'fold'); else g.nextStreet(); }
+  }
+});

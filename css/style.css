@@ -609,3 +609,7 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 .dboard .me { background: var(--yellow); color: var(--ink); border-color: var(--ink); }
 
 .notebook small.read { color: var(--mint); }
+
+/* bankroll */
+.bank { font-size: 1.3rem; margin-top: .6rem; } .bank b { color: var(--yellow); font-weight: 800; font-size: 1.5rem; }
+#hud .up { color: var(--mint); } #hud .down { color: var(--red); }
