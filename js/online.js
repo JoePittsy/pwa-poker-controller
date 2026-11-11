@@ -1,3 +1,4 @@
+import { addGame, addLog, placeOf, placings, readLog, table, tally } from './standings.js';
 import { saveStats, stats } from './stats.js';
 import { rankName } from './career.js';
 import { myRank } from './rank.js';
@@ -67,7 +68,7 @@ export function onlineMenu() {
   showOverlay({
     title: 'Play <span>online</span>', closable: true, onClose: moreGames,
     body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is encrypted between the host and each player, so nobody else can read the cards or act for you. Only the host's device knows every card, so let someone you trust host.</p><p class="ver">Version ${ver()}</p>`,
-    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`You: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
+    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], ['History', historyScreen], [`You: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
   });
 }
 // Names are typed by players and shown on every device, so only plain letters, digits and spaces get through.
@@ -150,7 +151,7 @@ export const lobbyGuests = () => [...S.net.guests.values()].filter((gu) => !gu.k
 export const watchers = () => [...S.net.guests.values()].filter((gu) => gu.watch);
 export function tellLobby() {
   const names = seatNames();
-  for (const [pid, x] of S.net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', n: ++S.net.n, names, you: x.name, watch: !!x.watch, watching: watchers().length, info: cfgLine(S.net.cfg), v: ver() });
+  for (const [pid, x] of S.net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', n: ++S.net.n, names, you: x.name, watch: !!x.watch, watching: watchers().length, info: cfgLine(S.net.cfg), stand: standing(), v: ver() });
 }
 export function hostLobby(focus = 0) {
   const c = S.net.cfg, people = 1 + lobbyGuests().length;
@@ -162,7 +163,7 @@ export function hostLobby(focus = 0) {
   const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
   showOverlay({
     title: `Room <span>${S.net.code}</span>`, compact: true,
-    body: `<p>Others join with this code from Online on the main menu, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>`,
+    body: `<p>Others join with this code from Online on the main menu, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>${standHtml(standing())}`,
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {
@@ -294,7 +295,7 @@ export function startOnline() {
   S.game = new Game({ players: S.cast, handsPerLevel: c.twist === 'turbo' ? 2 : 6, chips: Math.round(1000 * (c.twist === 'short' ? 0.5 : c.twist === 'deep' ? 2 : 1)), variant: c.variant });
   setVariantLook(c.variant);
   setBackLook(c.back);
-  S.net.started = true; S.net.turn = 0; S.net.hold = null; S.clock = null;
+  S.net.busts = []; S.net.started = true; S.net.turn = 0; S.net.hold = null; S.clock = null;
   $('app').style.setProperty('--mat', VENUES[c.venue][1]);
   audio.setVenue(c.venue);
   buildSeats();
@@ -339,14 +340,39 @@ export function remoteAction(p) {
     return { type: S.game.legal(p.seat).canCheck ? 'check' : 'fold' };
   });
 }
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); // text from the relay, made safe to show
+// How a finished game and the room's running standings are shown. Names arrive over the relay, so they are cleaned again here.
+const orderHtml = (order) => `<p class="who">${(order || []).map((n, i) => `${i + 1}. <b>${cleanName(n)}</b>`).join(' &middot; ')}</p>`;
+const standHtml = (st) => (st?.games ? `<p class="stand">This room, ${st.games} game${st.games === 1 ? '' : 's'}: ${st.rows.map((r) => `<b>${cleanName(r.name)}</b> ${+r.points || 0}${r.wins ? ` (${+r.wins} win${r.wins === 1 ? '' : 's'})` : ''}`).join(' &middot; ')}</p>` : '');
+const standing = () => (S.net?.session ? { games: S.net.session.games, rows: table(S.net.session).slice(0, 8) } : null);
+const LOG_KEY = 'padpoker.online';
+const gameLog = () => { try { return readLog(localStorage.getItem(LOG_KEY)); } catch { return []; } };
+function logGame(order, me, hands) { try { localStorage.setItem(LOG_KEY, JSON.stringify(addLog(gameLog(), { at: Date.now(), order, me, hands }))); } catch { /* private mode */ } }
+// After each hand on the host: anyone who has just lost their last chip is written down, in order.
+export function noteBusts(g) { for (const p of g.players) if (p.chips === 0 && !S.net.busts.includes(p.name)) S.net.busts.push(p.name); }
 export function netDone() {
-  const w = S.game.players.find((p) => p.chips > 0);
-  const text = `${w.name} wins the table after ${S.game.handNo} hands.`;
-  for (const [pid, gu] of S.net.guests) if (!gu.kicked) sendTo(pid, { t: 'end', text, again: true, won: gu.seat === w.seat });
+  const g = S.game, w = g.players.find((p) => p.chips > 0);
+  noteBusts(g);
+  const order = placings(w.name, S.net.busts);
+  S.net.session = addGame(S.net.session, order);
+  const text = `${w.name} wins the table after ${g.handNo} hands.`;
+  for (const [pid, gu] of S.net.guests) if (!gu.kicked) sendTo(pid, { t: 'end', text, again: true, won: gu.seat === w.seat, order, stand: standing(), hands: g.handNo });
   stats.online++; if (w.seat === S.ME) stats.onlineWins++; saveStats(); // counts towards your rank
+  logGame(order, g.players[S.ME].name, g.handNo);
   audio.musicLevel(0); audio.fanfare(); fx.chipRain(40);
   S.net.started = false; S.clock = null;
-  showOverlay({ title: `${w.name} <span>wins!</span>`, body: `<p>${text}</p>`, items: [[`${glyph('A')}Back to the room`, () => hostLobby()], ['Close room', () => { leaveOnline(); startScreen(); }]] });
+  showOverlay({ title: `${w.name} <span>wins!</span>`, body: `<p>${text}</p>${orderHtml(order)}${standHtml(standing())}`, items: [[`${glyph('A')}Back to the room`, () => { hostLobby(); tellLobby(); }], ['Close room', () => { leaveOnline(); startScreen(); }]] });
+}
+// The games this device has taken part in: who won, where you came, and wins by name.
+function historyScreen() {
+  const log = gameLog(), wins = tally(log);
+  const day = (at) => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const rows = log.slice(0, 8).map((x) => `<tr><td>${day(x.at)}</td><td><b>${x.order[0]}</b> won${x.hands ? ` in ${x.hands} hands` : ''}</td><td>${placeOf(x, x.me) ? `you came ${['', '1st', '2nd', '3rd', '4th', '5th', '6th'][placeOf(x, x.me)]} of ${x.order.length}` : 'you watched'}</td></tr>`).join('');
+  showOverlay({
+    title: 'Online <span>history</span>', wide: true, closable: true, onClose: onlineMenu,
+    body: log.length ? `<p>Wins across your last ${log.length} game${log.length === 1 ? '' : 's'}: ${wins.map((r) => `<b>${r.name}</b> ${r.wins}`).join(' &middot; ')}</p><table class="log">${rows}</table>` : '<p>No online games finished on this device yet.</p>',
+    items: [[`${glyph('B')}Back`, onlineMenu]],
+  });
 }
 
 // The turn clock, on every device: shrink the bar on whoever is acting, tick faster as time runs
@@ -484,7 +510,7 @@ export function guestHears(m) {
     if (S.overlay?.naming) return; // typing a name: the lobby is redrawn afterwards
     showOverlay({
       title: `Room <span>${S.net.code}</span>`,
-      body: `<p>${m.watch ? 'You are <b>watching</b>: you will see the table, and cards only at showdown.' : `You are <b>${m.you}</b>.`} Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}${m.watching ? ` &middot; ${m.watching} watching` : ''}</p><p class="ver">Version ${m.v || ver()}</p>`,
+      body: `<p>${m.watch ? 'You are <b>watching</b>: you will see the table, and cards only at showdown.' : `You are <b>${m.you}</b>.`} Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}${m.watching ? ` &middot; ${m.watching} watching` : ''}</p>${standHtml(m.stand)}<p class="ver">Version ${m.v || ver()}</p>`,
       items: [['Name and face', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() }); if (S.mode !== 'net' && S.net.lobbyMsg) guestHears({ ...S.net.lobbyMsg, again: true }); })], [m.watch ? 'Take a seat' : 'Watch only', () => { S.net.wantWatch = !m.watch; sendUp({ t: 'join', name: myName(), face: myFace(), watch: !!S.net.wantWatch, rank: myRank().index, v: ver() }); }], ['Leave', onlineMenu]],
     });
     S.overlay.lobby = true;
@@ -497,7 +523,8 @@ export function guestHears(m) {
     const stay = m.again; // the host may deal again: stay connected and wait
     if (stay && !S.net.watch) { stats.online++; if (m.won) stats.onlineWins++; saveStats(); } // a finished game counts towards your rank
     if (!stay) { try { localStorage.removeItem('padpoker.seat'); } catch { /* private mode */ } leaveOnline(false); }
-    return showOverlay({ title: 'Game <span>over</span>', body: `<p>${m.text}</p>${stay ? '<p>Stay here if the host is dealing again.</p>' : ''}`, items: [[stay ? 'Leave' : 'OK', () => { leaveOnline(); startScreen(); }]] });
+    if (stay && Array.isArray(m.order)) logGame(m.order.map(cleanName), S.net.watch ? '' : S.game?.players[S.ME]?.name, m.hands);
+    return showOverlay({ title: 'Game <span>over</span>', body: `<p>${esc(m.text)}</p>${Array.isArray(m.order) ? orderHtml(m.order) : ''}${standHtml(m.stand)}${stay ? '<p>Stay here if the host is dealing again.</p>' : ''}`, items: [[stay ? 'Leave' : 'OK', () => { leaveOnline(); startScreen(); }]] });
   }
   if (m.t === 'e' && S.game) {
     if (m.k === 'deal') { audio.tension(false); audio.newHand(); audio.musicLevel(1); ui.scatter = 0; fx.shuffle($('deck')); audio.shuffle(); S.game.players.forEach((p) => setMood(p.seat, 'idle')); }
