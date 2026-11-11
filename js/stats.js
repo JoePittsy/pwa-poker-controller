@@ -7,7 +7,7 @@ export const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon
 export const stats = { ...STATS0 };
 try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) || {}); } catch { /* private mode */ }
 export const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };
-export const RUN0 = { hands: 0, won: 0, biggest: 0, knockouts: 0, bestScore: 0, bestHand: '', startBest: 0, seed: 0 };
+export const RUN0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, knockouts: 0, bestScore: 0, bestHand: '', startBest: 0, seed: 0 };
 S.runStats = { ...RUN0 }; // this run only; saved with the game
 /* handLog: see state.js */ // the hand in progress
 /* lastHand: see state.js */ // the most recent finished hand
@@ -18,7 +18,7 @@ export const cardsText = (cs) => cs.map(cardText).join(' ');
 export function logStart(g, before) {
   S.handLog = {
     no: g.handNo, table: S.table, where: S.mode === 'daily' ? 'Daily deal' : S.mode === 'quick' ? 'Sit & go' : S.mode === 'cash' ? 'Cash game' : S.bossMode ? 'Boss' : `Table ${S.table}`,
-    blinds: `${g.sb}/${g.bb}`, hole: [...g.players[S.ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
+    run: S.mode === 'run' ? S.runStats?.seed || 0 : 0, blinds: `${g.sb}/${g.bb}`, hole: [...g.players[S.ME].cards], streets: [{ name: 'Preflop', board: [], acts: [] }], shown: [], result: '',
     // enough to play the hand back exactly: who sat where, the stacks, the shuffled deck and every action
     cast: g.players.map((p) => p.name), before, deck: g.dealt, variant: g.variant, actions: [], mine: [], net: 0, mat: getComputedStyle($('app')).getPropertyValue('--mat'),
   };
@@ -48,8 +48,8 @@ export function recordHand(g) {
     if (me.won > 0) { st.won++; st.biggest = Math.max(st.biggest, me.won); }
     if (g.result.showdown && !me.folded && me.score > st.bestScore) { st.bestScore = me.score; st.bestHand = me.handName; }
     st.knockouts += kos;
+    if (g.result.showdown && !me.folded) { st.showdowns++; if (me.won > 0) st.showdownsWon++; }
   }
-  if (g.result.showdown && !me.folded) { stats.showdowns++; if (me.won > 0) stats.showdownsWon++; }
   if (me.allIn) { stats.allins++; if (me.won > 0) stats.allinsWon++; }
   saveStats();
   return kos;

@@ -50,7 +50,7 @@ export function tableConfig(n, boss = false) {
     const b = bossFor(n);
     return {
       names: [b.name], boss: b, skill: 1, venue: `${b.name}, ${b.tag}`, mat: '#3a3355', twist: null,
-      handsPerLevel: b.turbo ? 2 : 4, chips: STACKS[prefs.stack],
+      handsPerLevel: b.turbo || !b.chips ? 2 : 3, chips: STACKS[prefs.stack], // the whale's big stack needs the slower blinds
     };
   }
   let names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : REGULARS;

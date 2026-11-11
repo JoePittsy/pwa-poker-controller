@@ -83,13 +83,26 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
 
 // Walking away: once half your opponents are out you may stand up with what you have won so far.
 // It pays no speed bonus and the table does not count as cleared; a boss must be beaten.
-export const walkOffer = () => (S.mode === 'run' && S.game && S.trip && canWalk(S.game.players, S.ME, S.bossMode) ? cashOut(S.trip, S.table, S.game.players[S.ME].chips) : -1);
+export function walkOffer() {
+  const g = S.game;
+  if (S.mode !== 'run' || !g || !S.trip) return -1;
+  // mid-hand, chips already in the pot still belong to a player who is in the hand: an all-in opponent is not out
+  const live = ['betting', 'streetEnd'].includes(g.stage);
+  const seats = g.players.map((p, seat) => (seat === S.ME ? p : { chips: p.chips + (live ? p.total : 0) }));
+  return canWalk(seats, S.ME, S.bossMode) ? cashOut(S.trip, S.table, g.players[S.ME].chips) : -1;
+}
+// How the walk-away number is worked out, as cashOut() in trip.js does it, in a sentence.
+export function walkWhy(short = false) {
+  if (short) return 'what you have won above your starting stack';
+  const t = S.trip, chips = S.game.players[S.ME].chips, mult = (dealOf(t).cash || 1) * (t.risky === S.table ? RISKY.cash : 1);
+  return `What you have won above your starting stack: ${money(chips)} now, less the ${money(t.buyin || 0)} you started with${mult !== 1 ? `, times ${mult} for your deal and route` : ''}.`;
+}
 let toldAt = ''; // the run and table at which the player was last told they may walk
 export function walkHint() {
   const offer = walkOffer(), key = `${S.runStats?.seed}:${S.table}`;
-  if (offer < 0 || toldAt === key) return;
+  if (offer <= 0 || toldAt === key) return; // nothing to say until there is something to take (the menu item shows whenever offer >= 0)
   toldAt = key;
-  toast(`You can walk away now: menu (\u2630) \u2192 Walk away with ${money(offer)}`, 5000);
+  toast(`You can walk away: menu (\u2630) \u2192 Walk away (pocket +${money(offer)})`, 5000);
 }
 export function walkAway() {
   const g = S.game, me = g.players[S.ME], bank = walkOffer();
@@ -98,8 +111,8 @@ export function walkAway() {
   const mid = ['betting', 'streetEnd'].includes(g.stage) && me.total > 0 && !me.folded;
   showOverlay({
     title: 'Walk <span>away?</span>', closable: true, onClose: pauseMenu,
-    body: `<p>Stand up now and bank <b>${money(bank)}</b>. You go on to the shop and the next table, but with no bonus, and Table ${S.table} will not count towards your best run.</p><p>Stay and win it all for the ${money(left)} still on the table, at the risk of the run.${mid ? ' The hand in progress counts as folded.' : ''}</p>`,
-    items: [['Stay', pauseMenu], [`Walk away \u00b7 bank ${money(bank)}`, () => {
+    body: `<p>Stand up now and put <b>+${money(bank)}</b> in your pocket. ${walkWhy()} You go on to the shop and the next table, but with no bonus, and Table ${S.table} will not count towards your best run.</p><p>Stay and win it all for the ${money(left)} still on the table, at the risk of the run.${mid ? ' The hand in progress counts as folded.' : ''}</p>`,
+    items: [['Stay', pauseMenu], [`Walk away \u00b7 pocket +${money(bank)}`, () => {
       const t = S.trip;
       S.runId++; // stops the game loop
       t.pocket += bank; t.banked += bank; t.walked++;

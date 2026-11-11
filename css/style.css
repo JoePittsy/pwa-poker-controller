@@ -685,3 +685,11 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 
 /* the sentence naming what beat you: a longer line than a banner usually carries, so smaller, sentence case and wrapping */
 .bannerfx.info.beat { font-size: 2.1rem; line-height: 1.15; text-transform: none; white-space: normal; text-align: center; max-width: 80vw; padding: .6rem 1.2rem; }
+
+/* notebook: entries wrap onto a second line instead of being cut off, and only opponents met are listed */
+.notebook { grid-template-columns: repeat(auto-fit, minmax(min(17.5rem, 100%), 1fr)); }
+.notebook > div { align-items: flex-start; }
+.notebook small { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; }
+.notebook .more { grid-column: 1 / -1; margin: .2rem 0 0; font-size: 1rem; color: var(--sky); opacity: .8; }
+/* the walk-away menu item carries a line saying where its number comes from */
+.btn .walkitem small { font-size: 1rem; font-weight: 500; line-height: 1.15; white-space: normal; }
