@@ -61,6 +61,7 @@ export function tableConfig(n, boss = false) {
     names = pool.slice(0, 5);
     if (n === 4 && !names.some((x) => !REGULARS.includes(x))) names[4] = 'Zed'; // Table 4 always introduces someone new
   }
+  if (S.trip?.bribe === n && names.length > 2) names = names.slice(0, -1); // someone was paid to stay away (see trip.js)
   const [venue, mat] = VENUES[(n - 1) % VENUES.length];
   const lap = Math.ceil(n / VENUES.length);
   const twist = n >= 3 ? TWISTS[(n - 3) % TWISTS.length] : null; // the first two tables are plain

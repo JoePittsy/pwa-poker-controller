@@ -660,3 +660,8 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 #coachtip b i { font-style: normal; color: var(--ink); opacity: .6; text-transform: none; letter-spacing: 0; }
 #coachtip p { font-size: 1.4rem; line-height: 1.3; margin: 0; }
 #coachtip .btn { white-space: nowrap; }
+
+/* a run's trip: the deal picker, the shop and the way on */
+.dialog.perky.tight .btn { height: 4.3rem; min-width: 34rem; font-size: 1.5rem; } .dialog.perky.tight .btn small { font-size: 1.05rem; margin-top: 0; } .dialog.perky.tight .items { gap: .55rem; }
+.wares p { margin-top: .5rem; } .wares b { color: var(--yellow); font-size: 1.35rem; }
+.wares em.fam { display: inline-block; margin: 0 .5rem; padding: .02rem .55rem; border-radius: .6rem; font-style: normal; font-size: 1rem; font-weight: 700; color: var(--ink); }
