@@ -143,8 +143,8 @@ export function settingsMenu(back) {
       [() => `Speed: ${prefs.speed}`, set(() => { prefs.speed = cycle(PACE, prefs.speed); }), true],
       [() => `Stacks: ${prefs.stack}`, set(() => { prefs.stack = cycle(STACKS, prefs.stack); }), true],
       [() => `Left-handed: ${onOff(prefs.lefty)}`, set(() => { prefs.lefty = !prefs.lefty; }), true],
-      [() => `Sound: ${onOff(audio.settings.sfx)}`, () => audio.setSfx(!audio.settings.sfx), true],
-      [() => `Music: ${onOff(audio.settings.music)}`, () => audio.setMusic(!audio.settings.music), true],
+      [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
+      [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],
       fx.hapticSupport() === 'none' && fx.isIOS
         ? ['Rumble: not on iPhone', () => toast('iPhone and iPad don\u2019t let web apps vibrate or rumble a controller'), true, true]
         : [() => `Rumble: ${onOff(prefs.rumble)}`, set(() => {

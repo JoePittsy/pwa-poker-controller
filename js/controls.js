@@ -1,3 +1,4 @@
+import { dismissTip, tipShown } from './tip.js';
 import * as audio from './audio.js';
 import { closeOverlay, overlayFocus, pauseMenu } from './menus.js';
 import { ui } from './prefs.js';
@@ -16,6 +17,7 @@ export function onButton(b) {
     warned = true;
     toast('Tap the screen once to turn sound on');
   }
+  if (!S.overlay && tipShown() && (b === 'a' || b === 'b')) return dismissTip(); // the coach's note is read and dismissed before anything else
   if (S.overlay) {
     if (S.overlay.onKey?.(b)) return;
     if (b === 'up') overlayFocus(-S.overlay.cols);

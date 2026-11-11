@@ -1,3 +1,4 @@
+import { coachTip } from './tip.js';
 import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
 import { worstOf } from './coach.js';
@@ -23,7 +24,7 @@ import { DIFFICULTY, prefs, ui } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
 import { BURN_MS, buildSeats, dealOrder, render } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
-import { finishSqueeze, oddsFor, renderActions, toast, waitForSqueeze } from './squeeze.js';
+import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
 import { S } from './state.js';
 import { RUN0, logAction, logStart, logStreet, recordHand, saveStats, stats } from './stats.js';
 import { handOverBanter } from './talk.js';
@@ -263,7 +264,7 @@ export async function run() {
     rankCheck();
     if (!friendly && prefs.coach) { // the coach has a word about the hand's worst mistake, if there was one
       const w = worstOf(S.lastHand);
-      if (w) setTimeout(() => toast(`Coach, ${w.street === 'preflop' ? 'before the flop' : `on the ${w.street}`}: ${w.why}`), 2200);
+      if (w) setTimeout(() => { if (S.game === g) coachTip(w.street === 'preflop' ? 'before the flop' : `on the ${w.street}`, `${w.what}. ${w.why}`); }, 700); // stays until dismissed
     }
     if (!friendly) noteHand(g);
     if (S.mode === 'run' && !S.bossMode && me.won > 0) { // they remember who took their last chip
