@@ -1363,14 +1363,17 @@ function closeRaise() { audio.back(); ui.mode = 'actions'; ui.focus = 2; renderA
 function confirmRaise() { if (ui.mode === 'raise') finish({ type: 'raise', amount: ui.raiseTo }); }
 
 // ---------- overlay (start / pause / game over) ----------
-const CONTROLS = `<table>
-<tr><td>${glyph('A')} / Enter</td><td>Confirm</td></tr>
-<tr><td>${glyph('B')} / Esc</td><td>Fold &middot; Back</td></tr>
-<tr><td>${glyph('X')} / C</td><td>Check &middot; Call</td></tr>
-<tr><td>${glyph('Y')} / R</td><td>Bet &middot; Raise</td></tr>
-<tr><td>D-pad / Stick</td><td>Move &middot; Adjust bet (&uarr;&darr; = big steps)</td></tr>
-<tr><td>${glyph('LB')} ${glyph('RB')} / Q E</td><td>Bet presets</td></tr>
-<tr><td>Start / P</td><td>Menu</td></tr></table>`;
+// The controls legend lives in Help. It lists controller buttons only while a controller is connected,
+// keys only on a device likely to have a keyboard, and otherwise just says to tap.
+const CONTROL_ROWS = [['A', 'Enter', 'Confirm'], ['B', 'Esc', 'Fold &middot; Back'], ['X', 'C', 'Check &middot; Call'], ['Y', 'R', 'Bet &middot; Raise'],
+  ['D-pad / Stick', 'Arrows', 'Move &middot; Adjust bet (&uarr;&darr; = big steps)'], ['LB RB', 'Q E', 'Bet presets'], ['Start', 'P', 'Menu']];
+function controlsHtml() {
+  const pad = document.body.classList.contains('gp'), keys = matchMedia('(pointer: fine)').matches;
+  const hint = pad ? '' : '<p>Have a controller? Connect it and press any button: hints then appear on the buttons.</p>';
+  if (!pad && !keys) return `<p>Tap the buttons on screen. Drag your cards up to peek at them.</p>${hint}`;
+  const cell = (p, k) => [pad ? (p.length <= 2 || p === 'Start' || p === 'LB RB' ? p.split(' ').map((x) => (x === 'Start' ? x : glyph(x))).join(' ') : p) : '', keys ? k : ''].filter(Boolean).join(' / ');
+  return `<table>${CONTROL_ROWS.map(([p, k, what]) => `<tr><td>${cell(p, k)}</td><td>${what}${pad && p === 'LB RB' ? ' &middot; RB: table talk' : ''}</td></tr>`).join('')}</table>${hint}`;
+}
 
 // items: [label | () => label, fn, keepOpen]
 function showOverlay({ title, body, items, closable = false, compact = false, wide = false, perky = false, onClose }) {
@@ -1419,7 +1422,7 @@ function startScreen() {
     : [[`${glyph('A')}Play`, firstPlay]];
   showOverlay({
     title: TITLE, compact: true,
-    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${CONTROLS}`,
+    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>`,
     items: [...run, ['Online', onlineMenu], [daily, dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu],
       ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
@@ -1457,7 +1460,7 @@ function exitToMenu() {
 function pauseMenu() {
   audio.tick();
   showOverlay({
-    title: TITLE, body: CONTROLS, closable: true,
+    title: TITLE, body: '', closable: true,
     items: [
       ['Resume'],
       ...(mode === 'net' ? [] : [['Hands', () => handsScreen(pauseMenu)]]), // no replays while others are waiting on you
@@ -1637,7 +1640,7 @@ function howTo(step, done, firstRun = false) {
 }
 function helpMenu(back) {
   showOverlay({
-    title: 'Help', closable: true, onClose: back, body: CONTROLS,
+    title: 'Help', closable: true, onClose: back, body: controlsHtml(),
     items: [
       ['How to play', () => howTo(0, () => helpMenu(back))],
       ['Hand ranks', () => ranksScreen(() => helpMenu(back))],
