@@ -320,6 +320,7 @@ function nameEntry(back = onlineMenu) {
     body: `<p>Shown to everyone at an online table. Up to ten letters.</p><input id="name-in" class="namein" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Your name" value="${myName()}">`,
     items: [[`${glyph('A')}Save`, () => { prefs.name = cleanName($('name-in')?.value ?? prefs.name); applyPrefs(); back(); }], [`${glyph('B')}Back`, back]],
   });
+  overlay.naming = true;
   const el = $('name-in');
   const keep = () => { prefs.name = cleanName(el.value); };
   el.oninput = keep;
@@ -343,7 +344,15 @@ const cfgLine = (c) => [`${c.seats} seats`, c.timer ? `${c.timer}s to act` : 'no
   c.twist ? twistName(c.twist) : null, `${c.back} cards`].filter(Boolean).join(' · ');
 
 // ----- hosting -----
+// The first time someone hosts or joins without a name, ask for one. Skipping is fine and is not asked again.
+function askNameFirst(then) {
+  if (myName() || prefs.nameAsked) return false;
+  prefs.nameAsked = true; applyPrefs();
+  nameEntry(then);
+  return true;
+}
 async function hostOnline() {
+  if (askNameFirst(hostOnline)) return;
   waiting('Opening <span>room</span>', 'Finding a relay…', onlineMenu);
   let conn;
   try { conn = await connectAny(); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>None of the public relays answered. Check your connection and try again.</p>', items: [['Try again', hostOnline], [`${glyph('B')}Back`, onlineMenu]] }); }
@@ -390,6 +399,7 @@ function hostLobby(focus = 0) {
       [`Card back: ${c.back}`, again(5, () => { c.back = next(backs, c.back); if (backs.length === 1) toast('Clear tables in a run to unlock more card backs'); })],
       [`Twist: ${twistName(c.twist)}`, again(6, () => { c.twist = next(['', ...TWISTS.map((t) => t.key)], c.twist); })],
       [`Game: ${VARIANTS[c.variant].name}`, again(7, () => { c.variant = next(Object.keys(VARIANTS), c.variant); })],
+      [`Name: ${myName() || 'not set'}`, () => nameEntry(() => { tellLobby(); hostLobby(8); })],
       ['Close room', onlineMenu],
     ],
   });
@@ -460,7 +470,7 @@ function hostHears(m) {
     else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
     gu.asked = cleanName(m.name);
-    if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(); }
+    if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(overlay.focus); }
   } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.stamp === stampOf(game)) {
     const w = net.waiter; net.waiter = null; w.resolve(m.a);
   } else if (m.t === 'leave' && gu) setAway(gu, m.pid);
@@ -585,6 +595,7 @@ function joinEntry(code = [1, 0, 0, 0, 0], pos = 0) {
 }
 async function joinOnline(code) {
   if (!/^[1-9]\d{4}$/.test(code)) return joinEntry();
+  if (askNameFirst(() => joinOnline(code))) return;
   waiting('Joining <span>room</span>', `Looking for room ${code}…`, onlineMenu);
   let conn;
   try { conn = await connectAny(+code[0] - 1); } catch { return showOverlay({ title: 'No <span>connection</span>', body: '<p>Could not reach the relay for that room. Check the code and your connection.</p>', items: [['Try again', () => joinOnline(code)], [`${glyph('B')}Back`, onlineMenu]] }); }
@@ -629,10 +640,12 @@ function guestHears(m) {
   if (m.t === 'hb') return;
   if (m.t === 'full') { leaveOnline(false); return showOverlay({ title: 'Room <span>full</span>', body: '<p>That game has already started or has no seats left.</p>', items: [['OK', onlineMenu]] }); }
   if (m.t === 'lobby') {
+    net.lobbyMsg = m;
+    if (overlay?.naming) return; // typing a name: the lobby is redrawn afterwards
     showOverlay({
       title: `Room <span>${net.code}</span>`,
       body: `<p>You are <b>${m.you}</b>. Waiting for the host to start.</p><p class="who">At the table: <b>${m.names.join('</b>, <b>')}</b></p><p>${m.info || ''}</p>`,
-      items: [['Leave', onlineMenu]],
+      items: [['Change name', () => nameEntry(() => { if (!netOn('guest')) return; sendUp({ t: 'join', name: myName() }); if (mode !== 'net' && net.lobbyMsg) guestHears(net.lobbyMsg); })], ['Leave', onlineMenu]],
     });
     overlay.lobby = true;
     return;
