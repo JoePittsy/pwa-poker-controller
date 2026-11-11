@@ -1,3 +1,6 @@
+import { chen, equity } from './ai.js';
+import { scoreHand } from './cards.js';
+
 // The coach: how one decision is judged, and how a session's decisions add up into habits.
 // A decision is { type, street, eq, need, toCall, to }: what you did, your rough chance of winning at
 // the time (against random cards for everyone still in) and the share of the pot a call was asking for.
@@ -5,10 +8,11 @@
 export function judge(d) {
   const e = Math.round(d.eq * 100), n = Math.round(d.need * 100);
   if (d.type === 'fold') {
-    return d.eq > d.need + 0.1 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
+    return d.eq > d.need + 0.15 && d.eq > 0.5 ? ['bad', 'Fold', `Folding gave up a good price: you were about ${e}% to win and only needed ${n}%.`]
       : ['good', 'Fold', `A sound fold: about ${e}% to win against the ${n}% the call needed.`];
   }
   if (d.type === 'call') {
+    if (Math.abs(d.eq - d.need) <= 0.05) return ['meh', `Call ${d.toCall}`, `A close call: about ${e}% to win against the ${n}% it needed. Either choice was fine.`];
     if (d.eq < d.need - 0.08) return ['bad', `Call ${d.toCall}`, `Too loose: about ${e}% to win, but the call needed ${n}%.`];
     if (d.eq < d.need) return ['meh', `Call ${d.toCall}`, `A marginal call: about ${e}% to win against the ${n}% it needed. Close, but slightly behind the price.`];
     if (d.eq > 0.7) return ['meh', `Call ${d.toCall}`, `Fine, but at about ${e}% to win a raise would have built a bigger pot.`];
@@ -38,6 +42,7 @@ export function habitOf(d) {
   const [kind] = judge(d);
   if (kind === 'good') return 'sound';
   if (kind === 'bluff') return 'bluff';
+  if (d.type === 'call' && Math.abs(d.eq - d.need) <= 0.05) return 'sound'; // a close call either way is no leak
   if (d.type === 'call') return kind === 'bad' || d.eq < d.need ? 'looseCall' : 'missedValue';
   if (d.type === 'fold') return 'tightFold';
   if (d.type === 'check') return 'missedValue';
@@ -78,11 +83,64 @@ export function worstOf(hand) {
 
 /**
  * A chance worked out against random cards runs high when someone is betting: people bet with more than
- * random cards. This marks it down by how big the bet is against the pot (nothing to call: no change;
- * a pot-sized bet: about a fifth off), so the number shown at the table can be trusted when it matters.
+ * random cards, and the bigger the bet and the later the street, the more they have. This marks the chance
+ * down accordingly. toCall is what you must put in; pot is everything in the middle including that bet;
+ * street is 'preflop' | 'flop' | 'turn' | 'river'. A pot-sized bet takes off about four tenths, more on the river.
  */
-export function facingBet(eq, toCall, pot) {
+export function facingBet(eq, toCall, pot, street = 'flop') {
   if (!(toCall > 0)) return eq;
-  const size = Math.min(1.2, toCall / Math.max(1, pot - toCall));
-  return eq * (1 - 0.2 * size);
+  const size = Math.min(1.2, toCall / Math.max(1, pot - toCall)); // the bet as a share of what was there before it
+  const late = street === 'river' ? 1.25 : street === 'turn' ? 1.1 : 1;
+  return eq * (1 - Math.min(0.6, 0.4 * size * late));
+}
+
+/**
+ * Your chance of winning against opponents who hold what their betting suggests, not random cards.
+ * opps: one { loose: 0..1, pressure: 0..1 } per opponent still in. Each is dealt only hands with Chen points
+ * at or above 2 + (1 - loose) * 5 + pressure * 5, and after the flop a bettor often has to have connected.
+ * Wins count 1, ties 0.5. Omaha and short deck fall back to random hands.
+ */
+export function rangeEquity(hole, board, opps, sims = 300, rng = Math.random, variant = 'holdem') {
+  if (variant === 'omaha' || variant === 'short') return equity(hole, board, opps.length, sims, rng, variant);
+  const n = opps.length;
+  if (!n) return 1;
+  const stamp = new Uint8Array(52);
+  const taken = [...hole, ...board];
+  for (const c of taken) stamp[c] = 1;
+  const draw = () => { let c; do c = Math.floor(rng() * 52); while (stamp[c]); return c; };
+  let win = 0;
+  const used = [];
+  for (let s = 0; s < sims; s++) {
+    const hands = [];
+    const take = (c) => { stamp[c] = 1; used.push(c); };
+    const deal = (cutoff) => {
+      /** @type {[number, number]} */
+      let h = [0, 0];
+      for (let i = 0; i < 20; i++) {
+        const a = draw(); stamp[a] = 1;
+        const b = draw(); stamp[a] = 0;
+        h = [a, b];
+        if (chen(h) >= cutoff) break;
+      }
+      return h;
+    };
+    for (const { loose, pressure } of opps) {
+      const cutoff = 2 + (1 - loose) * 5 + pressure * 5;
+      let h = deal(cutoff);
+      if (board.length >= 3 && pressure >= 0.5 && rng() < pressure) {
+        for (let t = 0; t < 10 && Math.floor(scoreHand(h, board, variant) / 13 ** 5) < 1; t++) h = deal(cutoff);
+      }
+      take(h[0]); take(h[1]);
+      hands.push(h);
+    }
+    const full = board.slice();
+    while (full.length < 5) { const c = draw(); take(c); full.push(c); }
+    const mine = scoreHand(hole, full, variant);
+    let best = 0;
+    for (const h of hands) best = Math.max(best, scoreHand(h, full, variant));
+    win += mine > best ? 1 : mine === best ? 0.5 : 0;
+    for (const c of used) stamp[c] = 0;
+    used.length = 0;
+  }
+  return win / sims;
 }

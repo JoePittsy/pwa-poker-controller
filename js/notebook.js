@@ -46,7 +46,7 @@ export function notebookScreen(back) {
     const tell = c.trick ? c.trick
       : !c.style.tell ? (n.hands >= 20 ? 'No tell that you can see' : 'Still watching\u2026')
         : n.clues >= CLUES_NEEDED ? TELLS[c.style.tell] : `Tell: ${n.clues} of ${CLUES_NEEDED} clues`;
-    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>Plays ${pct(n.vpip, n.hands)} &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
+    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>${n.hands >= 10 ? `Plays ${pct(n.vpip, n.hands)} of hands &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands` : `${n.hands} hands seen so far`}</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
   }).join('');
   showOverlay({
     title: 'Notebook', wide: true, closable: true, onClose: back,

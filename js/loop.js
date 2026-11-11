@@ -24,13 +24,13 @@ import { passDone, takeSeat } from './pass.js';
 import { grudge } from './perks.js';
 import { DIFFICULTY, prefs, ui, PACE } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
-import { BURN_MS, buildSeats, dealOrder, render, seenBoard } from './render.js';
+import { BURN_MS, buildSeats, dealOrder, render, seenBoard, coachOdds } from './render.js';
 import { busted, tableCleared, tableIntro } from './replay.js';
 import { finishSqueeze, oddsFor, renderActions, waitForSqueeze } from './squeeze.js';
 import { S } from './state.js';
 import { RUN0, logAction, logStart, logStreet, recordHand, saveStats, stats } from './stats.js';
 import { handOverBanter } from './talk.js';
-import { finish, prompt } from './turn.js';
+import { finish, prompt, speedUp } from './turn.js';
 import { $, mulberry, tick } from './util.js';
 
 // ---------- game loop ----------
@@ -44,6 +44,7 @@ export function loadSave() {
     return s;
   } catch { return null; }
 }
+let lastCoach = null;
 // What has happened between you and each opponent in the hand being played (see reads.js).
 let duel = { hand: -1, bet: false, called: new Set() };
 function readAct(g, p, a) {
@@ -77,7 +78,7 @@ export function writeSave(s) {
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
 let nextTrip = null; // the trip a new run will start on, set by the deal picker
 export const setNextTrip = (t) => { nextTrip = t; };
-export function startTable(n, saved) {
+export function startTable(n, saved, quick = false) {
   leaveOnline();
   S.mode = 'run'; S.aiRng = Math.random; S.ME = 0; ui.hidden = false;
   S.trip = saved ? readTrip(saved.trip) : n === 1 ? nextTrip || newTrip() : S.trip || newTrip(); // the deal, pocket and route of this run
@@ -122,7 +123,7 @@ export function startTable(n, saved) {
   S.lastBB = 0; S.fast = false; audio.hush(false); S.squeeze = null; ui.squeezed = true; $('app').classList.remove('zoom');
   S.runId++; // stop any game loop still running from the previous table
   renderActions();
-  if (saved?.chips) run(); else tableIntro(run);
+  if (saved?.chips || quick) run(); else tableIntro(run);
 }
 
 export async function run() {
@@ -214,6 +215,7 @@ export async function run() {
         audio.turn(); fx.haptic('turn');
         await waitForSqueeze();
         if (id !== S.runId) return;
+        lastCoach = S.mode === 'pass' ? null : coachOdds(g) / 100; // what the coach is showing for this decision: the review must agree with it
         a = await prompt('actions');
         noteHumanAction(a, g.legal(S.ME));
         if (S.handLog && S.mode !== 'pass' && a) { // what you knew when you chose: your rough chance to win and the price you were offered
@@ -221,13 +223,16 @@ export async function run() {
           S.handLog.mine.push({
             street: g.street, type: a.type === 'call' && L.canCheck ? 'check' : a.type, toCall: L.toCall, pot: g.pot,
             to: a.type === 'raise' ? Math.max(L.minTo, Math.min(a.amount, L.maxTo)) : 0,
-            eq: facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot + L.toCall), need: L.toCall / (g.pot + L.toCall),
+            eq: lastCoach !== null ? lastCoach : facingBet(equity(g.players[S.ME].cards, seenBoard(g), Math.max(1, opp), g.variant === 'omaha' ? 120 : 250, Math.random, g.variant), L.toCall, g.pot, g.street), need: L.toCall / (g.pot + L.toCall),
           });
         }
         feats.lastAct = { type: a.type === 'call' && g.legal(S.ME).canCheck ? 'check' : a.type, street: g.street };
       } else {
         const watching = S.mode === 'net' || (S.mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded);
-        if (!watching && !S.fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
+        if (!watching && !S.fast && ui.mode === 'wait') {
+          if (prefs.autoNext && ['run', 'quick', 'cash', 'daily'].includes(S.mode)) speedUp(); // folded: no waiting around, no button to tap
+          else { ui.mode = 'skip'; renderActions(); }
+        }
         a = decide(g, p.seat, S.aiRng, adjust(humanProfile(), S.mode === 'run' ? S.memory[p.name] : null)); // each opponent has their own read on you
         noteDecision(g, p, a, g.legal(p.seat).toCall);
         const wait = !watching ? 300 : thinkTime(p, a);
@@ -316,7 +321,7 @@ export async function run() {
     await sleep(500);
     if (S.mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
     else if (prefs.autoNext && me.chips > 0 && g.players.filter((p) => p.chips > 0).length > 1) { // carries on by itself; the button skips the wait
-      await Promise.race([prompt('continue'), autoNext(g.result.showdown ? 3600 : 1900)]);
+      await Promise.race([prompt('continue'), autoNext(me.folded ? 900 : g.result.showdown ? 3000 : 1400)]);
       if (ui.mode === 'continue') finish();
     } else await prompt('continue'); // the end of a table or of your chips always waits for you
     if (id !== S.runId) return;

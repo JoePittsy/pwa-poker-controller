@@ -168,10 +168,10 @@ export function setRaise(v, moveSlider = true, silent = false) {
 }
 
 /* toastTimer: see state.js */
-export function toast(text) {
+export function toast(text, ms = 2200) {
   const t = $('toast');
   t.textContent = text;
   t.classList.add('show');
   clearTimeout(S.toastTimer);
-  S.toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  S.toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }

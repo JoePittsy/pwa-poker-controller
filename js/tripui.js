@@ -19,8 +19,9 @@ const money = (n) => n.toLocaleString();
 export const pocketHtml = (explain = false) => `<p class="bank">Pocket <b>${money(S.trip?.pocket || 0)}</b>${explain ? ' <small>this run\u2019s winnings so far, to spend in the shop between tables</small>' : ''}${S.trip && S.trip.deal !== 'regular' ? ` &middot; ${dealOf(S.trip).name}` : ''}</p>`;
 
 // A new run starts by choosing the deal it is played on.
-export function newRun() {
+export function newRun(same = '') { // same: a deal to start on straight away, skipping the picker
   const deals = dealsFor(myRank().index);
+  if (same && deals.some((d) => d.key === same && !d.locked)) { setNextTrip(newTrip(same)); return startTable(1, undefined, true); }
   showOverlay({
     title: 'Pick your <span>deal</span>', perky: true, closable: true, onClose: startScreen,
     body: '<p>A run costs nothing. Chips you win go in your <b>pocket</b> to spend in the shop; a quarter of what is left at the end joins your <b>bankroll</b>.</p>',
@@ -83,11 +84,12 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
 // Walking away: once half your opponents are out you may stand up with what you have won so far.
 // It pays no speed bonus and the table does not count as cleared; a boss must be beaten.
 export const walkOffer = () => (S.mode === 'run' && S.game && S.trip && canWalk(S.game.players, S.ME, S.bossMode) ? cashOut(S.trip, S.table, S.game.players[S.ME].chips) : -1);
-let toldAt = -1; // the table at which the player was last told they may walk
+let toldAt = ''; // the run and table at which the player was last told they may walk
 export function walkHint() {
-  if (walkOffer() < 0 || toldAt === S.table) return;
-  toldAt = S.table;
-  toast('Half the table is out: you may walk away with your winnings from the menu');
+  const offer = walkOffer(), key = `${S.runStats?.seed}:${S.table}`;
+  if (offer < 0 || toldAt === key) return;
+  toldAt = key;
+  toast(`You can walk away now: menu (\u2630) \u2192 Walk away with ${money(offer)}`, 5000);
 }
 export function walkAway() {
   const g = S.game, me = g.players[S.ME], bank = walkOffer();
