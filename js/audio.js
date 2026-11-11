@@ -205,6 +205,8 @@ export const thrown = sfx((power = 0.5) => {
   for (let i = 0; i < n; i++) tok(scale(3 + ((i * 5) % 8)) + 12, { delay: 0.3 + i * 0.028 + Math.random() * 0.02, v: 0.12 + power * 0.14, d: 0.07 });
   thud(0.32, 0.3 + power * 0.6);
 });
+// the turn clock running down: a knock that climbs in pitch as time runs out
+export const clockTick = sfx((urgency = 0, loud = 1) => knock(0, (0.22 + urgency * 0.3) * loud, 620 + urgency * 700));
 export const lose = sfx(() => { // a little "wah-wah"
   tone({ f: midi(64), f2: midi(63), type: 'triangle', d: 0.22, v: 0.2, wet: 0.2 });
   tone({ delay: 0.24, f: midi(60), f2: midi(55), type: 'triangle', d: 0.4, v: 0.2, wet: 0.2 });
