@@ -28,4 +28,5 @@ an exit code.
 | `online-host-takeover` | The host vanishes mid-hand; a guest takes over and the others follow with every chip accounted for |
 | `online-standings` | Finishing order, room standings across two games, and the history screen |
 | `tables-and-bankroll` | Cash game (including closing the app mid-session), sit-and-go and the heads-up ladder |
+| `online-rebuy-and-late-seat` | A spectator takes a computer player's seat mid-game; a busted player buys back in |
 | `online-six-players` | Six players, on a clean relay and with 20% of messages dropped and 20% delayed |

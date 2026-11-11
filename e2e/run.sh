@@ -7,7 +7,7 @@ node relay.cjs >/dev/null 2>&1 & RELAY=$!
 trap 'kill $SITE $RELAY 2>/dev/null' EXIT
 sleep 2
 mkdir -p shots
-for t in ${@:-layout-iphone single-player-soak replay pass-and-play backup online-disconnect online-spectators online-chat online-snooping online-standings online-host-takeover tables-and-bankroll online-six-players}; do
+for t in ${@:-layout-iphone single-player-soak replay pass-and-play backup online-disconnect online-spectators online-chat online-snooping online-standings online-host-takeover online-rebuy-and-late-seat tables-and-bankroll online-six-players}; do
   echo "== $t"
   case $t in
     layout-iphone) timeout 200 node layout-iphone.cjs shots 750 369 ;;

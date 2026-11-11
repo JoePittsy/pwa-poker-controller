@@ -6,7 +6,7 @@ import { streak } from './dailystats.js';
 import * as fx from './fx.js';
 import { loadSave, startTable, writeSave } from './loop.js';
 import { notebookScreen } from './notebook.js';
-import { leaveOnline, onlineMenu } from './online.js';
+import { leaveOnline, onlineMenu, askSeat } from './online.js';
 import { passMenu } from './pass.js';
 import { ui } from './prefs.js';
 import { bankHtml, cashLeave, settleBank, tablesMenu } from './tables.js';
@@ -129,6 +129,7 @@ export function pauseMenu() {
     title: TITLE, body: '', closable: true,
     items: [
       ['Resume'],
+      ...(S.mode === 'net' && S.net?.watch ? [['Take a seat', askSeat]] : []),
       ...(S.mode === 'net' ? [] : [['Hands', () => handsScreen(pauseMenu)]]), // no replays while others are waiting on you
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
