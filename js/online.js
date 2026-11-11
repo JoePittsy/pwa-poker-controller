@@ -115,7 +115,8 @@ export const waiting = (title, text, cancel) => showOverlay({ title, body: `<p>$
 export const twistName = (key) => TWISTS.find((t) => t.key === key)?.name || 'None';
 // One line describing the host's settings, shown to everyone in the lobby.
 export const cfgLine = (c) => [`${c.seats} seats`, c.timer ? `${c.timer}s to act` : 'no turn timer', VENUES[c.venue][0], VARIANTS[c.variant].name,
-  c.twist ? twistName(c.twist) : null, `${c.back} cards`].filter(Boolean).join(' · ');
+  c.twist ? twistName(c.twist) : null, c.rebuys ? `${c.rebuys > 9 ? 'unlimited' : c.rebuys} rebuy${c.rebuys === 1 ? '' : 's'}` : null, `${c.back} cards`].filter(Boolean).join(' · ');
+export const startStack = (c) => Math.round(1000 * (c.twist === 'short' ? 0.5 : c.twist === 'deep' ? 2 : 1));
 
 // ----- hosting -----
 // The first time someone hosts or joins without a name, ask for one. Skipping is fine and is not asked again.
@@ -156,7 +157,7 @@ export async function hostOnline(resume = null) {
   const code = `${conn.index + 1}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`; // first digit says which relay
   S.net = {
     role: 'host', relay: conn.relay, code, base: `padpoker2/${code}`, guests: new Map(), keys: new Map(), priv: keys.priv, pub: keys.pub, outq: Promise.resolve(), inq: Promise.resolve(), started: false, turn: 0, n: 0, waiter: null, hold: null,
-    cfg: { timer: 45, seats: 4, venue: 0, back: prefs.back, twist: '', variant: 'holdem' },
+    cfg: { timer: 45, seats: 4, venue: 0, back: prefs.back, twist: '', variant: 'holdem', rebuys: 0 },
     rs: newSecret(), // shared with everyone seated; lets a player who takes over prove they were in this room
   };
   if (resume) { S.net.resume = resume.state; Object.assign(S.net.cfg, resume.cfg, { seats: resume.state.players.length }); }
@@ -211,8 +212,9 @@ export function hostLobby(focus = 0) {
       [`Table: ${VENUES[c.venue][0].replace('The ', '')}`, again(4, () => { c.venue = (c.venue + 1) % VENUES.length; })],
       [`Card back: ${c.back}`, again(5, () => { c.back = next(backs, c.back); if (backs.length === 1) toast('Clear tables in a run to unlock more card backs'); })],
       [`Twist: ${twistName(c.twist)}`, again(6, () => { c.twist = next(['', ...TWISTS.map((t) => t.key)], c.twist); })],
-      [`Game: ${VARIANTS[c.variant].name}`, again(7, () => { c.variant = next(Object.keys(VARIANTS), c.variant); })],
-      [`You: ${myName() || 'not set'}`, () => nameEntry(() => { tellLobby(); hostLobby(8); })],
+      [`Rebuys: ${c.rebuys ? (c.rebuys > 9 ? 'Any' : c.rebuys) : 'Off'}`, again(7, () => { c.rebuys = next([0, 1, 2, 99], c.rebuys || 0); })],
+      [`Game: ${VARIANTS[c.variant].name}`, again(8, () => { c.variant = next(Object.keys(VARIANTS), c.variant); })],
+      [`You: ${myName() || 'not set'}`, () => nameEntry(() => { tellLobby(); hostLobby(9); })],
       ['Close room', onlineMenu],
     ],
   });
@@ -325,6 +327,10 @@ export function hostHears(m) {
     const who = gu.watch ? gu.asked || 'Spectator' : ''; // a spectator has no seat to speak from, so their name goes with it
     showChat(gu.seat, text, who);
     for (const [pid, x] of S.net.guests) if (x !== gu && !x.kicked && !x.away) sendTo(pid, { t: 'e', k: 'chat', seat: gu.seat, text, who });
+  } else if (m.t === 'rebuy' && gu && !gu.watch && S.net.started) {
+    S.net.rebuyAns[S.game.players[gu.seat].name] = !!m.yes;
+  } else if (m.t === 'seat' && gu && gu.watch && S.net.started) {
+    gu.wantSeat = true;
   } else if (m.t === 'leave' && gu) setAway(gu, m.pid);
 }
 export function startOnline() {
@@ -353,11 +359,11 @@ export function startOnline() {
       ...lobbyGuests().map((gu, i) => ({ name: gu.name, face: gu.face, badge: String(i + 2), isHuman: true, remote: true, tag: rankName(gu.rank), color: PASS_COLORS[(i + 1) % 4] }))];
     const bots = NET_BOTS.slice(0, Math.max(0, c.seats - people.length)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
     S.cast = [...people, ...bots];
-    S.game = new Game({ players: S.cast, handsPerLevel: c.twist === 'turbo' ? 2 : 6, chips: Math.round(1000 * (c.twist === 'short' ? 0.5 : c.twist === 'deep' ? 2 : 1)), variant: c.variant });
+    S.game = new Game({ players: S.cast, handsPerLevel: c.twist === 'turbo' ? 2 : 6, chips: startStack(c), variant: c.variant });
   }
   setVariantLook(c.variant);
   setBackLook(c.back);
-  S.net.busts = []; S.net.started = true; S.net.turn = 0; S.net.hold = null; S.clock = null;
+  S.net.busts = []; S.net.rebought = {}; S.net.declined = new Set(); S.net.rebuyAns = {}; S.net.started = true; S.net.turn = 0; S.net.hold = null; S.clock = null;
   $('app').style.setProperty('--mat', VENUES[c.venue][1]);
   audio.setVenue(c.venue);
   buildSeats();
@@ -412,6 +418,67 @@ const standing = () => (S.net?.session ? { games: S.net.session.games, rows: tab
 const LOG_KEY = 'padpoker.online';
 const gameLog = () => { try { return readLog(localStorage.getItem(LOG_KEY)); } catch { return []; } };
 function logGame(order, me, hands) { try { localStorage.setItem(LOG_KEY, JSON.stringify(addLog(gameLog(), { at: Date.now(), order, me, hands }))); } catch { /* private mode */ } }
+// Between hands on the host: people who are out may buy back in if the host allowed it, and spectators
+// who asked for a seat are given one. Both happen here so they never change a hand in progress.
+export async function netBetweenHands(g) {
+  const c = S.net.cfg, n = S.net;
+  if (c.rebuys) {
+    const bust = g.players.filter((p) => p.isHuman && p.chips === 0 && (n.rebought[p.name] || 0) < c.rebuys && !n.declined.has(p.name));
+    if (bust.length) {
+      n.rebuyAns = {};
+      for (const p of bust) {
+        const left = c.rebuys > 9 ? 0 : c.rebuys - (n.rebought[p.name] || 0); // 0: no limit to mention
+        if (p.seat === S.ME) offerRebuy(left, (yes) => { n.rebuyAns[p.name] = yes; });
+        else for (const [pid, gu] of n.guests) if (gu.seat === p.seat && !gu.watch && !gu.kicked) sendTo(pid, { t: 'offer', left });
+      }
+      const t0 = performance.now();
+      while (S.net === n && performance.now() - t0 < 12000 && bust.some((p) => n.rebuyAns[p.name] === undefined)) await tick(200);
+      if (S.net !== n) return;
+      if (S.overlay?.offer) closeOverlay();
+      for (const p of bust) {
+        if (!n.rebuyAns[p.name]) { n.declined.add(p.name); continue; }
+        p.chips = startStack(c); n.rebought[p.name] = (n.rebought[p.name] || 0) + 1;
+        const text = `${p.name} buys back in`; fx.banner(text, 'info'); audio.chips(5, 0, 4); netEffect('banner', { text });
+      }
+    }
+  }
+  noteBusts(g);
+  let seated = false;
+  for (const gu of n.guests.values()) {
+    if (!gu.wantSeat || !gu.watch || gu.kicked) continue;
+    gu.wantSeat = false;
+    let seat = g.players.findIndex((p) => !p.isHuman && p.chips > 0); // take over a computer player, stack and all
+    if (seat < 0 && g.players.length < 6) { // or pull up a chair with a fresh stack
+      seat = g.players.length;
+      g.players.push({ seat, name: '', isHuman: true, style: undefined, chips: startStack(c), cards: [], bet: 0, total: 0, folded: true, allIn: false, acted: false, out: false, lastAction: '', won: 0, handName: '' });
+      S.cast.push({});
+    }
+    if (seat < 0) { for (const [pid, x] of n.guests) if (x === gu) sendTo(pid, { t: 'e', k: 'banner', text: 'No seat is free' }); continue; }
+    const others = new Set(g.players.filter((p, i) => i !== seat).map((p) => p.name.toLowerCase()));
+    const name = gu.asked && !others.has(gu.asked.toLowerCase()) && !NET_BOTS.includes(gu.asked) ? gu.asked : `P${seat + 1}`;
+    const was = g.players[seat].name;
+    Object.assign(g.players[seat], { name, isHuman: true });
+    S.cast[seat] = { name, face: gu.face, badge: String(seat + 1), isHuman: true, remote: true, tag: rankName(gu.rank), color: PASS_COLORS[seat % 4] };
+    Object.assign(gu, { watch: false, seat, name, away: false });
+    const text = was ? `${name} takes ${was}'s seat` : `${name} sits down`; fx.banner(text, 'info'); netEffect('banner', { text });
+    seated = true;
+  }
+  if (seated) { ui.noAnim = true; buildSeats(true); render(); ui.noAnim = false; }
+}
+// You are out and the host allows rebuys: buy back in, or watch the rest.
+function offerRebuy(left, answer) {
+  showOverlay({
+    title: 'You are <span>out</span>', body: `<p>Buy back in with a fresh stack${left ? ` (${left} rebuy${left === 1 ? '' : 's'} left)` : ''}, or sit out and watch? The table waits a few seconds.</p>`,
+    items: [[`${glyph('A')}Buy back in`, () => answer(true)], ['Sit out', () => answer(false)]],
+  });
+  S.overlay.offer = true;
+}
+// A spectator asks the host for a seat; it is given between hands.
+export function askSeat() {
+  if (!netOn('guest') || !S.net.watch) return;
+  sendUp({ t: 'seat' });
+  toast('Asked for a seat. You join at the next hand if there is room.');
+}
 // After each hand on the host: anyone who has just lost their last chip is written down, in order.
 export function noteBusts(g) { for (const p of g.players) if (p.chips === 0 && !S.net.busts.includes(p.name)) S.net.busts.push(p.name); }
 export function netDone() {
@@ -586,6 +653,7 @@ export function guestHears(m) {
     S.overlay.lobby = true;
     return;
   }
+  if (m.t === 'offer') return offerRebuy(+m.left || 0, (yes) => sendUp({ t: 'rebuy', yes }));
   if (m.t === 'hold') return guestHold(true, m.names);
   if (m.t === 'go') return guestHold(false);
   if (m.t === 'end') {
@@ -679,6 +747,7 @@ export function showTable(m) {
   if (m.board.length >= 3) audio.musicLevel(2);
   if (m.stage === 'handOver' && !ui.squeezed) finishSqueeze();
   render();
+  if (S.overlay?.offer && m.stage === 'betting') closeOverlay(); // the rebuy window has passed
   if (!!m.held !== !!S.net.held) guestHold(!!m.held);
   const myTurn = !!m.legal;
   if (!myTurn && ['actions', 'raise', 'squeeze'].includes(ui.mode)) { if (ui.mode === 'squeeze') { ui.mode = 'wait'; renderActions(); } else finish(); } // the host moved on without us
