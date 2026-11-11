@@ -297,7 +297,7 @@ function leaveOnline(tell = true) {
   if (!net) return;
   if (tell && netOn('host')) for (const pid of net.guests.keys()) sendTo(pid, { t: 'end', text: 'The host closed the game.' });
   if (tell && netOn('guest')) { sendUp({ t: 'leave' }); try { localStorage.removeItem('padpoker.seat'); } catch { /* private mode */ } }
-  clearInterval(net.joiner); clearInterval(net.beat);
+  clearInterval(net.joiner); clearInterval(net.beat); clearInterval(net.again);
   const r = net.relay; net = null; clock = null;
   setTimeout(() => r.close(), 300); // let the goodbye go out first
   applyPrefs(); // back to your own card back
@@ -308,8 +308,33 @@ function onlineMenu() {
   showOverlay({
     title: 'Play <span>online</span>', closable: true, onClose: moreGames,
     body: `<p>Up to six people, each on their own device. One hosts, sets up the table and shares a five-digit room code or a link; the rest join.</p><p>The game is relayed through a free public server, so treat it as a friendly game: it is not secured against someone determined to snoop.</p>`,
-    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`${glyph('B')}Back`, moreGames]],
+    items: [[`${glyph('A')}Host a game`, hostOnline], ['Join a game', () => joinEntry()], [`Name: ${myName() || 'not set'}`, () => nameEntry()], [`${glyph('B')}Back`, moreGames]],
   });
+}
+// Names are typed by players and shown on every device, so only plain letters, digits and spaces get through.
+const cleanName = (n) => String(n || '').replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 10);
+const myName = () => cleanName(prefs.name);
+function nameEntry(back = onlineMenu) {
+  showOverlay({
+    title: 'Your <span>name</span>', closable: true, onClose: back,
+    body: `<p>Shown to everyone at an online table. Up to ten letters.</p><input id="name-in" class="namein" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Your name" value="${myName()}">`,
+    items: [[`${glyph('A')}Save`, () => { prefs.name = cleanName($('name-in')?.value ?? prefs.name); applyPrefs(); back(); }], [`${glyph('B')}Back`, back]],
+  });
+  const el = $('name-in');
+  const keep = () => { prefs.name = cleanName(el.value); };
+  el.oninput = keep;
+  el.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { keep(); applyPrefs(); closeOverlay(); back(); } }; // typing must not drive the menu
+  setTimeout(() => el.focus(), 50);
+}
+// Nobody shares a name at the table: a clash, or no name at all, falls back to the seat number.
+function seatNames() {
+  const taken = new Set(), out = [];
+  [myName(), ...lobbyGuests().map((gu) => gu.asked)].forEach((n, i) => {
+    const name = n && !taken.has(n.toLowerCase()) && !NET_BOTS.includes(n) ? n : `P${i + 1}`;
+    taken.add(name.toLowerCase()); out.push(name);
+  });
+  lobbyGuests().forEach((gu, i) => { gu.name = out[i + 1]; });
+  return out;
 }
 const waiting = (title, text, cancel) => showOverlay({ title, body: `<p>${text}</p>`, items: [['Cancel', cancel]] });
 const twistName = (key) => TWISTS.find((t) => t.key === key)?.name || 'None';
@@ -325,24 +350,28 @@ async function hostOnline() {
   if (!overlay || net) return conn.relay.close(); // cancelled while connecting
   const code = `${conn.index + 1}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`; // first digit says which relay
   net = {
-    role: 'host', relay: conn.relay, code, base: `padpoker1/${code}`, guests: new Map(), started: false, turn: 0, waiter: null, hold: null,
+    role: 'host', relay: conn.relay, code, base: `padpoker1/${code}`, guests: new Map(), started: false, turn: 0, n: 0, waiter: null, hold: null,
     cfg: { timer: 45, seats: 4, venue: 0, back: prefs.back, twist: '', variant: 'holdem' },
   };
   net.relay.subscribe(`${net.base}/up`);
   net.relay.onMessage = (_, text) => { try { hostHears(JSON.parse(text)); } catch { /* not ours */ } };
   net.relay.onClose = () => { toast('Lost the relay. The game has ended.'); leaveOnline(false); startScreen(); };
   net.beat = setInterval(hostBeat, 3000);
+  net.again = setInterval(() => { // whoever we are waiting on gets the table every second, in case their copy was lost
+    if (!netOn('host') || !net.waiter || net.hold) return;
+    for (const [pid, gu] of net.guests) if (gu.seat === net.waiter.seat && !gu.kicked && !gu.away) sendTo(pid, tableFor(gu.seat));
+  }, 1000);
   hostLobby();
 }
 const lobbyGuests = () => [...net.guests.values()].filter((gu) => !gu.kicked);
 function tellLobby() {
-  const names = ['P1', ...lobbyGuests().map((x) => x.name)];
-  for (const [pid, x] of net.guests) sendTo(pid, { t: 'lobby', names, you: x.name, info: cfgLine(net.cfg) });
+  const names = seatNames();
+  for (const [pid, x] of net.guests) if (!x.kicked) sendTo(pid, { t: 'lobby', names, you: x.name, info: cfgLine(net.cfg) });
 }
 function hostLobby(focus = 0) {
   const c = net.cfg, people = 1 + lobbyGuests().length;
   c.seats = Math.max(c.seats, people, 2);
-  const names = ['P1 (you)', ...lobbyGuests().map((gu) => gu.name)];
+  const names = seatNames().map((n, i) => (i ? n : `${n} (you)`));
   const link = `${location.origin}${location.pathname}?join=${net.code}`;
   const backs = unlockedBacks();
   const again = (i, change) => () => { change(); tellLobby(); hostLobby(i); }; // redraw with the same button focused
@@ -373,7 +402,7 @@ function hostBeat() {
   const now = performance.now();
   for (const [pid, gu] of net.guests) {
     if (gu.kicked) continue;
-    sendTo(pid, { t: 'hb' });
+    sendTo(pid, net.started && game && !gu.away ? tableFor(gu.seat) : { t: 'hb' }); // the relay can drop messages, so the table is sent again regularly
     if (!gu.away && now - gu.seen > AWAY_AFTER) setAway(gu, pid);
   }
 }
@@ -430,8 +459,9 @@ function hostHears(m) {
     if (gu) { if (net.started) sendTo(m.pid, tableFor(gu.seat)); }
     else if (net.started || net.guests.size >= 5) return void sendTo(m.pid, { t: 'full' });
     else { gu = { name: `P${net.guests.size + 2}`, seat: net.guests.size + 1, seen: performance.now(), away: false, kicked: false }; net.guests.set(m.pid, gu); }
+    gu.asked = cleanName(m.name);
     if (!net.started) { tellLobby(); if (overlay?.lobby) hostLobby(); }
-  } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.turn === net.turn) {
+  } else if (m.t === 'act' && gu && net.waiter && net.waiter.seat === gu.seat && m.stamp === stampOf(game)) {
     const w = net.waiter; net.waiter = null; w.resolve(m.a);
   } else if (m.t === 'leave' && gu) setAway(gu, m.pid);
 }
@@ -440,8 +470,9 @@ function startOnline() {
   mode = 'net'; bossMode = false; perks = {}; table = 0; aiRng = Math.random; ME = 0; ui.hidden = false;
   twist = c.twist;
   // seats are renumbered in case someone left the lobby
-  lobbyGuests().forEach((gu, i) => { gu.seat = i + 1; gu.name = `P${i + 2}`; gu.away = false; gu.seen = performance.now(); });
-  const people = [{ name: 'P1', badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
+  lobbyGuests().forEach((gu, i) => { gu.seat = i + 1; gu.away = false; gu.seen = performance.now(); });
+  const names = seatNames();
+  const people = [{ name: names[0], badge: '1', isHuman: true, tag: 'Host', color: PASS_COLORS[0] },
     ...lobbyGuests().map((gu, i) => ({ name: gu.name, badge: String(i + 2), isHuman: true, remote: true, tag: 'Player', color: PASS_COLORS[(i + 1) % 4] }))];
   const bots = NET_BOTS.slice(0, Math.max(0, c.seats - people.length)).map((name) => ({ name, ...CHARACTERS[name], style: { ...CHARACTERS[name].style, skill: 0.7 } }));
   cast = [...people, ...bots];
@@ -461,10 +492,13 @@ function startOnline() {
   run();
 }
 // What one seat is allowed to see: the whole table, with other players' cards blanked until they are shown.
+// Names the exact decision a player is facing. An answer is only accepted for the decision it was given for,
+// however many times the table or the answer gets sent.
+const stampOf = (g) => `${g.handNo}|${g.street}|${g.toAct}|${g.players.map((p) => p.total).join(',')}`;
 function tableFor(seat) {
   const g = game, c = net.cfg;
   return {
-    t: 's', me: seat, turn: net.turn, settled, held: !!net.hold,
+    t: 's', me: seat, n: ++net.n, stamp: stampOf(g), settled, held: !!net.hold,
     look: { mat: VENUES[c.venue][1], venue: c.venue, back: c.back },
     clock: clock ? { seat: clock.seat, left: Math.max(0, clock.end - performance.now()), total: clock.total } : null,
     handNo: g.handNo, dealer: g.dealer, sb: g.sb, bb: g.bb, street: g.street, stage: g.stage, toAct: g.toAct, board: g.board,
@@ -558,20 +592,23 @@ async function joinOnline(code) {
   // Your seat is remembered on this device, so reopening the link or the app puts you back in it.
   let pid = Math.random().toString(36).slice(2, 12);
   try { const kept = JSON.parse(localStorage.getItem('padpoker.seat')); if (kept?.code === code) pid = kept.pid; localStorage.setItem('padpoker.seat', JSON.stringify({ code, pid })); } catch { /* private mode */ }
-  net = { role: 'guest', relay: conn.relay, code, base: `padpoker1/${code}`, pid, seen: false, lastTurn: -1, tries: 0, hostSeen: performance.now(), lost: false, held: false };
+  net = { role: 'guest', relay: conn.relay, code, base: `padpoker1/${code}`, pid, seen: false, lastN: 0, sent: null, tries: 0, hostSeen: performance.now(), lost: false, held: false };
   net.relay.subscribe(`${net.base}/dn/${pid}`);
   net.relay.onMessage = (_, text) => { try { guestHears(JSON.parse(text)); } catch { /* not ours */ } };
   net.relay.onClose = async () => { // one quiet attempt to get back in
     if (!netOn('guest')) return;
     toast('Connection lost. Reconnecting…');
-    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join' }); }
+    try { const c = await connectAny(+code[0] - 1); if (!netOn('guest')) return c.relay.close(); c.relay.onMessage = net.relay.onMessage; c.relay.onClose = net.relay.onClose; net.relay = c.relay; net.relay.subscribe(`${net.base}/dn/${pid}`); sendUp({ t: 'join', name: myName() }); }
     catch { leaveOnline(false); showOverlay({ title: 'Connection <span>lost</span>', body: '<p>Could not get back to the room. Open the link or enter the code again to return to your seat.</p>', items: [['OK', startScreen]] }); }
   };
   const knock = () => { // keep asking until the host answers; the relay does not store messages
     if (!netOn('guest') || net.seen) return clearInterval(net.joiner);
     if (++net.tries > 8) { clearInterval(net.joiner); leaveOnline(false); return showOverlay({ title: 'No such <span>room</span>', body: `<p>Nobody answered in room ${code}. Check the code with the host.</p>`, items: [['Try again', () => joinEntry(code.split('').map(Number))], [`${glyph('B')}Back`, onlineMenu]] }); }
-    sendUp({ t: 'join' });
+    sendUp({ t: 'join', name: myName() });
   };
+  net.again = setInterval(() => { // keep sending our answer until the host's table shows it arrived
+    if (netOn('guest') && net.sent && performance.now() - net.sent.at > 1200) { net.sent.at = performance.now(); sendUp({ t: 'act', stamp: net.sent.stamp, a: net.sent.a }); }
+  }, 400);
   net.joiner = setInterval(knock, 1500);
   setTimeout(knock, 250);
   net.beat = setInterval(() => { // say we are still here, and notice if the host has gone quiet
@@ -627,6 +664,9 @@ function guestHears(m) {
 }
 // A guest's stand-in for the game object: the same fields the renderer reads, filled from the host's picture.
 function showTable(m) {
+  if (m.n <= net.lastN) return; // an older picture that arrived late
+  net.lastN = m.n;
+  if (net.sent && net.sent.stamp !== m.stamp) net.sent = null; // the host has our answer
   const fresh = mode !== 'net' || !game || game.players.length !== m.players.length || m.handNo < game.handNo
     || m.cast.some((x, i) => x.isHuman !== cast[i]?.isHuman); // someone was replaced by a computer player
   mode = 'net'; ME = m.me; settled = m.settled; cast = m.cast; peekSeat = -1; ui.hidden = false;
@@ -652,16 +692,18 @@ function showTable(m) {
   render();
   const myTurn = !!m.legal;
   if (!myTurn && ['actions', 'raise', 'squeeze'].includes(ui.mode)) { if (ui.mode === 'squeeze') { ui.mode = 'wait'; renderActions(); } else finish(); } // the host moved on without us
-  if (myTurn && (m.turn !== net.lastTurn || ui.mode === 'wait')) { net.lastTurn = m.turn; guestTurn(m.turn); }
+  if (myTurn && ui.mode === 'wait' && !net.sent) guestTurn();
 }
-async function guestTurn(turn) {
+async function guestTurn() {
   if (ui.mode !== 'wait') return; // already being asked
   audio.turn(); fx.haptic('turn');
   await waitForSqueeze();
   if (!netOn('guest')) return;
   if (game.stage !== 'betting' || game.toAct !== ME || ui.mode !== 'wait') return;
   const a = await prompt('actions');
-  if (a && netOn('guest') && game.toAct === ME) sendUp({ t: 'act', turn: net.lastTurn, a }); // the turn number may have moved on while we were being asked
+  if (!a || !netOn('guest') || game.toAct !== ME || game.stage !== 'betting') return;
+  net.sent = { stamp: game.stamp, a, at: performance.now() };
+  sendUp({ t: 'act', stamp: game.stamp, a });
 }
 
 function moreGames() {
