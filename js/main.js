@@ -333,7 +333,7 @@ function nameEntry(back = onlineMenu) {
   });
   overlay.naming = true;
   const row = $('face-row');
-  const draw = () => { row.innerHTML = tiles.map((n, i) => `<button class="ava${n === myFace() ? ' sel' : ''}" data-i="${i}">${n ? face(n) : '#'}</button>`).join(''); };
+  const draw = () => { row.innerHTML = tiles.map((n, i) => `<button class="ava${n === myFace() ? ' sel' : ''}" data-mood="${n === myFace() ? 'happy' : 'idle'}" data-i="${i}">${n ? face(n) : '#'}</button>`).join(''); };
   const pick = (i) => { prefs.face = tiles[(i + tiles.length) % tiles.length]; audio.tick(); draw(); };
   row.onclick = (e) => { const b = e.target.closest('button'); if (b) pick(+b.dataset.i); };
   overlay.onKey = (b) => { // a controller steps through the faces
