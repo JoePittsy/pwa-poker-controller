@@ -14,7 +14,7 @@ import { Game } from './engine.js';
 import * as fx from './fx.js';
 import { best } from './menus.js';
 import { noteDecision, noteHand } from './notebook.js';
-import { leaveOnline, netBroadcast, netDone, netEffect, netOn, remoteAction, startClock } from './online.js';
+import { leaveOnline, netBroadcast, netDone, netEffect, netOn, remoteAction, startClock, noteBusts } from './online.js';
 import { passDone, takeSeat } from './pass.js';
 import { grudge, pickPerk } from './perks.js';
 import { DIFFICULTY, prefs, ui } from './prefs.js';
@@ -300,6 +300,7 @@ export async function run() {
     if (id !== S.runId) return;
     if (S.mode === 'pass') { ui.hidden = true; continue; }
     if (S.mode === 'net') {
+      if (netOn('host')) noteBusts(g);
       if (S.twist === 'bounty') { // whoever won the hand collects for everyone it knocked out
         const out = g.players.filter((p) => !p.out && p.chips === 0 && p.total > 0).length, w = g.players[g.result.winners[0]];
         if (out && w) { w.chips += BOUNTY * out; const text = `${w.name}: bounty +${BOUNTY * out}`; fx.banner(text, 'info'); audio.chips(5, 0, 4); netEffect('banner', { text }); render(); }

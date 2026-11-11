@@ -613,3 +613,6 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 /* bankroll */
 .bank { font-size: 1.3rem; margin-top: .6rem; } .bank b { color: var(--yellow); font-weight: 800; font-size: 1.5rem; }
 #hud .up { color: var(--mint); } #hud .down { color: var(--red); }
+
+/* online standings */
+.stand { font-size: 1.15rem; opacity: .9; } .stand b { color: var(--yellow); }
