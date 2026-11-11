@@ -1,3 +1,4 @@
+import { readText } from './reads.js';
 import { BOSSES, CHARACTERS } from './config.js';
 import { face } from './faces.js';
 import { showOverlay } from './menus.js';
@@ -45,11 +46,11 @@ export function notebookScreen(back) {
     const tell = c.trick ? c.trick
       : !c.style.tell ? (n.hands >= 20 ? 'No tell that you can see' : 'Still watching\u2026')
         : n.clues >= CLUES_NEEDED ? TELLS[c.style.tell] : `Tell: ${n.clues} of ${CLUES_NEEDED} clues`;
-    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>Plays ${pct(n.vpip, n.hands)} &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands</small><small class="tell">${tell}</small></span></div>`;
+    return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>Plays ${pct(n.vpip, n.hands)} &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
   }).join('');
   showOverlay({
     title: 'Notebook', wide: true, closable: true, onClose: back,
-    body: `<p>What you have seen each opponent do. A tell is written down once you have seen it ${CLUES_NEEDED} times at showdown.</p><div class="notebook">${tiles}</div>`,
+    body: `<p>What you have seen each opponent do. A tell is written down once you have seen it ${CLUES_NEEDED} times at showdown. During a run each one also adjusts to how you play them, shown in green.</p><div class="notebook">${tiles}</div>`,
     items: [[`${glyph('B')}Back`, back]],
   });
 }

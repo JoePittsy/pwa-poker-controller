@@ -1,3 +1,4 @@
+import { adjust, noteGaveUp, notePushed, noteShowdownWon } from './reads.js';
 import { nextHeat, payout, stackFactor } from './build.js';
 import { rankCheck } from './rank.js';
 import { award, checkHandStickers, feats } from './achievements.js';
@@ -36,6 +37,21 @@ export function loadSave() {
     if (s.chips && (s.chips.length !== tableConfig(s.table, !!s.boss).names.length + 1 || !(s.chips[S.ME] > 0))) return null;
     return s;
   } catch { return null; }
+}
+// What has happened between you and each opponent in the hand being played (see reads.js).
+let duel = { hand: -1, bet: false, called: new Set() };
+function readAct(g, p, a) {
+  if (duel.hand !== g.handNo) duel = { hand: g.handNo, bet: false, called: new Set() };
+  const by = g.aggressor, facing = g.legal(p.seat).toCall > 0;
+  let said = '', who = null;
+  if (p.seat === S.ME) {
+    if (a.type === 'raise') duel.bet = true;
+    if (facing && by >= 0 && by !== S.ME) {
+      if (a.type === 'fold') { who = g.players[by]; said = notePushed(S.memory, who.name); }
+      else if (a.type === 'call') duel.called.add(by);
+    }
+  } else if (a.type === 'fold' && facing && by === S.ME) { who = p; said = noteGaveUp(S.memory, p.name); }
+  if (said) setTimeout(() => { if (S.game === g) say(who, said); }, 900);
 }
 export function writeSave(s) {
   if (S.mode === 'quick' || S.mode === 'pass' || S.mode === 'net') return;
@@ -193,7 +209,7 @@ export async function run() {
       } else {
         const watching = S.mode === 'net' || (S.mode === 'pass' ? g.players.some((q) => q.isHuman && !q.folded) : !me.folded);
         if (!watching && !S.fast && ui.mode === 'wait') { ui.mode = 'skip'; renderActions(); }
-        a = decide(g, p.seat, S.aiRng, humanProfile());
+        a = decide(g, p.seat, S.aiRng, adjust(humanProfile(), S.mode === 'run' ? S.memory[p.name] : null)); // each opponent has their own read on you
         noteDecision(g, p, a, g.legal(p.seat).toCall);
         const wait = !watching ? 300 : thinkTime(p, a);
         if (wait > 1100 && !S.fast) showThinking(p.seat);
@@ -203,6 +219,7 @@ export async function run() {
       }
       if (id !== S.runId) return;
       const potBefore = g.pot;
+      if (S.mode === 'run') readAct(g, p, a);
       g.act(a.type, a.amount);
       setMood(p.seat, 'idle');
       logAction(p, a);
@@ -241,9 +258,16 @@ export async function run() {
     rankCheck();
     if (!friendly) noteHand(g);
     if (S.mode === 'run' && !S.bossMode && me.won > 0) { // they remember who took their last chip
-      for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) S.memory[p.name] = { ko: grudge(p.name) + 1 };
+      for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) S.memory[p.name] = { ...S.memory[p.name], ko: grudge(p.name) + 1 };
     }
     if (!friendly) checkHandStickers(g, kos);
+    if (S.mode === 'run' && g.result.showdown && me.won > 0 && !me.folded) { // a read that just cost someone chips is dropped
+      for (const p of g.players) {
+        if (p.isHuman || p.folded) continue;
+        const said = noteShowdownWon(S.memory, p.name, { youBet: duel.hand === g.handNo && duel.bet, youCalledThem: duel.hand === g.handNo && duel.called.has(p.seat) });
+        if (said) setTimeout(() => { if (S.game === g) say(p, said); }, 1700);
+      }
+    }
     // bonuses are paid by the house, on top of the pot
     const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, category: Math.floor((me.score || 0) / 13 ** 5) }, S.heat);
     if (!friendly) S.heat = nextHeat(S.heat, { won: me.won, showdown: g.result.showdown, folded: me.folded });
