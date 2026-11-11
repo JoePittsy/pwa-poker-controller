@@ -52,7 +52,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const L = g.legal(seat);
   const { loose = 0.5, aggr = 0.5, tell, skill = 1, cheat = 0, noBluff = false } = p.style || {};
   const sloppy = 1 - skill; // weaker players see their hands less clearly and call too much
-  const { foldToBet = 0.4, aggression = 0.3 } = human;
+  const { foldToBet = 0.4, aggression = 0.3, shove: shoveRate = 0 } = human; // shove: how often the human moves all in
   const pot = g.pot, toCall = L.toCall, bb = g.bb;
   const variant = g.variant || 'holdem';
   const opp = g.players.filter((q) => !q.folded && q !== p).length;
@@ -61,7 +61,9 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const bluffy = noBluff ? 0 : hero ? 0.5 + foldToBet * 1.6 : 1;
   // a cheating boss half-knows the human's cards: blend in the true odds against them
   const truth = cheat && hero && hero.cards.length ? runoutOdds([p.cards, hero.cards], g.board, variant === 'omaha' ? 60 : 120, rng, variant)[0] : null;
-  const lighter = hero && g.aggressor === hero.seat ? (aggression - 0.3) * 0.2 : 0;
+  const fromHero = hero && g.aggressor === hero.seat;
+  const lighter = fromHero ? (aggression - 0.3) * 0.2 : 0;
+  const vsShover = fromHero ? Math.min(0.7, shoveRate) : 0; // someone who shoves all the time has any two cards
   let think = 0.1 + rng() * 0.25;
 
   const out = (a, extra) => ({ ...a, think: Math.min(1, think), ...extra });
@@ -78,13 +80,23 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
     const position = behind <= 1 ? 1 : behind >= 4 ? -0.7 : 0; // looser late, tighter early
-    const s = strength(p.cards) + (loose - 0.5) * 3 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 1.2 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
+    const s = strength(p.cards) + (loose - 0.5) * 6 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 0.6 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const shove = toCall >= p.chips; // calling puts us all-in
     if (cost > 4) think += 0.35;
-    if (s >= 11) return cost > 15 || rng() > 0.85 ? passive() : raise(1, { strong: true });
-    if (shove && toCall > 5 * bb) { think += 0.3; return s >= 9.5 ? passive() : giveUp(); }
+    // A big bet is a decision for the whole stack. How good a hand that takes depends on who we are (a careful
+    // player wants more, a loose one less) and on who is betting: against a habitual shover, far less.
+    if (cost > 12 || (shove && toCall > 5 * bb)) {
+      think += 0.3;
+      const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves: wishful thinking does not count here
+      return raw >= 10 + (0.5 - loose) * 3 - vsShover * 6 ? passive() : giveUp();
+    }
+    if (s >= 11) {
+      const premium = s >= 13 + (0.5 - loose) * 3; // only the very best hands keep raising a raised pot
+      if (cost > 6 && !premium) return passive();
+      return rng() > 0.85 ? passive() : raise(1, { strong: true });
+    }
     if (s >= 8) {
       if (!raised) return rng() < 0.4 + 0.5 * aggr ? raise(0.8) : passive();
       if (cost > 9) return giveUp();
@@ -94,14 +106,14 @@ export function decide(g, seat, rng = Math.random, human = {}) {
       if (!raised) return rng() < 0.25 * aggr ? raise(0.8) : passive();
       return cost <= 3.5 ? passive() : giveUp();
     }
-    if (s >= 4.5) return cost <= 1 && rng() < 0.5 + 0.4 * loose ? passive() : giveUp();
+    if (s >= 4.5) return cost <= 1 && rng() < 0.2 + 0.75 * loose ? passive() : giveUp();
     if (!raised && toCall > 0 && rng() < 0.06 * aggr * bluffy * (1 + position)) return raise(0.8, { bluff: true }); // steal
     return giveUp();
   }
 
   let e = equity(p.cards, g.board, Math.min(opp, 3), variant === 'omaha' ? 90 : 200, rng, variant) + (loose - 0.5) * 0.06 + (rng() - 0.5) * sloppy * 0.2;
   if (truth !== null) e = e * (1 - cheat) + truth * cheat;
-  const strong = e > 0.75;
+  let strong = e > 0.75;
   if (toCall === 0) {
     if (e > 0.7) return rng() < 0.6 + 0.35 * aggr ? raise(0.6 + rng() * 0.3, { strong }) : out({ type: 'check' }, { strong });
     if (e > 0.5) return rng() < 0.25 + 0.5 * aggr ? raise(0.4 + rng() * 0.2) : passive();
@@ -110,11 +122,17 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   }
   const odds = toCall / (pot + toCall);
   const pressure = toCall / Math.max(pot - toCall, 1);
-  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter - sloppy * 0.05;
+  // Our chance was worked out against random cards, but someone who bets has more than that, the more so the
+  // bigger the bet and the later the street. Sticky players discount this least, careful ones most; nobody
+  // discounts much against a human who shoves constantly.
+  const respect = 0.2 * Math.min(1.2, pressure) * (g.street === 'river' ? 1.25 : 1) * (1.15 - 0.6 * loose) * (1 - vsShover);
+  e -= e * respect;
+  const need = odds + 0.05 + Math.min(0.15, 0.1 * pressure) - lighter - sloppy * 0.05 - vsShover * 0.12;
   // close decisions for a big share of the stack take longest
   const close = 1 - Math.min(1, Math.abs(e - need) / 0.22);
   const stake = Math.min(1, toCall / Math.max(1, 0.3 * (p.chips + p.bet)));
   think += close * (0.25 + 0.6 * stake);
+  strong = e > 0.75;
   if (e > 0.82 || (e > 0.68 && rng() < aggr * 0.5)) return raise(0.7 + rng() * 0.3, { strong });
   if (e >= need) return out({ type: 'call' }, { strong });
   if (pressure < 0.6 && rng() < 0.04 * aggr * bluffy) return raise(0.8, { bluff: true });

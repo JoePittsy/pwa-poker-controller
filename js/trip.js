@@ -4,7 +4,7 @@
 // spend it in the shop, and a share of whatever is left goes to your bankroll when you bust.
 /** @type {Record<string, { name: string, text: string, rank: number, stack?: number, cash?: number, pocket?: number, blinds?: number, price?: number, skill?: number, oppStack?: number, payout?: number }>} */
 export const DEALS = {
-  regular: { name: 'Regular', text: 'A straight run. Nothing changed.', rank: 0 },
+  regular: { name: 'Classic', text: 'A straight run. Nothing changed.', rank: 0 },
   short: { name: 'Short Stack', text: 'Start every table with 60% of the chips. Cash-outs pay 50% more.', stack: 0.6, cash: 1.5, rank: 0 },
   backed: { name: 'Backed', text: 'Start with 2,000 in your pocket, but your backer takes half of every cash-out.', pocket: 2000, cash: 0.5, rank: 1 },
   speed: { name: 'Speed Freak', text: 'Blinds rise twice as fast. Everything in the shop is 30% off.', blinds: 0.5, price: 0.7, rank: 2 },
@@ -33,11 +33,14 @@ export function cashOut(trip, table, finalStack, bonus = 0) {
 // Two things do. Clearing it quickly pays extra: within FAST hands per opponent, half as much again; within
 // QUICK, a quarter. And once half your opponents are out you may walk away with what you have won so far,
 // for no bonus and without the table counting as cleared. Never against a boss.
+// (What counts as won is measured against the table's ordinary stack: chips a perk or a boost added to your
+// starting stack are yours to bank, so walking away is never worth nothing just because you started big.)
 export const FAST = 8, QUICK = 13;
 export const fastPar = (opponents) => FAST * opponents;
 export const quickPar = (opponents) => QUICK * opponents;
 /** The bonus, as a share of the cash-out, for clearing a table of this many opponents in this many hands. */
-export const speedBonus = (hands, opponents) => (hands <= fastPar(opponents) ? 0.5 : hands <= quickPar(opponents) ? 0.25 : 0);
+export const SPEED = { fast: 0.3, quick: 0.15 };
+export const speedBonus = (hands, opponents) => (hands <= fastPar(opponents) ? SPEED.fast : hands <= quickPar(opponents) ? SPEED.quick : 0);
 /** May you walk away? players: the table as it stands, you in seat `me`. */
 export function canWalk(players, me, boss) {
   if (boss) return false;
@@ -48,10 +51,10 @@ export function canWalk(players, me, boss) {
 export const clearedCount = (trip, tablesPassed) => Math.max(0, tablesPassed - (trip?.walked || 0));
 /** Shop prices. Perks cost more the more you already hold; each reroll in one visit costs more than the last. */
 export const PRICES = {
-  perk: (trip, held) => round((1200 + 400 * held) * (dealOf(trip).price || 1)),
-  reroll: (trip, used) => round((200 + 200 * used) * (dealOf(trip).price || 1)),
-  boost: (trip) => round(600 * (dealOf(trip).price || 1)),
-  bribe: (trip) => round(1500 * (dealOf(trip).price || 1)),
+  perk: (trip, held) => round((1000 + 250 * held) * (dealOf(trip).price || 1)),
+  reroll: (trip, used) => round((150 + 150 * used) * (dealOf(trip).price || 1)),
+  boost: (trip) => round(500 * (dealOf(trip).price || 1)),
+  bribe: (trip) => round(1200 * (dealOf(trip).price || 1)),
 };
 /** Pay for something. Returns false, changing nothing, if the pocket cannot cover it. */
 export function spend(trip, cost) {

@@ -9,7 +9,7 @@ import { loadSave, startTable, writeSave } from './loop.js';
 import { notebookScreen } from './notebook.js';
 import { leaveOnline, onlineMenu, askSeat } from './online.js';
 import { passMenu } from './pass.js';
-import { ui } from './prefs.js';
+import { ui, prefs } from './prefs.js';
 import { bankHtml, cashLeave, settleBank, tablesMenu } from './tables.js';
 import { helpMenu, howTo, replayHand, settingsMenu } from './replay.js';
 import { rankCheck, rankHtml, ranksScreen } from './rank.js';
@@ -32,7 +32,7 @@ export const CONTROL_ROWS = [['A', 'Enter', 'Confirm'], ['B', 'Esc', 'Fold &midd
 export function controlsHtml() {
   const pad = document.body.classList.contains('gp'), keys = matchMedia('(pointer: fine)').matches;
   const hint = pad ? '' : '<p>Have a controller? Connect it and press any button: hints then appear on the buttons.</p>';
-  if (!pad && !keys) return `<p>Tap the buttons on screen. Drag your cards up to peek at them.</p>${hint}`;
+  if (!pad && !keys) return `<p>Tap the buttons on screen.${prefs.squeeze ? ' Your cards arrive face down: tap Flip cards, or drag them up to peek slowly.' : ''}</p>${hint}`;
   const cell = (p, k) => [pad ? (p.length <= 2 || p === 'Start' || p === 'LB RB' ? p.split(' ').map((x) => (x === 'Start' ? x : glyph(x))).join(' ') : p) : '', keys ? k : ''].filter(Boolean).join(' / ');
   return `<table>${CONTROL_ROWS.map(([p, k, what]) => `<tr><td>${cell(p, k)}</td><td>${what}${pad && p === 'LB RB' ? ' &middot; RB: table talk' : ''}</td></tr>`).join('')}</table>${hint}`;
 }
@@ -125,6 +125,14 @@ export function exitToMenu() {
   renderActions();
   startScreen();
 }
+// Leaving a sit and go gives up the entry fee, so say so first.
+function quitSng() {
+  showOverlay({
+    title: 'Quit the <span>sit &amp; go?</span>', closable: true, onClose: pauseMenu,
+    body: '<p>Your entry fee has been paid and is not returned if you leave now. Stay in to play for the prizes.</p>',
+    items: [['Stay', pauseMenu], ['Quit and lose the entry', exitToMenu]],
+  });
+}
 export function pauseMenu() {
   audio.tick();
   showOverlay({
@@ -139,7 +147,7 @@ export function pauseMenu() {
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
-      S.mode === 'net' ? ['Leave game', exitToMenu] : [S.mode === 'run' || S.mode === 'daily' ? 'Save & main menu' : S.mode === 'cash' ? 'Cash out' : 'Quit to menu', exitToMenu],
+      S.mode === 'net' ? ['Leave game', exitToMenu] : [S.mode === 'run' || S.mode === 'daily' ? 'Save & main menu' : S.mode === 'cash' ? 'Cash out' : 'Quit to menu', S.mode === 'quick' && S.quickKind === 'sng' ? quitSng : exitToMenu],
     ],
   });
 }
@@ -150,7 +158,7 @@ export function statsScreen(back) {
     title: 'Stats', closable: true, onClose: back,
     body: `${rankHtml()}<div class="stats">
       ${tile(best(), 'best run (tables)')}${tile(stats.tables, 'tables cleared')}${tile(stats.knockouts, 'knock-outs')}
-      ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot')}
+      ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot won')}
       ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdowns won')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
     </div>`,
     items: [['Ranks', () => ranksScreen(() => statsScreen(back))], [`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], ['Notebook', () => notebookScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],

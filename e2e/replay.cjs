@@ -5,8 +5,8 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 750, height: 369 }, deviceScaleFactor: 2 });
   const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   await p.goto('http://localhost:8080/');
-  await p.evaluate(() => { localStorage.clear(); localStorage.setItem('padpoker.seen', '1'); localStorage.setItem('padpoker.prefs', JSON.stringify({ speed: 'Fast', squeeze: false })); });
-  await p.reload(); await p.waitForTimeout(300); await p.keyboard.press('Enter'); await p.waitForTimeout(300); await p.keyboard.press('Enter');
+  await p.evaluate(() => { localStorage.clear(); localStorage.setItem('padpoker.seen', '1'); localStorage.setItem('padpoker.prefs', JSON.stringify({ speed: 'Fast', squeeze: false, autoNext: false })); });
+  await p.reload(); await p.waitForTimeout(300); await p.keyboard.press('Enter'); await p.waitForTimeout(300); await p.keyboard.press('Enter'); await p.waitForTimeout(400); await p.keyboard.press('Enter');
   const results = []; const t0 = Date.now();
   while (Date.now() - t0 < 100000 && results.length < 3) { const s = await p.evaluate(() => ({ m: window.__poker.ui.mode, r: window.__poker.game.result?.text, bd: window.__poker.game.board.join() })); if (s.m === 'actions') { await p.keyboard.press(Math.random() < 0.3 ? 'r' : 'c'); if ((await p.evaluate(() => window.__poker.ui.mode)) === 'raise') await p.keyboard.press('Enter'); } if (s.m === 'continue') { results.push(`${s.r} [${s.bd}]`); if (results.length < 3) await p.keyboard.press('Enter'); } if (s.m === 'skip') await p.keyboard.press('Enter'); await p.waitForTimeout(60); }
   const liveBefore = await p.evaluate(() => JSON.stringify({ chips: window.__poker.game.players.map((q) => q.chips), hand: window.__poker.game.handNo, mode: window.__poker.ui.mode, board: window.__poker.game.board }));

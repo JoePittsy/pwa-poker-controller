@@ -23,8 +23,8 @@ const { chromium } = require('playwright');
   await p.evaluate(() => [...document.querySelectorAll('#overlay .btn')][0].click()); await p.waitForTimeout(300);
   await click('Reroll'); await p.waitForTimeout(300); await click('+25% stack'); await p.waitForTimeout(300);
   console.log('after buying a perk, a reroll and a boost:', JSON.stringify(await S('({ perks: S.perks, trip: S.trip })'))); console.log('  buttons:', await btns());
-  await click('Leave the shop'); await p.waitForTimeout(300);
-  console.log('way on:', await btns()); await p.screenshot({ path: 'wayon.png' });
+  await p.waitForTimeout(100);
+  
   await click('The hard way'); await p.waitForTimeout(500);
   console.log('intro 2:', await dlg(900));
   await click('Deal me in'); await p.waitForTimeout(3000);

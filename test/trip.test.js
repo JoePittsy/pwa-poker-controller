@@ -24,9 +24,9 @@ test('the deal and the hard route change the cash-out', () => {
 });
 test('perks cost more the more you hold, rerolls more each time, and Speed Freak pays less', () => {
   const t = newTrip();
-  assert.deepEqual([0, 1, 3].map((n) => PRICES.perk(t, n)), [1200, 1600, 2400]);
-  assert.deepEqual([0, 1, 2].map((n) => PRICES.reroll(t, n)), [200, 400, 600]);
-  assert.equal(PRICES.perk(newTrip('speed'), 0), 850);
+  assert.deepEqual([0, 1, 3].map((n) => PRICES.perk(t, n)), [1000, 1250, 1750]);
+  assert.deepEqual([0, 1, 2].map((n) => PRICES.reroll(t, n)), [150, 300, 450]);
+  assert.equal(PRICES.perk(newTrip('speed'), 0), 700);
   assert.ok(PRICES.bribe(t) > PRICES.boost(t));
 });
 test('you cannot spend what you do not have', () => {
@@ -57,9 +57,9 @@ test('a saved trip is made safe to use', () => {
 
 test('a fast clear pays more, scaled to the size of the table', () => {
   assert.deepEqual([fastPar(3), quickPar(3)], [24, 39]);
-  assert.deepEqual([24, 25, 39, 40].map((h) => speedBonus(h, 3)), [0.5, 0.25, 0.25, 0]);
-  assert.equal(speedBonus(30, 5), 0.5);
-  assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.5), 4500);
+  assert.deepEqual([24, 25, 39, 40].map((h) => speedBonus(h, 3)), [0.3, 0.15, 0.15, 0]);
+  assert.equal(speedBonus(30, 5), 0.3);
+  assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.3), 3900);
 });
 test('you may walk away once half your opponents are out, but not before, not at the end, and never from a boss', () => {
   const T = (...chips) => chips.map((c) => ({ chips: c }));

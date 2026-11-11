@@ -8,7 +8,7 @@ export const CHARACTERS = {
   Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.25, aggr: 0.3, tell: 'slowBluff' } },
   Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
   Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.75, aggr: 0.3, tell: 'slowStrong' } },
-  Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.5, aggr: 0.55 } },
+  Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.38, aggr: 0.45 } },
   // newcomers: they start turning up from Table 4
   Zed: { tag: 'Maniac', color: '#ff8a3d', voice: 9, style: { loose: 0.95, aggr: 0.95 } },
   Flo: { tag: 'Nit', color: '#c7e36a', voice: 10, style: { loose: 0.1, aggr: 0.5, tell: 'slowStrong' } },
@@ -68,7 +68,7 @@ export function tableConfig(n, boss = false) {
   return {
     variant: variantFor(n),
     names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
-    handsPerLevel: twist?.key === 'turbo' ? 2 : Math.max(3, 7 - n),
+    handsPerLevel: twist?.key === 'turbo' ? 2 : [10, 8, 6, 5, 4][n - 1] ?? 3, // the first tables give you time to play
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
 }

@@ -2,7 +2,7 @@
 // (The rules and prices are in trip.js.)
 import { award } from './achievements.js';
 import * as audio from './audio.js';
-import { PERKS } from './build.js';
+import { FAMILIES, PERKS, familyCount } from './build.js';
 import { LADDER } from './career.js';
 import { tableConfig } from './config.js';
 import { loadSave, setNextTrip, startTable, writeSave } from './loop.js';
@@ -15,16 +15,17 @@ import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, newTrip, spend } fro
 import { $, glyph } from './util.js';
 
 const money = (n) => n.toLocaleString();
-export const pocketHtml = () => `<p class="bank">Pocket <b>${money(S.trip?.pocket || 0)}</b>${S.trip && S.trip.deal !== 'regular' ? ` &middot; ${dealOf(S.trip).name}` : ''}</p>`;
+// explain: say in a few words what the pocket is, for screens where a new player first meets it
+export const pocketHtml = (explain = false) => `<p class="bank">Pocket <b>${money(S.trip?.pocket || 0)}</b>${explain ? ' <small>this run\u2019s winnings so far, to spend in the shop between tables</small>' : ''}${S.trip && S.trip.deal !== 'regular' ? ` &middot; ${dealOf(S.trip).name}` : ''}</p>`;
 
 // A new run starts by choosing the deal it is played on.
 export function newRun() {
   const deals = dealsFor(myRank().index);
   showOverlay({
     title: 'Pick your <span>deal</span>', perky: true, closable: true, onClose: startScreen,
-    body: '<p>Bank what you win at each table, spend it in the shop, and take a quarter of what is left home when the run ends.</p><p>More deals unlock with rank.</p>',
-    items: deals.map((d, i) => [`${i === 0 ? glyph('A') : ''}<span>${d.name}<small>${d.locked ? `Unlocks at ${LADDER[d.rank][1]}` : d.text}</small></span>`,
-      () => { if (d.locked) { toast(`${d.name} unlocks at ${LADDER[d.rank][1]}`); return newRun(); } setNextTrip(newTrip(d.key)); startTable(1); }, false, d.locked]),
+    body: '<p>A run costs nothing. Chips you win go in your <b>pocket</b> to spend in the shop; a quarter of what is left at the end joins your <b>bankroll</b>.</p>',
+    items: deals.map((d, i) => [`${i === 0 ? glyph('A') : ''}<span>${d.name}<small>${d.locked ? `Unlocks at the rank of ${LADDER[d.rank][1]}` : d.text}</small></span>`,
+      () => { if (d.locked) { toast(`${d.name} unlocks at the rank of ${LADDER[d.rank][1]}`); return newRun(); } setNextTrip(newTrip(d.key)); startTable(1); }, false, d.locked]).concat([[`${glyph('B')}Back`, startScreen]]),
   });
   $('overlay').querySelector('.dialog').classList.add('tight');
 }
@@ -39,16 +40,15 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
   const again = () => { writeSave({ ...saved, perks: S.perks, trip: S.trip }); shop(n, saved, visit); };
   const buy = (cost, then) => () => { if (!spend(t, cost)) { toast('Not enough in your pocket'); return shop(n, saved, visit); } then(); again(); };
   const canBribe = !boss && t.bribe !== n && tableConfig(n).names.length > 2;
-  const leave = () => {
-    writeSave({ ...saved, perks: S.perks, trip: S.trip });
-    if (boss) return startTable(n, { ...saved, perks: S.perks, trip: S.trip, owed: false });
-    wayOn(n, saved);
-  };
+  // Leaving the shop is also choosing the way on: the next table as it comes, or the hard way for a bigger cash-out.
+  const go = (risky) => () => { t.risky = risky ? n : 0; writeSave({ ...saved, perks: S.perks, trip: t }); startTable(n, { ...saved, perks: S.perks, trip: t, owed: false }); };
+  const cfg = tableConfig(n, boss), usual = Math.round(cfg.names.length * cfg.chips * (dealOf(t).cash || 1) / 10) * 10; // roughly what winning it banks
+  const sets = Object.keys(FAMILIES).map((f) => ({ f, n: familyCount(S.perks, f) })).filter((x) => x.n > 0);
   showOverlay({
     title: 'The <span>shop</span>', wide: true, compact: true,
     body: `${pocketHtml()}${perkSummary() ? `<p class="who">You hold: ${perkSummary()}</p>` : ''}
-      <div class="wares">${visit.offer.map((k) => `<p><b>${PERKS[k].name}</b>${perkTag(k)} ${PERKS[k].text}</p>`).join('') || '<p>The shelf is empty. Reroll for more.</p>'}</div>
-      <p class="note">Perks last the whole run and cost more the more you hold. A boost and a pay-off are for the next table only.</p>`,
+      <div class="wares">${visit.offer.map((k) => `<p><b>${PERKS[k].name}</b>${perkTag(k)} ${PERKS[k].text}${S.perks[k] ? ` <i>You hold ${S.perks[k]}; another adds to it.</i>` : ''}</p>`).join('') || '<p>The shelf is empty. Reroll for more.</p>'}</div>
+      <p class="note"><b>Sets:</b> two different perks of one family pay &times;1.5, all three &times;2${sets.length ? ` (you have ${sets.map((x) => `${x.n}/3 ${FAMILIES[x.f].name}`).join(', ')})` : ''}. Each perk costs more than the last. <b>Reroll</b> changes the offer; the stack and one-fewer deals are for the next table only.${boss ? '' : ` <b>The hard way:</b> sharper opponents with ${Math.round((RISKY.oppStack - 1) * 100)}% more chips.`}</p>`,
     items: [
       ...visit.offer.map((k, i) => [`${i === 0 ? glyph('A') : ''}${PERKS[k].name} \u00b7 ${money(perk)}`, buy(perk, () => {
         S.perks[k] = (S.perks[k] || 0) + 1; visit.offer = visit.offer.filter((x) => x !== k); audio.win(1);
@@ -57,20 +57,8 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
       [`Reroll \u00b7 ${money(reroll)}`, buy(reroll, () => { visit.offer = draw(); visit.rerolls++; audio.shuffle(); }), false, reroll > t.pocket],
       ...(t.boost === n ? [] : [[`+25% stack \u00b7 ${money(boost)}`, buy(boost, () => { t.boost = n; audio.chips(5, 0, 4); }), false, boost > t.pocket]]),
       ...(canBribe ? [[`One fewer opponent \u00b7 ${money(bribe)}`, buy(bribe, () => { t.bribe = n; audio.confirm(); }), false, bribe > t.pocket]] : []),
-      ['Leave the shop', leave],
-    ],
-  });
-}
-
-// After the shop: the usual next table, or the same one the hard way for a bigger cash-out.
-function wayOn(n, saved) {
-  const cfg = tableConfig(n), go = (risky) => () => { S.trip.risky = risky ? n : 0; startTable(n, { ...saved, perks: S.perks, trip: S.trip, owed: false }); };
-  showOverlay({
-    title: 'Which <span>way?</span>', perky: true,
-    body: `${pocketHtml()}<p>Next: Table ${n}, ${cfg.venue}.</p>`,
-    items: [
-      [`${glyph('A')}<span>The usual<small>${cfg.names.length} opponents, as they come.</small></span>`, go(false)],
-      [`<span>The hard way<small>Sharper opponents with ${Math.round((RISKY.oppStack - 1) * 100)}% more chips. The cash-out pays ${Math.round((RISKY.cash - 1) * 100)}% more.</small></span>`, go(true)],
+      [boss ? 'On to the boss' : `Next table \u00b7 banks about ${money(usual)}`, go(false)],
+      ...(boss ? [] : [[`The hard way \u00b7 about ${money(Math.round(usual * RISKY.cash / 10) * 10)}`, go(true)]]),
     ],
   });
 }
@@ -91,7 +79,7 @@ export function walkAway() {
   const mid = ['betting', 'streetEnd'].includes(g.stage) && me.total > 0 && !me.folded;
   showOverlay({
     title: 'Walk <span>away?</span>', closable: true, onClose: pauseMenu,
-    body: `<p>Stand up now and bank <b>${money(bank)}</b>. There is no speed bonus, and Table ${S.table} will not count as cleared.</p><p>Stay and win it all for the ${money(left)} still on the table, at the risk of the run.${mid ? ' The hand in progress counts as folded.' : ''}</p>`,
+    body: `<p>Stand up now and bank <b>${money(bank)}</b>. You go on to the shop and the next table, but with no bonus, and Table ${S.table} will not count towards your best run.</p><p>Stay and win it all for the ${money(left)} still on the table, at the risk of the run.${mid ? ' The hand in progress counts as folded.' : ''}</p>`,
     items: [['Stay', pauseMenu], [`Walk away \u00b7 bank ${money(bank)}`, () => {
       const t = S.trip;
       S.runId++; // stops the game loop
@@ -102,7 +90,7 @@ export function walkAway() {
       audio.musicLevel(0); audio.chips(8, 0, 6);
       showOverlay({
         title: 'Walked <span>away</span>',
-        body: `<p>You left Table ${S.table} with ${g.players.filter((p, seat) => seat !== S.ME && p.chips > 0).length} still sitting. It does not count as cleared.</p><p class="gain">Cashed out +${money(bank)}</p>${pocketHtml()}`,
+        body: `<p>On to the next table. You left Table ${S.table} with ${g.players.filter((p, seat) => seat !== S.ME && p.chips > 0).length} still sitting. It does not count as cleared.</p><p class="gain">Cashed out +${money(bank)}</p>${pocketHtml()}`,
         items: [[`${glyph('A')}To the shop`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
       });
     }]],

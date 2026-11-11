@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
   const dlg = (n = 420) => p.evaluate((n) => document.querySelector('#overlay .dialog > div')?.innerText.replace(/\n+/g, ' / ').slice(0, n), n);
   const btns = () => p.evaluate(() => [...document.querySelectorAll('#overlay .btn')].map((x) => x.innerText.replace(/\n+/g, ' ')).join(' | '));
   const S = (f) => p.evaluate(async (f) => { const { S } = await import('/js/state.js'); return new Function('S', `return ${f}`)(S); }, f);
-  await click('Play'); await p.waitForTimeout(300); await click('Regular'); await p.waitForTimeout(500);
+  await click('Play'); await p.waitForTimeout(300); await click('Classic'); await p.waitForTimeout(500);
   console.log('intro:', (await dlg(700)).slice(150));
   await click('Deal me in'); await p.waitForTimeout(3200);
   await p.evaluate(() => document.getElementById('menu-btn').click()); await p.waitForTimeout(300);
@@ -21,7 +21,7 @@ const { chromium } = require('playwright');
   console.log('confirm:', await dlg(500), '||', await btns()); await p.screenshot({ path: 'walk.png' });
   await click('Walk away'); await p.waitForTimeout(400);
   console.log('walked:', await dlg(300)); console.log('trip:', JSON.stringify(await S('S.trip')), '| best stored:', await p.evaluate(() => localStorage.getItem('padpoker.best')), '| tables stat:', await p.evaluate(() => JSON.parse(localStorage.getItem('padpoker.stats') || '{}').tables));
-  await click('To the shop'); await p.waitForTimeout(300); await click('Leave the shop'); await p.waitForTimeout(300); await click('The usual'); await p.waitForTimeout(500);
+  await click('To the shop'); await p.waitForTimeout(300); await click('Next table'); await p.waitForTimeout(500);
   console.log('next:', (await dlg(120)));
   await click('Deal me in'); await p.waitForTimeout(3000);
   // clear table 2 quickly: speed bonus
