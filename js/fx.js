@@ -92,32 +92,15 @@ export function roll(el, to, { dur = 420, onTick } = {}) {
 let rumbleOn = true;
 export function setRumble(on) { rumbleOn = on; }
 const hasActuator = () => [...(navigator.getGamepads?.() ?? [])].some((gp) => gp?.vibrationActuator);
-const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-// iPhone Safari gives web pages no vibration API and cannot rumble a controller. The one
-// thing that does make the phone tick is toggling a native switch control, so we keep a
-// hidden one and click its label. It is a single light tap per call, it is unofficial, and
-// newer iOS versions may ignore it; if so this quietly does nothing.
-let tapper = null;
-function phoneTap() {
-  try {
-    if (!tapper) {
-      tapper = document.createElement('label');
-      tapper.setAttribute('aria-hidden', 'true');
-      tapper.style.cssText = 'position:fixed;left:-99px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
-      const sw = document.createElement('input');
-      sw.type = 'checkbox'; sw.setAttribute('switch', ''); sw.tabIndex = -1;
-      tapper.append(sw);
-      document.body.append(tapper);
-    }
-    tapper.click();
-  } catch { /* unsupported */ }
-}
+export const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 // Where haptics can come from on this device: 'controller', 'phone' (a real vibration motor
-// API, as on Android), 'taps' (the iPhone workaround) or 'none'.
+// API, as on Android) or 'none'. iPhone and iPad are always 'none': Safari there gives web
+// pages no vibration API and cannot rumble a controller, and the switch-toggle workaround
+// some sites use for a tap does not fire in an installed app, so it was removed.
 export function hapticSupport() {
-  return hasActuator() ? 'controller' : navigator.vibrate ? 'phone' : isIOS ? 'taps' : 'none';
+  if (isIOS) return 'none';
+  return hasActuator() ? 'controller' : navigator.vibrate ? 'phone' : 'none';
 }
 
 export function rumble(strong = 0.5, weak = 0.5, ms = 120) {
@@ -128,7 +111,6 @@ export function rumble(strong = 0.5, weak = 0.5, ms = 120) {
         gp?.vibrationActuator?.playEffect?.('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch?.(() => {});
       }
     } else if (navigator.vibrate) navigator.vibrate(Math.max(20, ms));
-    else if (isIOS) { phoneTap(); if (Math.max(strong, weak) >= 0.9 && ms >= 200) setTimeout(phoneTap, 90); } // big moments get a double tap
   } catch { /* unsupported */ }
 }
 
