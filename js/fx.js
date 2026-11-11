@@ -145,6 +145,42 @@ export function shuffle(deck) {
   });
 }
 
+// The big moments: a title stamped on letter by letter, a flash, and paper confetti.
+export function stamp(text, sub = '', cls = '', hold = 2600) {
+  const e = spawn(`stampfx ${cls}`, `<b>${[...text].map((ch) => (ch === ' ' ? '<i class="gap"></i>' : `<i>${ch}</i>`)).join('')}</b>${sub ? `<small>${sub}</small>` : ''}`);
+  const letters = [...e.querySelectorAll('b i:not(.gap)')];
+  if (calm) { setTimeout(() => e.remove(), hold); return; }
+  letters.forEach((l, i) => l.animate([
+    { transform: 'translateY(-1.2em) scale(2.4) rotate(-14deg)', opacity: 0 },
+    { transform: 'translateY(0) scale(.86) rotate(2deg)', opacity: 1, offset: 0.6 },
+    { transform: 'translateY(0) scale(1) rotate(0deg)', opacity: 1 },
+  ], { duration: 320, delay: i * 55, easing: 'cubic-bezier(.3, 1.6, .5, 1)', fill: 'both' }));
+  const sm = e.querySelector('small');
+  if (sm) sm.animate([{ opacity: 0, transform: 'translateY(.6em)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: letters.length * 55 + 250, fill: 'both' });
+  e.animate([{ opacity: 1, transform: 'translate(50vw, 44vh) translate(-50%, -50%) rotate(-4deg) scale(1)' }, { opacity: 0, transform: 'translate(50vw, 44vh) translate(-50%, -50%) rotate(-4deg) scale(1.25)' }],
+    { duration: 380, delay: hold, fill: 'forwards' }).onfinish = () => e.remove();
+}
+export function flash(color = '#fff') {
+  if (calm) return;
+  const e = spawn('flashfx');
+  e.style.background = color;
+  e.animate([{ opacity: 0.85 }, { opacity: 0 }], { duration: 420, easing: 'ease-out' }).onfinish = () => e.remove();
+}
+export function confetti(n = 90) {
+  if (calm) return;
+  const w = innerWidth, hgt = innerHeight, cols = ['var(--yellow)', 'var(--red)', 'var(--mint)', 'var(--paper)', 'var(--sky)'];
+  for (let i = 0; i < n; i++) {
+    const c = spawn('confettifx');
+    c.style.background = cols[i % cols.length];
+    const fromLeft = i % 2 === 0, x0 = fromLeft ? -0.02 * w : 1.02 * w, peakX = rnd(0.15, 0.85) * w, peakY = rnd(0.05, 0.4) * hgt, spin = rnd(-900, 900);
+    c.animate([ // fired in from both bottom corners, then fluttering down
+      { transform: `translate(${x0}px, ${hgt}px) rotate(0deg)`, opacity: 1 },
+      { transform: `translate(${peakX}px, ${peakY}px) rotate(${spin * 0.4}deg)`, opacity: 1, offset: 0.35, easing: 'cubic-bezier(.2, .7, .4, 1)' },
+      { transform: `translate(${peakX + rnd(-0.12, 0.12) * w}px, ${1.1 * hgt}px) rotate(${spin}deg)`, opacity: 1 },
+    ], { duration: rnd(1900, 3200), delay: rnd(0, 500), fill: 'both' }).onfinish = () => c.remove();
+  }
+}
+
 // Chips tumbling down the whole screen.
 export function chipRain(n = 40) {
   if (calm) return;
