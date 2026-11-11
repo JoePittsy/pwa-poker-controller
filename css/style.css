@@ -537,6 +537,10 @@ input[type=range] { width: 100%; height: 2.4rem; accent-color: var(--red); margi
 .faces .ava.sel { background: var(--yellow); translate: 0 -.3rem; box-shadow: .25rem .55rem 0 var(--ink); }
 .chatin { width: 34rem; font-size: 1.9rem; }
 #emotes .btn.type { grid-column: 1 / -1; }
+#crowd { left: auto; right: 1.5rem; top: 64%; transform: none; max-width: 24rem; text-align: left; border-style: dashed; } /* spectators talking from the rail */
+#crowd::before { display: none; }
+#crowd.show { animation: rise .25s var(--spring); }
+.lefty #crowd { right: auto; left: 1.5rem; }
 .ver { opacity: .6; font-size: 1.3rem; white-space: nowrap; }
 .namein { display: block; width: 22rem; max-width: 100%; margin-top: 1rem; padding: .7rem 1.1rem; font: inherit; font-size: 2.4rem; font-weight: 800; color: var(--ink);
   background: var(--paper); border: .3rem solid var(--ink); border-radius: 1.2rem; box-shadow: .3rem .3rem 0 var(--ink); outline: none; -webkit-user-select: text; user-select: text; }
