@@ -19,7 +19,7 @@ function packet(type, body) {
 }
 
 export class Relay {
-  constructor(url) { this.url = url; this.onMessage = () => {}; this.onClose = () => {}; this.buf = new Uint8Array(0); this.subs = new Set(); this.open = false; }
+  constructor(url) { this.url = url; this.onMessage = (topic, text) => {}; this.onClose = () => {}; this.buf = new Uint8Array(0); this.subs = new Set(); this.open = false; }
 
   connect(timeout = 7000) {
     return new Promise((resolve, reject) => {

@@ -27,6 +27,7 @@ function spawn(cls, html = '') {
   return e;
 }
 
+/** @param {any} fromEl @param {any} toEl @param {number} [n] @param {any} [o] */
 export function flyChips(fromEl, toEl, n = 1, { stagger = 45, onLand, spread = 1 } = {}) {
   const a = mid(fromEl), b = mid(toEl), u = rem() * spread; // spread > 1 scatters the landing, for a thrown bet
   for (let i = 0; i < n; i++) {
@@ -72,6 +73,7 @@ export function burst(el, n = 34) {
 }
 
 // Tween the number shown in el towards `to`.
+/** @param {any} el @param {number} to @param {any} [o] */
 export function roll(el, to, { dur = 420, onTick } = {}) {
   const from = el._cur ?? to;
   cancelAnimationFrame(el._raf);

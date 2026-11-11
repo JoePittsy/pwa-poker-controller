@@ -20,7 +20,8 @@ export class Game {
     this.board = [];
     this.stage = 'idle';
     this.toAct = -1;
-    [this.sb, this.bb] = BLIND_LEVELS[0];
+    this.sb = BLIND_LEVELS[0][0];
+    this.bb = BLIND_LEVELS[0][1];
   }
 
   get pot() { return this.players.reduce((s, p) => s + p.total, 0); }

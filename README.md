@@ -64,3 +64,11 @@ first button press.
 - [x] Perks, boss fights, table-clear celebration, card squeeze, haptic patterns, daily deal, stickers
 - [x] Opponent memory, five new opponents, share cards, quick table, pass-and-play, thrown chips
 - [x] Slow-motion showdowns, table talk, difficulty, notebook, hand history with replay, hand review, short deck and Omaha
+
+## Working on it
+
+No build step: the site is the files in this folder. `npm start` serves it on port 8080.
+
+- `npm run check` runs the linter, a type check over the JavaScript and the unit tests. The deploy runs it too and stops if it fails.
+- `js/main.js` only starts the app. Each area lives in its own file (`online.js`, `render.js`, `loop.js`, `menus.js` and so on), and everything that changes while the game runs is on the `S` object in `js/state.js`.
+- A new file in `js/` must be added to the offline list in `sw.js`; a test fails if it is missing.

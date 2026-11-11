@@ -23,7 +23,7 @@ const PENTA = [0, 2, 4, 7, 9];
 const scale = (i) => 60 + 12 * Math.floor(i / 5) + PENTA[((i % 5) + 5) % 5];
 
 function init() {
-  const AC = window.AudioContext || window.webkitAudioContext;
+  const AC = window.AudioContext || /** @type {any} */ (window).webkitAudioContext;
   if (!AC) return false;
   ctx = new AC();
   const comp = ctx.createDynamicsCompressor();
@@ -69,6 +69,7 @@ function shape(g, t, a, d, v) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
 }
 // delay is in seconds from now
+/** @param {any} o */
 function tone({ f, f2, type = 'sine', delay = 0, a = 0.003, d = 0.15, v = 0.3, wet = 0, bus = sfxBus }) {
   const t = ctx.currentTime + delay;
   const o = ctx.createOscillator(), g = ctx.createGain();
@@ -79,6 +80,7 @@ function tone({ f, f2, type = 'sine', delay = 0, a = 0.003, d = 0.15, v = 0.3, w
   o.connect(g); out(g, bus, wet);
   o.start(t); o.stop(t + a + d + 0.05);
 }
+/** @param {any} o */
 function noise({ delay = 0, a = 0.002, d = 0.1, v = 0.2, type = 'bandpass', f = 2000, f2, q = 1, wet = 0, bus = sfxBus }) {
   const t = ctx.currentTime + delay;
   const s = ctx.createBufferSource(), flt = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -91,6 +93,7 @@ function noise({ delay = 0, a = 0.002, d = 0.1, v = 0.2, type = 'bandpass', f = 
   s.start(t, Math.random()); s.stop(t + a + d + 0.05);
 }
 // the house instrument: a wooden mallet "tok" (fundamental + the 4x partial a marimba bar has)
+/** @param {number} note @param {any} [o] */
 function tok(note, { delay = 0, v = 0.3, d = 0.2, bus = sfxBus, wet = 0.15 } = {}) {
   const f = midi(note + (bus === musicBus ? 0 : flavour.key));
   tone({ delay, f, d, v, wet, bus });
@@ -186,7 +189,7 @@ export const talk = sfx((seat = 1) => {
 // clearing a table: a run up the bars, two big chords and a shower of chips
 export const fanfare = sfx(() => {
   for (let i = 0; i < 10; i++) tok(scale(i) + 12, { delay: i * 0.055, v: 0.2 + i * 0.012, d: 0.16, wet: 0.3 });
-  for (const [delay, notes] of [[0.62, [60, 67, 72, 76]], [1.0, [60, 64, 67, 72, 79, 84]]]) {
+  for (const [delay, notes] of /** @type {[number, number[]][]} */ ([[0.62, [60, 67, 72, 76]], [1.0, [60, 64, 67, 72, 79, 84]]])) {
     for (const m of notes) tok(m + 12, { delay, v: 0.26, d: 1.1, wet: 0.6 });
     thud(delay, 0.8);
   }
