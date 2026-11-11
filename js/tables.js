@@ -12,6 +12,7 @@ import { glyph } from './util.js';
 const KEY = 'padpoker.bank';
 export const bank = () => { try { return readBank(localStorage.getItem(KEY)); } catch { return readBank(null); } };
 const save = (b) => { try { localStorage.setItem(KEY, JSON.stringify(b)); } catch { /* private mode */ } return b; };
+export function addToBank(n) { const b = bank(); b.chips += Math.max(0, Math.floor(n)); save(b); }
 export const bankHtml = () => `<p class="bank">Bankroll <b>${bank().chips.toLocaleString()}</b></p>`;
 // Called whenever the menus open: chips left on a cash table (the app was closed mid-session) come home,
 // and a player who cannot afford anything is staked again.

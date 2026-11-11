@@ -2,6 +2,7 @@
 // write these through S, because a value imported from another module cannot be reassigned.
 export const S = {
   bossMode: false,
+  trip: null,
   perks: {},
   heat: 0,
   memory: {},

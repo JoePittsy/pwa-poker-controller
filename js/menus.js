@@ -1,3 +1,4 @@
+import { newRun } from './tripui.js';
 import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
@@ -81,7 +82,7 @@ export function startScreen() {
   const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
   const d = dailyData(), days = streak(d.scores, today()), daily = `Daily deal${d.scores[today()] !== undefined ? ' \u2713' : ''}${days > 1 ? ` \u00b7 ${days} days` : ''}`;
   const run = saved
-    ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)]]
+    ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', newRun]]
     : [[`${glyph('A')}Play`, firstPlay]];
   showOverlay({
     title: TITLE, compact: true,
@@ -94,7 +95,7 @@ export function startScreen() {
 export function firstPlay() {
   let seen = true;
   try { seen = !!localStorage.getItem('padpoker.seen'); } catch { /* private mode */ }
-  if (seen) startTable(1); else howTo(0, () => startTable(1), true);
+  if (seen) newRun(); else howTo(0, () => startTable(1), true); // a first run is played on the regular deal
 }
 // Leave the table for the title screen. A run or daily deal is kept exactly where it is,
 // to carry on later; if you walk away in the middle of a hand, that hand counts as folded
@@ -107,7 +108,7 @@ export function exitToMenu() {
     const me = g.players[S.ME];
     const chips = g.players.map((p) => (p === me ? p.chips : p.chips + p.total));
     if (me.chips > 0) { // (all-in and walking away would bust you: that hand is simply dealt again instead)
-      writeSave({ table: S.table, boss: S.bossMode, chips, dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
+      writeSave({ table: S.table, boss: S.bossMode, chips, dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
       if (!me.folded && me.total > 0) setTimeout(() => toast('Saved. The hand you left counts as folded.'), 300);
     }
   }

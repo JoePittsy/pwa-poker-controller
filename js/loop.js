@@ -1,3 +1,5 @@
+import { newTrip, readTrip, tableMods } from './trip.js';
+import { shop } from './tripui.js';
 import { coachTip } from './tip.js';
 import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
@@ -19,7 +21,7 @@ import { best } from './menus.js';
 import { noteDecision, noteHand } from './notebook.js';
 import { leaveOnline, netBroadcast, netDone, netEffect, netOn, remoteAction, startClock, netBetweenHands } from './online.js';
 import { passDone, takeSeat } from './pass.js';
-import { grudge, pickPerk } from './perks.js';
+import { grudge } from './perks.js';
 import { DIFFICULTY, prefs, ui } from './prefs.js';
 import { cashBust, cashHand, quickDone } from './tables.js';
 import { BURN_MS, buildSeats, dealOrder, render } from './render.js';
@@ -68,37 +70,43 @@ export function writeSave(s) {
 }
 
 // Start (or resume) a table. `saved` may carry mid-table chip stacks.
+let nextTrip = null; // the trip a new run will start on, set by the deal picker
+export const setNextTrip = (t) => { nextTrip = t; };
 export function startTable(n, saved) {
   leaveOnline();
   S.mode = 'run'; S.aiRng = Math.random; S.ME = 0; ui.hidden = false;
+  S.trip = saved ? readTrip(saved.trip) : n === 1 ? nextTrip || newTrip() : S.trip || newTrip(); // the deal, pocket and route of this run
+  nextTrip = null;
   if (n === 1 && !saved) S.memory = {};
   if (saved?.mem) S.memory = saved.mem;
   if (n === 1 && !saved) { S.perks = {}; S.heat = 0; }
   if (saved?.perks) { S.perks = saved.perks; S.heat = saved.heat || 0; }
-  if (saved?.owed) return pickPerk(() => startTable(n, { ...saved, perks: S.perks, owed: false })); // a perk is due for the table just cleared
+  if (saved?.owed) return shop(n, saved); // between tables: the shop, then the way on
   if (n === 1 && !saved) { S.habits = { facing: 0, folds: 0, acts: 0, raises: 0 }; stats.runs++; saveStats(); S.runStats = { ...RUN0, startBest: best(), seed: Math.floor(Math.random() * 1e9) + 1 }; }
   if (saved?.run) S.runStats = { ...RUN0, ...saved.run };
   S.table = n;
   S.bossMode = !!saved?.boss;
-  const cfg = tableConfig(n, S.bossMode);
+  const cfg = tableConfig(n, S.bossMode), mods = tableMods(S.trip, n);
   const info = (name) => (cfg.boss ? cfg.boss : CHARACTERS[name]);
   S.cast = [YOU, ...cfg.names.map((name) => {
-    const st = { ...info(name).style, skill: cfg.skill };
+    const st = { ...info(name).style, skill: Math.min(1, cfg.skill + mods.skill) };
     if (grudge(name)) st.aggr = Math.min(0.95, st.aggr + 0.12 * grudge(name)); // out for revenge
     return { name, ...info(name), style: st };
   })];
-  S.game = new Game({ players: S.cast, handsPerLevel: cfg.handsPerLevel + 2 * (S.perks.slowblinds || 0), chips: cfg.chips, variant: cfg.variant || 'holdem' });
+  S.game = new Game({ players: S.cast, handsPerLevel: Math.max(2, Math.round((cfg.handsPerLevel + 2 * (S.perks.slowblinds || 0)) * mods.blinds)), chips: cfg.chips, variant: cfg.variant || 'holdem' });
   setVariantLook(S.game.variant);
-  S.game.players[S.ME].chips = Math.round(cfg.chips * stackFactor(S.perks));
+  S.game.players[S.ME].chips = Math.round(cfg.chips * stackFactor(S.perks) * mods.stack);
+  if (!saved?.chips) S.trip.buyin = S.game.players[S.ME].chips; // what you sat down with: the cash-out is what you win beyond it
   if (cfg.boss?.chips) S.game.players[1].chips = cfg.chips * cfg.boss.chips;
   if (DIFFICULTY[prefs.difficulty].stack !== 1) for (const p of S.game.players) if (!p.isHuman) p.chips = Math.round(p.chips * DIFFICULTY[prefs.difficulty].stack);
+  if (mods.oppStack !== 1) for (const p of S.game.players) if (!p.isHuman) p.chips = Math.round(p.chips * mods.oppStack);
   S.twist = cfg.twist?.key || '';
   if (saved?.habits) S.habits = saved.habits;
   if (saved?.chips) {
     S.game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     S.game.dealer = saved.dealer;
     S.game.handNo = saved.handNo;
-  } else writeSave({ table: n, boss: S.bossMode, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
+  } else writeSave({ table: n, boss: S.bossMode, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
   setTable(cfg.mat, cfg.boss ? 'boss' : kindOf(n - 1), cfg.boss ? cfg.boss.name : cfg.venue);
   audio.setVenue(n - 1);
   buildSeats();
@@ -280,6 +288,8 @@ export async function run() {
     }
     // bonuses are paid by the house, on top of the pot
     const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, category: Math.floor((me.score || 0) / 13 ** 5) }, S.heat);
+    const pm = S.mode === 'run' ? tableMods(S.trip, S.table).payout : 1;
+    if (pm !== 1) { paid.total = Math.round(paid.total * pm); }
     if (!friendly) S.heat = nextHeat(S.heat, { won: me.won, showdown: g.result.showdown, folded: me.folded });
     const bounty = S.twist === 'bounty' ? BOUNTY * kos : 0, bonus = bounty + paid.total;
     if (bonus > 0) {
@@ -297,7 +307,7 @@ export async function run() {
     render();
     handOverFx();
     setTimeout(handOverBanter, 700);
-    writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
+    writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
     await sleep(500);
     if (S.mode === 'net') { await Promise.race([prompt('continue'), tick(9000)]); if (ui.mode === 'continue') finish(); } // nobody should wait on the host
     else await prompt('continue');
