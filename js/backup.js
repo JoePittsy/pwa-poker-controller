@@ -1,7 +1,7 @@
 // Backup and restore. Everything the game remembers lives in this browser's storage, so clearing
 // site data or reinstalling loses it. A backup is all of it as one line of text that can be copied,
 // shared as a file, and pasted back in on this or another device.
-const KEYS = ['prefs', 'audio', 'stats', 'stickers', 'notes', 'best', 'daily', 'save', 'seen']; // not the online seat or relay: those belong to one device and one game
+const KEYS = ['prefs', 'audio', 'stats', 'stickers', 'notes', 'best', 'daily', 'save', 'seen', 'rank']; // not the online seat or relay: those belong to one device and one game
 const TAG = 'POKERPAD1:';
 const enc = (s) => { const b = new TextEncoder().encode(s); let t = ''; for (const x of b) t += String.fromCharCode(x); return btoa(t); };
 const dec = (s) => new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)));

@@ -3,7 +3,7 @@ import { S } from './state.js';
 import { $ } from './util.js';
 
 // ---------- stats and hand history ----------
-export const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, allins: 0, allinsWon: 0, knockouts: 0, tables: 0, runs: 0, bosses: 0, bestScore: 0, bestHand: '' };
+export const STATS0 = { hands: 0, won: 0, biggest: 0, showdowns: 0, showdownsWon: 0, allins: 0, allinsWon: 0, knockouts: 0, tables: 0, runs: 0, bosses: 0, online: 0, onlineWins: 0, bestScore: 0, bestHand: '' };
 export const stats = { ...STATS0 };
 try { Object.assign(stats, JSON.parse(localStorage.getItem('padpoker.stats')) || {}); } catch { /* private mode */ }
 export const saveStats = () => { try { localStorage.setItem('padpoker.stats', JSON.stringify(stats)); } catch { /* private mode */ } };

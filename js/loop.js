@@ -1,3 +1,4 @@
+import { rankCheck } from './rank.js';
 import { award, checkHandStickers, feats } from './achievements.js';
 import { decide, equity } from './ai.js';
 import * as audio from './audio.js';
@@ -236,6 +237,7 @@ export async function run() {
     S.settled = true;
     const friendly = S.mode === 'pass' || S.mode === 'net'; // games among people: no stats, stickers or notes
     const kos = friendly ? 0 : recordHand(g);
+    rankCheck();
     if (!friendly) noteHand(g);
     if (S.mode === 'run' && !S.bossMode && me.won > 0) { // they remember who took their last chip
       for (const p of g.players) if (!p.isHuman && !p.out && p.chips === 0 && p.total > 0) S.memory[p.name] = { ko: grudge(p.name) + 1 };
