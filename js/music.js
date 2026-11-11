@@ -102,6 +102,16 @@ function planSection(sec, seed, arpBase) {
   };
 }
 
+// A long session should not sound like one track. Each venue has its own key, tempo, swing and lead
+// voice (its flavour), and within a venue the key moves every six sections (about a minute and a half),
+// through keys that sit well next to each other, coming home again at the end of the cycle.
+export const DRIFT = [0, 5, -2, 3, -4, 0];
+/** The key, in semitones from A minor, for a section of the tune at a venue. */
+export const songKey = (flavour, secIdx) => (flavour.key || 0) + DRIFT[Math.floor(Math.max(0, secIdx) / 6) % DRIFT.length];
+/** One sixteenth note, in seconds, at a venue's tempo. */
+export const sixteenth = (flavour) => S16 / (flavour?.tempo || 1);
+/** One bar, in seconds, at a venue's tempo. */
+export const barSeconds = (flavour) => sixteenth(flavour) * 16;
 export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
   const plans = new Map(); // section index -> how it is played
   // ---- signal chain ----
@@ -185,10 +195,12 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
   // The melody voice: a soft mallet, an octave below where it is written. Each note is struck
   // and dies away (no held tone, no vibrato), and it is filtered dark so it never pierces.
   function lead(note, t, dur, v) {
-    const f = midi(note + key - 12), ring = Math.max(0.45, dur + 0.25);
+    // three voices, all soft: a low mallet, the same an octave up and shorter (glass), or a slower-blooming pad
+    const up = voice === 'glass' ? 0 : -12, f = midi(note + key + up), ring = Math.max(0.45, dur + 0.25) * (voice === 'glass' ? 0.7 : voice === 'pad' ? 1.5 : 1);
+    if (voice === 'glass') v *= 0.6;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(v, t + 0.01);
+    g.gain.linearRampToValueAtTime(v, t + (voice === 'pad' ? 0.12 : 0.01));
     g.gain.exponentialRampToValueAtTime(v * 0.3, t + ring * 0.5);
     g.gain.exponentialRampToValueAtTime(0.0001, t + ring + 0.4);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 0.3;
@@ -221,43 +233,45 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
 
   // level: 0 = keys and bass only, 1 = + drums and arpeggio, 2 = + melody
   // flavour: { key: semitones to transpose, arp: which arpeggio shapes } — each venue has its own
-  let key = 0;
+  let key = 0, voice = 'mallet';
   // level: 0 = keys and bass only, 1 = + drums and arpeggio, 2 = + melody
   function scheduleBar(bar, t0, level, flavour = {}) {
-    key = flavour.key || 0;
     const secIdx = Math.floor(bar / 4), inSec = bar % 4;
+    key = songKey(flavour, secIdx);
+    voice = flavour.lead || 'mallet';
+    const s16 = sixteenth(flavour);
     if (!plans.has(secIdx)) { plans.set(secIdx, planSection(secIdx, seed, flavour.arp || 0)); plans.delete(secIdx - 3); }
     const plan = plans.get(secIdx);
     const [root, voicing] = CH[plan.prog[inSec]];
-    const at = (step) => t0 + step * S16 + (step % 2 ? 0.022 : 0); // lazy sixteenth swing
+    const at = (step) => t0 + step * s16 + (step % 2 ? flavour.swing ?? 0.022 : 0); // lazy sixteenth swing
     const odd = bar % 2 === 1;
 
     // electric piano
     if (plan.keys === 1) { // one slow rolled chord per bar
-      voicing.forEach((n, i) => ep(n, at(0) + i * 0.06, S16 * 12, 0.095));
+      voicing.forEach((n, i) => ep(n, at(0) + i * 0.06, s16 * 12, 0.095));
     } else if (plan.keys === 2) { // pushed: on the one and just before the three
-      voicing.forEach((n, i) => ep(n, at(0) + i * 0.012, S16 * 3, 0.1));
-      voicing.forEach((n, i) => ep(n, at(7) + i * 0.01, S16 * 3, 0.07));
-      voicing.slice(1).forEach((n, i) => ep(n, at(11) + i * 0.01, S16 * 4, 0.06));
+      voicing.forEach((n, i) => ep(n, at(0) + i * 0.012, s16 * 3, 0.1));
+      voicing.forEach((n, i) => ep(n, at(7) + i * 0.01, s16 * 3, 0.07));
+      voicing.slice(1).forEach((n, i) => ep(n, at(11) + i * 0.01, s16 * 4, 0.06));
     } else {
-      voicing.forEach((n, i) => ep(n, at(0) + i * 0.012, S16 * 5, 0.1)); // slightly strummed
-      voicing.forEach((n, i) => ep(n, at(6) + i * 0.01, S16 * 6, 0.07));
-      if (odd) voicing.slice(1).forEach((n) => ep(n + 12, at(13), S16 * 2, 0.045));
+      voicing.forEach((n, i) => ep(n, at(0) + i * 0.012, s16 * 5, 0.1)); // slightly strummed
+      voicing.forEach((n, i) => ep(n, at(6) + i * 0.01, s16 * 6, 0.07));
+      if (odd) voicing.slice(1).forEach((n) => ep(n + 12, at(13), s16 * 2, 0.045));
     }
     if (plan.sparkle && inSec === 0) pluck(voicing[3] + 24, at(2), 0.07); // a high note that rings into the echo
 
     // bass
     if (plan.bassLine === 1) { // held root, then the fifth
-      bass(root, at(0), S16 * 7, 0.2);
-      bass(root + 7, at(8), S16 * 5, 0.16);
+      bass(root, at(0), s16 * 7, 0.2);
+      bass(root + 7, at(8), s16 * 5, 0.16);
     } else if (plan.bassLine === 2) { // walking in quarter notes up the chord
       [root, voicing[1] - 24 > root ? voicing[1] - 24 : root + 4, root + 7, root + (inSec === 3 ? 11 : 10)]
-        .forEach((n, q) => bass(n, at(q * 4), S16 * 3.2, q ? 0.15 : 0.2));
+        .forEach((n, q) => bass(n, at(q * 4), s16 * 3.2, q ? 0.15 : 0.2));
     } else {
-      bass(root, at(0), S16 * 5, 0.2);
-      bass(root, at(6), S16 * 3, 0.16);
-      if (odd) bass(root + 12, at(10), S16 * 1.5, 0.14);
-      bass(root + 7, at(14), S16 * 1.6, 0.14);
+      bass(root, at(0), s16 * 5, 0.2);
+      bass(root, at(6), s16 * 3, 0.16);
+      if (odd) bass(root + 12, at(10), s16 * 1.5, 0.14);
+      bass(root + 7, at(14), s16 * 1.6, 0.14);
     }
 
     if (level >= 1) {
@@ -289,8 +303,9 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
       }
     }
     if (level >= 2 && plan.melody) {
-      for (const [b, s, n, l] of plan.melody) if (b === inSec) lead(n, at(s), l * S16, 0.11);
+      for (const [b, s, n, l] of plan.melody) if (b === inSec) lead(n, at(s), l * s16, 0.11);
     }
+    return key;
   }
   return { scheduleBar, filter: master };
 }
