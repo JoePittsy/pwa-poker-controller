@@ -1,4 +1,4 @@
-import { SPEED, cashOut, clearedCount, dealOf, fastPar, quickPar, speedBonus, takeHome } from './trip.js';
+import { cashOut, clearedCount, dealOf, speedBonus, takeHome } from './trip.js';
 import { newRun, pocketHtml } from './tripui.js';
 import { addToBank, bank } from './tables.js';
 import { rankHtml } from './rank.js';
@@ -14,7 +14,7 @@ import { Game } from './engine.js';
 import * as fx from './fx.js';
 import { loadSave, startTable, writeSave } from './loop.js';
 import { best, closeOverlay, controlsHtml, showOverlay, statsScreen, tables, startScreen } from './menus.js';
-import { grudge, perkSummary } from './perks.js';
+import { grudge } from './perks.js';
 import { BACKS, DIFFICULTY, PACE, STACKS, applyPrefs, bestRun, cycle, prefs, ui, unlockedBacks } from './prefs.js';
 import { buildSeats, render } from './render.js';
 import { runCard, share } from './results.js';
@@ -174,6 +174,10 @@ export function settingsMenu(back) {
   });
 }
 // Who starts with what, read from the table as it has actually been dealt.
+function stacksEqual() {
+  const me = S.game.players[S.ME].chips;
+  return S.game.players.every((p) => p.chips === me);
+}
 function stacksLine() {
   const me = S.game.players[S.ME].chips, them = [...new Set(S.game.players.filter((p, seat) => seat !== S.ME).map((p) => p.chips))];
   if (them.length === 1 && them[0] === me) return `Everyone starts with ${me.toLocaleString()} chips.`;
@@ -184,25 +188,24 @@ function tripLine() {
   const t = S.trip, n = S.table, bits = [];
   if (!t) return '';
   if (t.deal !== 'regular') bits.push(`<b>${dealOf(t).name}:</b> ${dealOf(t).text}`);
-  if (!S.bossMode) { const opp = S.game.players.length - 1, half = Math.ceil(opp / 2); bits.push(`<b>Bonus:</b> win the table in ${fastPar(opp)} hands or fewer and ${SPEED.fast * 100}% is added to what it puts in your pocket (${quickPar(opp)} or fewer: ${SPEED.quick * 100}%).${opp > 1 ? ` <b>Walking away:</b> once ${half} opponent${half === 1 ? ' is' : 's are'} out, the menu button (\u2630) lets you leave with what you have won so far.` : ''}`); }
   if (t.risky === n) bits.push('<b>The hard way:</b> sharper opponents with more chips, and a bigger cash-out.');
   if (t.boost === n) bits.push('<b>Boosted:</b> you start with 25% more.');
   if (t.bribe === n && !S.bossMode) bits.push('<b>Paid off:</b> one opponent stayed away.');
-  return `${bits.map((b) => `<p class="who">${b}</p>`).join('')}${pocketHtml(true)}`;
+  return bits.map((b) => `<p class="who">${b}</p>`).join('');
 }
 export function tableIntro(start) {
   const cfg = tableConfig(S.table, S.bossMode);
   if (S.bossMode) {
     return showOverlay({
       title: 'Boss <span>fight</span>',
-      body: `<p class="venue">${cfg.venue}</p><p>One on one. Beat ${cfg.boss.name} to carry on; lose and the run is over.</p><p class="who"><b>${cfg.boss.tag}:</b> ${cfg.boss.trick}</p>${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}${tripLine()}`,
+      body: `<p class="venue">${cfg.venue}</p><p>One on one. Beat ${cfg.boss.name} to carry on; lose and the run is over.</p><p class="who"><b>${cfg.boss.tag}:</b> ${cfg.boss.trick}</p>${tripLine()}`,
       items: [[`${glyph('A')}Sit down`, start]],
     });
   }
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${S.table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up. ${stacksLine()} Blinds rise every ${cfg.handsPerLevel} hands.${prefs.difficulty !== 'Standard' ? ` Difficulty: ${prefs.difficulty}.` : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${perkSummary() ? `<p class="who">Your perks: ${perkSummary()}</p>` : ''}${tripLine()}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up.${stacksEqual() ? '' : ` ${stacksLine()}`}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${tripLine()}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -290,6 +293,6 @@ export function bustSummary() {
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won')}${tile(r.biggest.toLocaleString(), 'biggest pot won')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('A')}Again, same deal`, () => newRun(S.trip?.deal)], ['Change deal', () => newRun()], ...(keyHands().length ? [['Review key hands', () => reviewScreen(keyHands(), 0, bustSummary)]] : []), ['Share', () => share(runCard(), 'pad-poker-run.png'), true], ['Stats', () => statsScreen(bustSummary)], ['Main menu', startScreen]],
+    items: [[`${glyph('A')}Again, same deal`, () => newRun(S.trip?.deal)], ['Change deal', () => newRun()], ['Main menu', startScreen], ...(keyHands().length ? [['Review key hands', () => reviewScreen(keyHands(), 0, bustSummary)]] : []), ['Stats', () => statsScreen(bustSummary)], ['Share', () => share(runCard(), 'pad-poker-run.png'), true]],
   });
 }

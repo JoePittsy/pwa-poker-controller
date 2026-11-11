@@ -72,9 +72,23 @@ export function handOverFx() {
     const net = p.won - p.total; // what the hand actually made them, not the size of the pot
     if (net > 0) setTimeout(() => fx.floatText(plate, `+${net.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
   }
-  if (g.result.showdown && !me.folded && me.total > me.won) { // a showdown you lost: say what it cost you
+  if (me.total > me.won) { // any hand that cost you chips, folded or not: say what it cost
     const cost = me.total - me.won;
     setTimeout(() => fx.floatText(S.seatEls[S.ME].querySelector('.plate'), `\u2212${cost.toLocaleString()}`, 'lost'), 350);
+    if (g.result.showdown && !me.folded && S.mode !== 'pass' && S.mode !== 'net') {
+      const w = g.players[g.result.winners.find((s) => s !== S.ME)];
+      if (w?.handName && me.handName) {
+        const lower = (t) => t.charAt(0).toLowerCase() + t.slice(1);
+        const text = `${w.name} had ${lower(w.handName)}; you had ${lower(me.handName)}.`;
+        let tries = 0; // wait for the end of any banner already on screen (a bonus or lifeline) rather than overlap it
+        const show = () => {
+          if (S.game !== g) return;
+          if (document.querySelector('#fx .bannerfx') && tries++ < 6) return void setTimeout(show, 500);
+          fx.banner(text, 'info beat');
+        };
+        setTimeout(show, 1200);
+      }
+    }
   }
   if (me.won > 0) {
     const size = me.won >= total && me.won > 40 * g.bb ? 3 : me.won > 12 * g.bb ? 2 : 1;

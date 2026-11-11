@@ -47,6 +47,8 @@ export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant
 }
 
 // human: { foldToBet, aggression } — observed tendencies of the human player, 0..1
+const K = JSON.parse(process.env.K || '{}');
+const RA = K.RA ?? 1, RB = K.RB ?? 0.2, SL = K.SL ?? 0.2, TB = K.TB ?? 0.3, TIGHT = K.C ?? 1.5, LOOSE_SPAN = K.LF ?? 10;
 export function decide(g, seat, rng = Math.random, human = {}) {
   const p = g.players[seat];
   const L = g.legal(seat);
@@ -64,6 +66,7 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const fromHero = hero && g.aggressor === hero.seat;
   const lighter = fromHero ? (aggression - 0.3) * 0.2 : 0;
   const vsShover = fromHero ? Math.min(0.7, shoveRate) : 0; // someone who shoves all the time has any two cards
+  const nerve = Math.min(1, aggr ** 1.5 * (0.2 + loose)); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing
   let think = 0.1 + rng() * 0.25;
 
   const out = (a, extra) => ({ ...a, think: Math.min(1, think), ...extra });
@@ -79,8 +82,9 @@ export function decide(g, seat, rng = Math.random, human = {}) {
 
   if (g.street === 'preflop') {
     const behind = g.players.filter((q) => q !== p && !q.folded && !q.allIn && !q.acted).length;
-    const position = behind <= 1 ? 1 : behind >= 4 ? -0.7 : 0; // looser late, tighter early
-    const s = strength(p.cards) + (loose - 0.5) * 6 + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * 0.6 + (truth === null ? 0 : (truth - 0.5) * 12 * cheat);
+    const position = behind <= 1 ? 1 : behind >= 4 ? -0.5 : 0; // looser late, tighter early
+    const rs = strength(p.cards) - TIGHT + (opp <= 2 ? 2 : 0) + position + lighter * 10 + sloppy * SL + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // what the cards are worth for raising
+    const s = rs + (loose - 0.5) * LOOSE_SPAN; // ...and how much the character wants to play them: loose adds to that, never to raising
     const cost = toCall / bb;
     const raised = g.currentBet > bb;
     const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves, without the character's wishful thinking
@@ -92,23 +96,24 @@ export function decide(g, seat, rng = Math.random, human = {}) {
       think += 0.3;
       return raw >= 10 + (0.5 - loose) * 3 - vsShover * 6 ? passive() : giveUp();
     }
-    if (s >= 11) {
-      const premium = s >= 13 + (0.5 - loose) * 3; // only the very best hands keep raising a raised pot
+    const openRaise = Math.min(0.95, aggr * (RA + RB * Math.max(0, Math.min(1, (rs - 6) / 6)))); // how often a hand worth playing is raised: mostly the character, a little the cards
+    if (rs >= 11) {
+      const premium = rs >= 13;
       if (cost > 6 && !premium) return passive();
       if (raised && raw < 10) return passive(); // re-raising takes real cards, whoever you are
-      return rng() > 0.85 ? passive() : raise(1, { strong: true });
+      return rng() < 0.35 + 0.6 * aggr ? raise(1, { strong: true }) : passive(); // aggression decides how often a good hand raises rather than calls
     }
     if (s >= 8) {
-      if (!raised) return rng() < 0.1 + 0.85 * aggr ? raise(0.8) : passive(); // a passive character mostly just calls
+      if (!raised) return rng() < openRaise ? raise(0.8) : passive();
       if (cost > 9) return giveUp();
-      return raw >= 9 && rng() < 0.15 * aggr ? raise(0.9) : passive();
+      return raw >= 7 && rng() < TB * aggr * aggr ? raise(0.9) : passive();
     }
     if (s >= 6) {
-      if (!raised) return rng() < 0.3 * aggr * aggr ? raise(0.8) : passive();
+      if (!raised) return rng() < openRaise ? raise(0.8) : passive();
       return cost <= 3.5 ? passive() : giveUp();
     }
     if (s >= 4.5) return cost <= 1 && rng() < 0.2 + 0.75 * loose ? passive() : giveUp();
-    if (!raised && toCall > 0 && rng() < 0.06 * aggr * bluffy * (1 + position)) return raise(0.8, { bluff: true }); // steal
+    if (!raised && toCall > 0 && rng() < 0.08 * nerve * bluffy * (1 + position)) return raise(0.8, { bluff: true }); // steal
     return giveUp();
   }
 

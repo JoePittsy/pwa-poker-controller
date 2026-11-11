@@ -17,12 +17,16 @@ export function prompt(mode) {
   renderActions();
   return new Promise((r) => { ui.resolve = r; });
 }
+// Run the rest of the hand at full speed and quiet the table sounds (restored by the loop after the hand).
+export function speedUp() {
+  S.fast = true;
+  audio.hush(true);
+}
 // You've folded: jump straight to the result instead of watching the rest play out.
 export function skipHand() {
   if (ui.mode !== 'skip') return;
   audio.confirm();
-  S.fast = true;
-  audio.hush(true);
+  speedUp();
   ui.mode = 'wait';
   renderActions();
 }
