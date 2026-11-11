@@ -33,7 +33,7 @@ const { chromium } = require('playwright');
   const heard = await spy.evaluate(() => window.heard.map(([t, x]) => x));
   const leaks = heard.filter((x) => /cards|"chips"|"board"|"t":/.test(x)).length;
   console.log(`spy heard ${heard.length} messages; readable game data in ${leaks}; sample: ${heard[heard.length - 1].slice(0, 110)}`);
-  if ((await st(g)).m === 'actions') await g.keyboard.press('c'); await host.waitForTimeout(1500);
-  console.log('real guest action accepted:', (await st(host)).toAct !== 1, errs);
+  const mine = (await st(host)).chips; if ((await st(g)).m === 'actions') await g.keyboard.press('c'); await host.waitForTimeout(1500);
+  console.log('real guest action accepted:', (await st(host)).chips !== mine, errs); // their call moves chips
   await b.close();
 })();

@@ -1,3 +1,4 @@
+import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
 import { dailyData, dailyScreen, today } from './daily.js';
@@ -111,6 +112,7 @@ export function exitToMenu() {
     }
   }
   S.runId++; // stops the game loop
+  keepAwake(false);
   S.fast = false; audio.hush(false); audio.tension(false); audio.musicLevel(0);
   S.game = null; S.ME = 0; S.mode = 'run'; S.squeeze = null;
   Object.assign(ui, { mode: 'wait', resolve: null, squeezed: true, hidden: false, slowRiver: false, scatter: 0 });
