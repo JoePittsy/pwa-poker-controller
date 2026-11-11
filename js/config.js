@@ -5,7 +5,7 @@ import { $, mulberry } from './util.js';
 export const YOU = { name: 'You', isHuman: true };
 export const CHARACTERS = {
   Mav: { tag: 'Wild', color: 'var(--red)', voice: 1, style: { loose: 0.65, aggr: 0.8, tell: 'fastBluff' } },
-  Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.33, aggr: 0.65, tell: 'slowBluff' } },
+  Dot: { tag: 'Careful', color: 'var(--mint)', voice: 2, style: { loose: 0.33, aggr: 0.4, tell: 'slowBluff' } },
   Rex: { tag: 'Shark', color: 'var(--yellow)', voice: 3, style: { loose: 0.35, aggr: 0.85, tell: 'bigBluff' } },
   Ivy: { tag: 'Sticky', color: 'var(--pink)', voice: 4, style: { loose: 0.7, aggr: 0.1, tell: 'slowStrong' } },
   Gus: { tag: 'Steady', color: 'var(--sky)', voice: 5, style: { loose: 0.44, aggr: 0.7 } },
@@ -50,7 +50,7 @@ export function tableConfig(n, boss = false) {
     const b = bossFor(n);
     return {
       names: [b.name], boss: b, skill: 1, venue: `${b.name}, ${b.tag}`, mat: '#3a3355', twist: null,
-      handsPerLevel: b.turbo ? 2 : 4, chips: STACKS[prefs.stack],
+      handsPerLevel: b.chips ? 3 : 2, chips: STACKS[prefs.stack], // the whale's big stack needs the slower blinds
     };
   }
   let names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : REGULARS;
@@ -68,7 +68,7 @@ export function tableConfig(n, boss = false) {
   return {
     variant: variantFor(n),
     names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
-    handsPerLevel: twist?.key === 'turbo' ? 2 : [10, 8, 6, 5, 4][n - 1] ?? 3, // the first tables give you time to play
+    handsPerLevel: twist?.key === 'turbo' ? 2 : n === 1 ? 2 : 3, // about 15-25 hands a table (see test/length.test.js); the first has the fewest opponents
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
 }

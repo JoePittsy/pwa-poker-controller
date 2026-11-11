@@ -40,14 +40,15 @@ export function noteHand(g) {
 export function notebookScreen(back) {
   const everyone = [...Object.keys(CHARACTERS).map((name) => ({ name, ...CHARACTERS[name] })), ...BOSSES];
   const pct = (a, b) => `${Math.round((a / b) * 100)}%`;
+  const unmet = everyone.filter((c) => !S.notes[c.name]).length;
   const tiles = everyone.map((c) => {
     const n = S.notes[c.name];
-    if (!n) return `<div class="unmet"><div class="ava">?</div><span><b>???</b><small>Not met yet</small></span></div>`;
+    if (!n) return '';
     const tell = c.trick ? c.trick
       : !c.style.tell ? (n.hands >= 20 ? 'No tell that you can see' : 'Still watching\u2026')
-        : n.clues >= CLUES_NEEDED ? TELLS[c.style.tell] : `Tell: ${n.clues} of ${CLUES_NEEDED} clues`;
+        : n.clues >= CLUES_NEEDED ? TELLS[c.style.tell] : `Tell: ${n.clues} of ${CLUES_NEEDED} clues (a clue is a telltale move they made, seen when they showed their cards)`;
     return `<div><div class="ava" data-mood="idle" style="background:${c.color}">${face(c.name)}</div><span><b>${c.name}</b> <i>${c.tag}</i><small>${n.hands >= 10 ? `Plays ${pct(n.vpip, n.hands)} of hands &middot; raises ${pct(n.raised, n.hands)} &middot; ${n.hands} hands` : `${n.hands} hands seen so far`}</small><small class="tell">${tell}</small>${readText(S.memory[c.name]) ? `<small class="read">${readText(S.memory[c.name])}</small>` : ''}</span></div>`;
-  }).join('');
+  }).join('') + (unmet ? `<p class="more">${unmet} more to meet</p>` : '');
   showOverlay({
     title: 'Notebook', wide: true, closable: true, onClose: back,
     body: `<p>What you have seen each opponent do. A tell is written down once you have seen it ${CLUES_NEEDED} times at showdown. During a run each one also adjusts to how you play them, shown in green.</p><div class="notebook">${tiles}</div>`,

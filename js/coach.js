@@ -124,10 +124,12 @@ export function rangeEquity(hole, board, opps, sims = 300, rng = Math.random, va
       }
       return h;
     };
-    for (const { loose, pressure } of opps) {
-      const cutoff = 2 + (1 - loose) * 5 + pressure * 5;
+    for (const { loose, pressure, entered = true } of opps) {
+      // A loose player bets with less than a careful one does, so the same bet says less about their cards.
+      const told = pressure * Math.min(1, 1.3 - loose);
+      const cutoff = entered ? 1 + (1 - loose) * 4 + told * 5 : -99; // someone who has put nothing in by choice could hold anything
       let h = deal(cutoff);
-      if (board.length >= 3 && pressure >= 0.5 && rng() < pressure) {
+      if (board.length >= 3 && told >= 0.3 && rng() < told) {
         for (let t = 0; t < 10 && Math.floor(scoreHand(h, board, variant) / 13 ** 5) < 1; t++) h = deal(cutoff);
       }
       take(h[0]); take(h[1]);

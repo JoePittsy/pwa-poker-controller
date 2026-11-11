@@ -18,7 +18,7 @@ export function runCard() {
     kicker: 'My run', title: `${tables(cleared)} cleared`,
     sub: S.bossMode ? `Beaten by ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `Out at Table ${S.table}, ${tableConfig(S.table).venue}`,
     accent: tableConfig(S.table, S.bossMode).mat,
-    tiles: [[r.knockouts, 'knock-outs'], [r.hands, 'hands played'], [r.hands ? `${Math.round((r.won / r.hands) * 100)}%` : '\u2013', 'hands won'],
+    tiles: [[r.knockouts, 'knock-outs'], [r.hands, 'hands played'], [r.showdowns ? `${r.showdownsWon} of ${r.showdowns}` : '\u2013', 'showdowns won'],
       [r.biggest.toLocaleString(), 'biggest pot won'], [r.bestHand ? r.bestHand.split(',')[0] : '\u2013', 'best hand'], [`${stickerCount()}/${STICKERS.length}`, 'stickers']],
   };
 }

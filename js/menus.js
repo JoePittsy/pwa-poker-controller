@@ -1,4 +1,4 @@
-import { newRun, walkAway, walkOffer } from './tripui.js';
+import { newRun, walkAway, walkOffer, walkWhy } from './tripui.js';
 import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
@@ -137,11 +137,12 @@ function quitSng() {
 }
 export function pauseMenu() {
   audio.tick();
+  const walk = walkOffer(); // the same number the banner told them about, as it stands now
   showOverlay({
     title: TITLE, body: '', closable: true, compact: true,
     items: [
       ['Resume'],
-      ...(walkOffer() >= 0 ? [[`Walk away \u00b7 bank ${walkOffer().toLocaleString()}`, walkAway]] : []),
+      ...(walk >= 0 ? [[`<span class="walkitem">Walk away \u00b7 pocket +${walk.toLocaleString()}<small>${walkWhy(true)}</small></span>`, walkAway]] : []),
       [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
       [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],
       ...(S.mode === 'net' && S.net?.watch ? [['Take a seat', askSeat]] : []),
@@ -160,8 +161,8 @@ export function statsScreen(back) {
     title: 'Stats', closable: true, onClose: back,
     body: `${rankHtml()}<div class="stats">
       ${tile(best(), 'best run (tables)')}${tile(stats.tables, 'tables cleared')}${tile(stats.knockouts, 'knock-outs')}
-      ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(pct(stats.won, stats.hands), 'hands won')}${tile(stats.biggest.toLocaleString(), 'biggest pot won')}
-      ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdowns won')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
+      ${tile(stats.hands.toLocaleString(), 'hands played')}${tile(stats.showdowns ? `${stats.showdownsWon} of ${stats.showdowns}` : '\u2013', 'showdowns won')}${tile(stats.biggest.toLocaleString(), 'biggest pot won')}
+      ${tile(pct(stats.showdownsWon, stats.showdowns), 'showdown win rate')}${tile(pct(stats.allinsWon, stats.allins), 'all-ins won')}${tile(stats.bestHand || '\u2013', 'best hand')}
     </div>`,
     items: [['Ranks', () => ranksScreen(() => statsScreen(back))], [`Stickers ${stickerCount()}/${STICKERS.length}`, () => stickersScreen(() => statsScreen(back))], ['Notebook', () => notebookScreen(() => statsScreen(back))], [`${glyph('B')}Back`, back]],
   });

@@ -1,5 +1,6 @@
 import * as audio from './audio.js';
 import { say, setMood } from './character.js';
+import { describe } from './cards.js';
 import { mine, sleep } from './core.js';
 import * as fx from './fx.js';
 import { netEffect } from './online.js';
@@ -55,6 +56,35 @@ export async function collectBets(wait = sleep) { // replays pass their own time
   fx.pop($('pot'), 1.2);
 }
 
+// What the hand cost or made the player, as a sentence: who beat whom, or which kicker decided it. '' when there is nothing to say.
+const lower = (t) => t.replace(/^(Two Pair|Pair|Full House|Straight Flush|Straight|Flush|Royal Flush|Three|Four)/, (m) => (/^(Two|Three|Four)/.test(m) ? '' : 'a ') + m.toLowerCase());
+// cards.js keeps its rank names private; describe() of a bare high card, "Nine high", is the one way to get one out.
+const rankName = (r) => describe(r * 13 ** 4).replace(/ high$/, '');
+const ranksOf = (score) => { const ks = []; for (let i = 0; i < 5; i++) { ks.unshift(score % 13); score = Math.floor(score / 13); } return ks; };
+export function beatLine(g) {
+  const me = g?.players[S.ME];
+  if (!me || !g.result?.showdown || me.folded || me.total <= me.won || S.mode === 'pass' || S.mode === 'net') return '';
+  const w = g.players[g.result.winners.find((s) => s !== S.ME)];
+  if (!w?.handName || !me.handName) return '';
+  let theirs = lower(w.handName), mine = lower(me.handName);
+  if (theirs === mine) { // the same hand, so the fifth card or the kicker decided it
+    const a = ranksOf(w.score), b = ranksOf(me.score), i = a.findIndex((r, k) => r !== b[k]);
+    if (i < 0) return ''; // a split pot
+    const named = (r) => `${/^[AE]/.test(rankName(r)) ? 'an' : 'a'} ${rankName(r)}`;
+    theirs += ` with ${named(a[i])} kicker`; mine += ` with ${named(b[i])}`;
+  }
+  return `${w.name} had ${theirs}; you had ${mine}.`;
+}
+// The floats (+15, \u221210) are unlabelled, so the first three times ever the player's own says what it is.
+const floatHint = () => {
+  try {
+    const n = +localStorage.getItem('padpoker.floatHint') || 0;
+    if (n >= 3) return '';
+    localStorage.setItem('padpoker.floatHint', String(n + 1));
+    return ' this hand';
+  } catch { return ''; }
+};
+
 export function handOverFx() {
   netEffect('over');
   const g = S.game, me = g.players[S.ME];
@@ -70,24 +100,20 @@ export function handOverFx() {
     const n = Math.max(4, Math.min(14, Math.round(p.won / g.bb / 2)));
     fx.flyChips($('center'), plate, n, { stagger: 50, onLand: (i) => { if (i % 2 === 0) audio.chips(1, 0, i / 2); } });
     const net = p.won - p.total; // what the hand actually made them, not the size of the pot
-    if (net > 0) setTimeout(() => fx.floatText(plate, `+${net.toLocaleString()}`, mine(p) ? 'big' : ''), 350);
+    if (net > 0) setTimeout(() => fx.floatText(plate, `+${net.toLocaleString()}${mine(p) ? floatHint() : ''}`, mine(p) ? 'big' : ''), 350);
   }
   if (me.total > me.won) { // any hand that cost you chips, folded or not: say what it cost
-    const cost = me.total - me.won;
-    setTimeout(() => fx.floatText(S.seatEls[S.ME].querySelector('.plate'), `\u2212${cost.toLocaleString()}`, 'lost'), 350);
-    if (g.result.showdown && !me.folded && S.mode !== 'pass' && S.mode !== 'net') {
-      const w = g.players[g.result.winners.find((s) => s !== S.ME)];
-      if (w?.handName && me.handName) {
-        const lower = (t) => t.replace(/^(Two Pair|Pair|Full House|Straight Flush|Straight|Flush|Royal Flush|Three|Four)/, (m) => (/^(Two|Three|Four)/.test(m) ? '' : 'a ') + m.toLowerCase());
-        const text = `${w.name} had ${lower(w.handName)}; you had ${lower(me.handName)}.`;
-        let tries = 0; // wait for the end of any banner already on screen (a bonus or lifeline) rather than overlap it
-        const show = () => {
-          if (S.game !== g) return;
-          if (document.querySelector('#fx .bannerfx') && tries++ < 6) return void setTimeout(show, 500);
-          fx.banner(text, 'info beat');
-        };
-        setTimeout(show, 1200);
-      }
+    const cost = me.total - me.won, hint = floatHint();
+    setTimeout(() => fx.floatText(S.seatEls[S.ME].querySelector('.plate'), `\u2212${cost.toLocaleString()}${hint}`, 'lost'), 350);
+    const text = beatLine(g);
+    if (text) {
+      let tries = 0; // wait for the end of any banner already on screen (a bonus or lifeline) rather than overlap it
+      const show = () => {
+        if (S.game !== g) return;
+        if (document.querySelector('#fx .bannerfx') && tries++ < 6) return void setTimeout(show, 500);
+        fx.banner(text, 'info beat');
+      };
+      setTimeout(show, 1200);
     }
   }
   if (me.won > 0) {

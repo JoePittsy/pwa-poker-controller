@@ -33,6 +33,33 @@ function madeHand(hole, board, short) {
   return catOf(evaluate([...hole, ...board], short)) > catOf(evaluate(board, short));
 }
 
+// Unseen cards that would turn a hand into a straight or better that is ours (not the board's): a draw's outs.
+function drawOuts(hole, board, short) {
+  if (board.length >= 5) return 0;
+  const known = new Set([...hole, ...board]);
+  let n = 0;
+  for (let c = short ? 16 : 0; c < 52; c++) {
+    if (known.has(c)) continue;
+    const b2 = [...board, c];
+    const mine = catOf(evaluate([...hole, ...b2], short));
+    if (mine >= 4 && mine > catOf(evaluate(b2, short))) n++;
+  }
+  return n;
+}
+
+// The Chen-point cut-off for calling an all-in with the whole stack. A hand is called with when it scores at least
+// this. `loose` sets the starting point, and the more the bettor shoves (v, 0..0.7) the lower it goes, down to a floor
+// that is about 40% of all hands for a sticky player and 20% for a careful one. Stacks under 15 big blinds
+// call wider still, down to about half of all hands at 8.
+export function shoveCut(loose, v, stackBB = Infinity) {
+  const open = 10.6 - 5 * loose; // shoves are rare: about 5% (careful) to 12% (sticky) of hands
+  const floor = Math.max(4.4, 8.5 - 7 * loose); // a known maniac: about 20% (careful) to 40% (sticky)
+  const at = (r) => open + (floor - open) * Math.min(1, r / 0.5) ** 0.6;
+  const cut = at(v);
+  if (stackBB > 15) return cut;
+  return Math.min(cut, stackBB <= 8 ? 3.8 : 3.8 + (at(0.3) - 3.8) * ((stackBB - 8) / 7));
+}
+
 export function equity(hole, board, nOpp, sims = 200, rng = Math.random, variant = 'holdem') {
   const known = new Set([...hole, ...board]);
   const deck = [];
@@ -72,14 +99,23 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   const fromHero = hero && g.aggressor === hero.seat;
   const lighter = fromHero ? (aggression - 0.3) * 0.2 : 0;
   const vsShover = fromHero ? Math.min(0.7, shoveRate) : 0; // someone who shoves all the time has any two cards
+  const careful = loose + 0.3 * (aggr - 0.5) < 0.42 && variant !== 'omaha'; // a nit: bets and calls big only with a hand
   const nerve = Math.min(1, 8 * aggr ** 1.5 * loose ** 3); // how readily a character bluffs: needs both the appetite to bet and the looseness to do it with nothing: a maniac 1, a steady player about 0.4, a careful one 0.15
   let think = 0.1 + rng() * 0.25;
 
   const out = (a, extra) => ({ ...a, think: Math.min(1, think), ...extra });
   const passive = () => out({ type: toCall > 0 ? 'call' : 'check' });
   const giveUp = () => out({ type: toCall > 0 ? 'fold' : 'check' });
+  let drawn; // does a nit have the goods for a big bet: a pair of ours or better, or a draw with 8+ outs
+  const goods = () => drawn ??= madeHand(p.cards, g.board, variant === 'short') || drawOuts(p.cards, g.board, variant === 'short') >= 8;
+  const bigBet = toCall / Math.max(pot - toCall, 1) >= 0.5;
   const raise = (frac, extra = {}) => {
     if (!L.canRaise) return passive();
+    if (careful && g.street !== 'preflop' && !goods()) { // nothing to bet or call big with: nothing, or a small stab
+      if (toCall > 0) return bigBet ? giveUp() : passive();
+      frac = Math.min(frac, 0.4);
+      if (Math.max(L.minTo, Math.round((frac * pot) / g.sb) * g.sb) >= 0.5 * pot) return passive();
+    }
     if (extra.bluff && tell === 'bigBluff') frac = 1.15; // overbets when he has nothing
     if (extra.strong && tell === 'smallValue') frac = 0.33; // bets small when she has it
     const to = Math.round((g.currentBet + frac * (pot + toCall)) / g.sb) * g.sb;
@@ -95,27 +131,28 @@ export function decide(g, seat, rng = Math.random, human = {}) {
     const raised = g.currentBet > bb;
     const raw = strength(p.cards) + (opp <= 2 ? 2 : 0) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat); // the cards themselves, without the character's wishful thinking
     const shove = toCall >= p.chips; // calling puts us all-in
+    const stackBB = (p.chips + p.bet) / bb;
     if (cost > 4) think += 0.35;
     // A big bet is a decision for the whole stack. How good a hand that takes depends on who we are (a careful
-    // player wants more, a loose one less) and on who is betting: against a habitual shover, far less.
-    if (cost > 12 || (shove && toCall > 5 * bb)) {
+    // player wants more, a loose one less), on who is betting (against a habitual shover, far less; once wise to
+    // you, as if you shove half the time) and on our stack (short stacks are priced in and call wide).
+    // The cards alone count here, not how many are left in the hand, so a bigger table is never softer.
+    if (cost > 12 || (shove && (toCall > 5 * bb || (stackBB <= 8 && toCall > bb)))) {
       think += 0.3;
-      // ...but never below a middling hand (a shover's cards are random, so calling lighter than that loses chips),
-      // and a little more than that when it is not just the two of us.
-      const floor = 8 + (g.players.filter((q) => !q.out).length > 2 ? 1.5 : 0);
-      return raw >= Math.max(floor, 10 + (0.5 - loose) * 3 - vsShover * 9) ? passive() : giveUp();
+      const cards = strength(p.cards) + (truth === null ? 0 : (truth - 0.5) * 12 * cheat) + (rng() - 0.5) * 1.2; // a hand is never judged exactly the same twice
+      return cards >= shoveCut(loose, wise && fromHero ? Math.max(vsShover, 0.5) : vsShover, stackBB) ? passive() : giveUp();
     }
     const openRaise = Math.min(0.95, aggr * (1.5 + 0.3 * Math.max(0, Math.min(1, (rs - 6) / 6)))); // how often a hand worth playing is raised: mostly the character, a little the cards
     if (rs >= 10.5) {
       const premium = rs >= 13;
       if (cost > 6 && !premium) return passive();
-      if (raised && raw < 10) return passive(); // re-raising takes real cards, whoever you are
+      if (raised && (raw < 10 || (careful && strength(p.cards) < 11))) return passive(); // re-raising takes real cards, whoever you are (and a nit wants a premium hand)
       return rng() < 0.35 + 0.6 * aggr ? raise(1, { strong: true }) : passive(); // aggression decides how often a good hand raises rather than calls
     }
     if (s >= 8) {
       if (!raised) return rng() < openRaise ? raise(0.8) : passive();
       if (cost > 9) return giveUp();
-      return raw >= 7 && rng() < 0.8 * aggr * aggr ? raise(0.9) : passive();
+      return raw >= 7 && !careful && rng() < 0.8 * aggr * aggr ? raise(0.9) : passive();
     }
     if (s >= 6) {
       if (!raised) return rng() < openRaise ? raise(0.8) : passive();
@@ -149,10 +186,10 @@ export function decide(g, seat, rng = Math.random, human = {}) {
   think += close * (0.25 + 0.6 * stake);
   strong = e > 0.75;
   if (e > 0.82 || (e > 0.68 && rng() < aggr * 0.5)) return raise(0.7 + rng() * 0.3, { strong });
-  if (e >= need) return out({ type: 'call' }, { strong });
+  if (e >= need) return careful && bigBet && !goods() ? giveUp() : out({ type: 'call' }, { strong });
   // Once they are wise to you, a bet of up to the pot does not move anyone who holds a pair or better: they call.
   if (wise && fromHero && variant !== 'omaha' && pressure <= 1.1 && madeHand(p.cards, g.board, variant === 'short')) return out({ type: 'call' }, { strong });
-  if (pressure < 0.6 && rng() < 0.06 * nerve * bluffy) return raise(0.8, { bluff: true });
+  if (pressure < 0.6 && !careful && rng() < 0.06 * nerve * bluffy) return raise(0.8, { bluff: true });
   return giveUp();
 }
 
