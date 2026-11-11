@@ -362,7 +362,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 #emotes { position: absolute; left: 1rem; bottom: 6.2rem; z-index: 7; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; animation: rise .25s var(--spring) both; }
 #emotes[hidden] { display: none; }
 #emotes .btn { justify-content: flex-start; }
-#emotes .glyph { display: inline-block; background: var(--ink); }
+#emotes .glyph { background: var(--ink); }
 .lefty #talk-btn { left: auto; right: 6rem; }
 .lefty #emotes { left: auto; right: 1rem; }
 .seat.me .say { top: auto; bottom: calc(100% + .6rem); }
@@ -403,7 +403,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
   font-size: 1.15rem; font-weight: 800; line-height: 1.65rem; text-align: center; color: #fff;
   background: var(--ink); border: .16rem solid var(--ink);
 }
-.gp .glyph, .dialog .glyph { display: inline-block; }
+.gp .glyph { display: inline-block; } /* controller hints only while a controller is connected */
 .glyph.a { background: #1f9d55; } .glyph.b { background: #d5303e; }
 .glyph.x { background: #2b62d9; } .glyph.y { background: #b98500; }
 .glyph.wide { width: auto; padding: 0 .5rem; border-radius: .6rem; }
