@@ -659,6 +659,7 @@ const dealOrder = (seat) => (seat - game.dealer - 1 + game.players.length) % gam
 
 function render() {
   const g = game;
+  if (!g) return; // left for the menu while something was still finishing
   const over = g.stage === 'handOver' && settled;
   const pending = g.stage === 'handOver' && !settled; // result known but not yet revealed
   const n = g.players.length;
@@ -1138,6 +1139,31 @@ function firstPlay() {
   try { seen = !!localStorage.getItem('padpoker.seen'); } catch { /* private mode */ }
   if (seen) startTable(1); else howTo(0, () => startTable(1), true);
 }
+// Leave the table for the title screen. A run or daily deal is kept exactly where it is,
+// to carry on later; if you walk away in the middle of a hand, that hand counts as folded
+// (your chips already in the pot are gone, everyone else gets theirs back).
+function exitToMenu() {
+  const g = game, kind = mode;
+  if (kind === 'net') leaveOnline();
+  else if (g && (kind === 'run' || kind === 'daily') && ['betting', 'streetEnd'].includes(g.stage)) {
+    const me = g.players[ME];
+    const chips = g.players.map((p) => (p === me ? p.chips : p.chips + p.total));
+    if (me.chips > 0) { // (all-in and walking away would bust you: that hand is simply dealt again instead)
+      writeSave({ table, boss: bossMode, chips, dealer: g.dealer, handNo: g.handNo, habits, run: runStats, perks, mem: memory });
+      if (!me.folded && me.total > 0) setTimeout(() => toast('Saved. The hand you left counts as folded.'), 300);
+    }
+  }
+  runId++; // stops the game loop
+  fast = false; audio.hush(false); audio.tension(false); audio.musicLevel(0);
+  game = null; ME = 0; mode = 'run'; squeeze = null;
+  Object.assign(ui, { mode: 'wait', resolve: null, squeezed: true, hidden: false, slowRiver: false, scatter: 0 });
+  toggleEmotes(false);
+  for (const id of ['seats', 'board', 'burn', 'hud']) $(id).innerHTML = '';
+  $('pot').hidden = true; $('msg').textContent = ''; $('msg').classList.remove('show');
+  $('app').classList.remove('zoom', 'omaha');
+  renderActions();
+  startScreen();
+}
 function pauseMenu() {
   audio.tick();
   showOverlay({
@@ -1148,7 +1174,7 @@ function pauseMenu() {
       ['Stats', () => statsScreen(pauseMenu)],
       ['Help', () => helpMenu(pauseMenu)],
       ['Settings', () => settingsMenu(pauseMenu)],
-      mode === 'net' ? ['Leave game', () => { leaveOnline(); startScreen(); }] : ['New run', () => startTable(1)],
+      mode === 'net' ? ['Leave game', exitToMenu] : [mode === 'run' || mode === 'daily' ? 'Save & main menu' : 'Quit to menu', exitToMenu],
     ],
   });
 }
@@ -1854,7 +1880,7 @@ function sendEmote(key) {
 
 function handOverBanter() {
   const g = game;
-  if (g.stage !== 'handOver') return; // the next hand has already started
+  if (!g || g.stage !== 'handOver') return; // the next hand has already started
   const me0 = g.players[ME];
   if (mode === 'run' && !bossMode) {
     const avenger = g.players.find((p) => !p.isHuman && p.won > 0 && grudge(p.name) && g.result.showdown && !me0.folded && me0.won === 0);
