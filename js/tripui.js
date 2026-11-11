@@ -6,7 +6,7 @@ import { FAMILIES, PERKS, familyCount } from './build.js';
 import { LADDER } from './career.js';
 import { tableConfig } from './config.js';
 import { loadSave, setNextTrip, startTable, writeSave } from './loop.js';
-import { pauseMenu, showOverlay, startScreen } from './menus.js';
+import { overlayFocus, pauseMenu, showOverlay, startScreen } from './menus.js';
 import { perkSummary, perkTag } from './perks.js';
 import { myRank } from './rank.js';
 import { toast } from './squeeze.js';
@@ -43,24 +43,41 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
   // Leaving the shop is also choosing the way on: the next table as it comes, or the hard way for a bigger cash-out.
   const go = (risky) => () => { t.risky = risky ? n : 0; writeSave({ ...saved, perks: S.perks, trip: t }); startTable(n, { ...saved, perks: S.perks, trip: t, owed: false }); };
   const cfg = tableConfig(n, boss), usual = Math.round(cfg.names.length * cfg.chips * (dealOf(t).cash || 1) / 10) * 10; // roughly what winning it banks
-  const sets = Object.keys(FAMILIES).map((f) => ({ f, n: familyCount(S.perks, f) })).filter((x) => x.n > 0);
+  const hard = Math.round(usual * RISKY.cash / 10) * 10;
+  const can = (cost) => (cost > t.pocket ? `<i class="short">You need ${money(cost - t.pocket)} more.</i>` : '');
+  const setNote = (k) => { // where buying this perk would leave its family's set
+    const f = PERKS[k].family;
+    if (!f) return 'It belongs to no family, so it counts towards no set.';
+    const have = familyCount(S.perks, f), after = have + (S.perks[k] ? 0 : 1);
+    return `<b>${FAMILIES[f].name}</b> family: ${FAMILIES[f].hint}. This would make ${after} of 3; two pay &times;1.5, all three &times;2.`;
+  };
+  // Each entry: [button label, what to show while it is selected, what choosing it does, greyed out?]
+  const rows = [
+    ...visit.offer.map((k) => [`${PERKS[k].name} \u00b7 ${money(perk)}`,
+      `<b>${PERKS[k].name}</b> ${perkTag(k)}<p>${PERKS[k].text} Lasts the whole run.</p><p>${setNote(k)}</p>${S.perks[k] ? `<p>You hold ${S.perks[k]} already; another adds to it.</p>` : ''}<p>${can(perk)}</p>`,
+      buy(perk, () => {
+        S.perks[k] = (S.perks[k] || 0) + 1; visit.offer = visit.offer.filter((x) => x !== k); visit.focus = 0; audio.win(1);
+        if (Object.values(S.perks).reduce((x, y) => x + y, 0) >= 3) award('loaded');
+      }), perk > t.pocket]),
+    [`Reroll \u00b7 ${money(reroll)}`, `<b>Reroll</b><p>Swap the three perks on offer for three others. It costs more each time you do it in one visit.</p><p>${can(reroll)}</p>`,
+      buy(reroll, () => { visit.offer = draw(); visit.rerolls++; audio.shuffle(); }), reroll > t.pocket],
+    ...(t.boost === n ? [] : [[`+25% stack \u00b7 ${money(boost)}`, `<b>Bigger stack</b><p>Start the next table with a quarter more chips. For that table only.</p><p>${can(boost)}</p>`,
+      buy(boost, () => { t.boost = n; audio.chips(5, 0, 4); }), boost > t.pocket]]),
+    ...(canBribe ? [[`One fewer opponent \u00b7 ${money(bribe)}`, `<b>One fewer opponent</b><p>Pay one player to stay away from the next table: ${cfg.names.length - 1} to beat, not ${cfg.names.length}. For that table only.</p><p>${can(bribe)}</p>`,
+      buy(bribe, () => { t.bribe = n; audio.confirm(); }), bribe > t.pocket]] : []),
+    [boss ? 'On to the boss' : 'Next table', boss ? `<b>${cfg.boss.name}, ${cfg.boss.tag}</b><p>One on one. Beat them to carry on; lose and the run is over.</p>`
+      : `<b>Table ${n}: ${cfg.venue}</b><p>${cfg.names.length} opponents, as they come. Winning it banks about <b>${money(usual)}</b>, more if you are quick.</p>`, go(false), false],
+    ...(boss ? [] : [['The hard way', `<b>Table ${n}, the hard way</b><p>The same table with sharper opponents holding ${Math.round((RISKY.oppStack - 1) * 100)}% more chips. Winning it banks about <b>${money(hard)}</b>, against ${money(usual)} the usual way.</p>`, go(true), false]]),
+  ];
+  const at = Math.min(visit.focus || 0, rows.length - 1);
   showOverlay({
     title: 'The <span>shop</span>', wide: true, compact: true,
-    body: `${pocketHtml()}${perkSummary() ? `<p class="who">You hold: ${perkSummary()}</p>` : ''}
-      <div class="wares">${visit.offer.map((k) => `<p><b>${PERKS[k].name}</b>${perkTag(k)} ${PERKS[k].text}${S.perks[k] ? ` <i>You hold ${S.perks[k]}; another adds to it.</i>` : ''}</p>`).join('') || '<p>The shelf is empty. Reroll for more.</p>'}</div>
-      <p class="note"><b>Sets:</b> two different perks of one family pay &times;1.5, all three &times;2${sets.length ? ` (you have ${sets.map((x) => `${x.n}/3 ${FAMILIES[x.f].name}`).join(', ')})` : ''}. Each perk costs more than the last. <b>Reroll</b> changes the offer; the stack and one-fewer deals are for the next table only.${boss ? '' : ` <b>The hard way:</b> sharper opponents with ${Math.round((RISKY.oppStack - 1) * 100)}% more chips.`}</p>`,
-    items: [
-      ...visit.offer.map((k, i) => [`${i === 0 ? glyph('A') : ''}${PERKS[k].name} \u00b7 ${money(perk)}`, buy(perk, () => {
-        S.perks[k] = (S.perks[k] || 0) + 1; visit.offer = visit.offer.filter((x) => x !== k); audio.win(1);
-        if (Object.values(S.perks).reduce((x, y) => x + y, 0) >= 3) award('loaded');
-      }), false, perk > t.pocket]),
-      [`Reroll \u00b7 ${money(reroll)}`, buy(reroll, () => { visit.offer = draw(); visit.rerolls++; audio.shuffle(); }), false, reroll > t.pocket],
-      ...(t.boost === n ? [] : [[`+25% stack \u00b7 ${money(boost)}`, buy(boost, () => { t.boost = n; audio.chips(5, 0, 4); }), false, boost > t.pocket]]),
-      ...(canBribe ? [[`One fewer opponent \u00b7 ${money(bribe)}`, buy(bribe, () => { t.bribe = n; audio.confirm(); }), false, bribe > t.pocket]] : []),
-      [boss ? 'On to the boss' : `Next table \u00b7 banks about ${money(usual)}`, go(false)],
-      ...(boss ? [] : [[`The hard way \u00b7 about ${money(Math.round(usual * RISKY.cash / 10) * 10)}`, go(true)]]),
-    ],
+    body: `${pocketHtml()}${perkSummary() ? `<p class="who">You hold: ${perkSummary()}</p>` : ''}<div id="ware" class="ware"></div><p class="note">Tap something to see what it is; tap it again to choose it. Each perk costs more than the last.</p>`,
+    items: rows.map(([label, , fn, off]) => [label, fn, false, off]),
   });
+  S.overlay.tapSelects = true;
+  S.overlay.onFocus = (i) => { visit.focus = i; $('ware').innerHTML = rows[i][1]; };
+  S.overlay.focus = at; overlayFocus(0);
 }
 
 // Walking away: once half your opponents are out you may stand up with what you have won so far.

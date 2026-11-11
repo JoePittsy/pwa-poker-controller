@@ -20,6 +20,7 @@ an exit code.
 | `first-run` | A new player's first minutes: taps to the first decision, hands advancing by themselves, and the hand label never naming a card before it has turned |
 | `single-player-soak` | A run plays on hand after hand without errors |
 | `run-deal-shop-route` | A run from the deal picker through a cleared table, the shop, the route choice, a reload and a bust |
+| `run-shop-select` | The shop describes only the selected item: one tap selects, a second chooses |
 | `run-walk-away-and-speed` | Walking away once half the table is out, and the bonus for a fast clear |
 | `replay` | A recorded hand plays back and the live game resumes exactly |
 | `pass-and-play` | Players sharing a device never see each other's cards |

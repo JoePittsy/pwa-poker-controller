@@ -21,11 +21,11 @@ const { chromium } = require('playwright');
   await click('To the shop'); await p.waitForTimeout(400);
   console.log('shop:', await dlg(700)); console.log('  buttons:', await btns(), '| dialog', await box()); await p.screenshot({ path: 'shop.png' });
   await p.evaluate(() => [...document.querySelectorAll('#overlay .btn')][0].click()); await p.waitForTimeout(300);
-  await click('Reroll'); await p.waitForTimeout(300); await click('+25% stack'); await p.waitForTimeout(300);
+  await click('Reroll'); await p.waitForTimeout(200); await click('Reroll'); await p.waitForTimeout(300); await click('+25% stack'); await p.waitForTimeout(200); await click('+25% stack'); await p.waitForTimeout(300);
   console.log('after buying a perk, a reroll and a boost:', JSON.stringify(await S('({ perks: S.perks, trip: S.trip })'))); console.log('  buttons:', await btns());
   await p.waitForTimeout(100);
   
-  await click('The hard way'); await p.waitForTimeout(500);
+  await click('The hard way'); await p.waitForTimeout(200); await click('The hard way'); await p.waitForTimeout(500);
   console.log('intro 2:', await dlg(900));
   await click('Deal me in'); await p.waitForTimeout(3000);
   console.log('table 2:', await S('S.game.players.map((q) => q.name + ":" + q.chips + (q.style ? "/" + q.style.skill.toFixed(2) : "")).join(" ")'), '| blinds every', await S('S.game.handsPerLevel'));

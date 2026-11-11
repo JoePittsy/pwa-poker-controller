@@ -51,6 +51,7 @@ export function showOverlay({ title, body, items, closable = false, compact = fa
   items.forEach(([label, fn, keep, off], i) => { // off: shown greyed out; pressing it only explains why
     const b = h('button', 'btn' + (i === 0 ? ' focus call' : '') + (off ? ' off' : ''), text(label));
     b.onclick = () => {
+      if (S.overlay.tapSelects && S.overlay.focus !== i) { S.overlay.focus = i; return overlayFocus(0); } // first tap selects and shows what it is; a second tap chooses it
       audio.confirm();
       if (!keep) closeOverlay();
       fn?.();
@@ -71,6 +72,7 @@ export function overlayFocus(d) {
     b.classList.toggle('focus', i === S.overlay.focus);
     b.classList.toggle('call', i === S.overlay.focus);
   });
+  S.overlay.onFocus?.(S.overlay.focus); // a screen that describes the selected item keeps up with it
 }
 
 export const TITLE = '<span class="logo">Poker<span>Pad</span></span>';
