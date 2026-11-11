@@ -1,3 +1,4 @@
+import { kindOf, setTable } from './venue.js';
 import { expected, handover } from './handover.js';
 import { addGame, addLog, placeOf, placings, readLog, table, tally } from './standings.js';
 import { saveStats, stats } from './stats.js';
@@ -364,7 +365,7 @@ export function startOnline() {
   setVariantLook(c.variant);
   setBackLook(c.back);
   S.net.busts = []; S.net.rebought = {}; S.net.declined = new Set(); S.net.rebuyAns = {}; S.net.started = true; S.net.turn = 0; S.net.hold = null; S.clock = null;
-  $('app').style.setProperty('--mat', VENUES[c.venue][1]);
+  setTable(VENUES[c.venue][1], kindOf(c.venue), VENUES[c.venue][0]);
   audio.setVenue(c.venue);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
@@ -739,7 +740,7 @@ export function showTable(m) {
     if (S.overlay && !S.overlay.hold) closeOverlay();
     setVariantLook(m.variant);
     setBackLook(m.look.back);
-    $('app').style.setProperty('--mat', m.look.mat);
+    setTable(m.look.mat, kindOf(+m.look.venue || 0), VENUES[((+m.look.venue || 0) % VENUES.length + VENUES.length) % VENUES.length][0]);
     audio.setVenue(m.look.venue);
     S.squeeze = null; ui.squeezed = true; ui.mode = 'wait'; ui.resolve = null;
     ui.noAnim = mid; buildSeats(); render(); ui.noAnim = false;

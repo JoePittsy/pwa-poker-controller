@@ -48,7 +48,7 @@ export function startCash(stake) {
   if (!sit(b, stake.buyin)) { toast(`You need ${stake.buyin.toLocaleString()} chips for that table`); return cashMenu(); }
   save(b);
   S.cash = { ...stake, hands: 0 };
-  seatSingle('cash', { names: REGULARS, skill: 0.8, venue: 'Cash game', mat: '#1f6f54', handsPerLevel: Infinity, startLevel: stake.level, chips: stake.buyin, music: 5 }, `<b>Cash ${stake.name}</b>`);
+  seatSingle('cash', { names: REGULARS, skill: 0.8, venue: 'Cash game', kind: 'cash', mat: '#1f6f54', handsPerLevel: Infinity, startLevel: stake.level, chips: stake.buyin, music: 5 }, `<b>Cash ${stake.name}</b>`);
 }
 // Before each cash hand: opponents who went broke buy back in, and your stack is written down so it survives the app closing.
 export function cashHand(g) {
@@ -76,7 +76,7 @@ export function cashBust() {
 }
 
 // ---------- sit and go ----------
-const SNG_CFG = { names: REGULARS, skill: 0.7, venue: 'Sit & go', mat: '#2c7da0', handsPerLevel: 4, chips: 1000, music: 6 };
+const SNG_CFG = { names: REGULARS, skill: 0.7, venue: 'Sit & go', kind: 'sng', mat: '#2c7da0', handsPerLevel: 4, chips: 1000, music: 6 };
 function sngMenu() {
   showOverlay({
     title: 'Sit <span>&amp; go</span>', closable: true, onClose: tablesMenu,
@@ -106,7 +106,7 @@ function ladderMenu() {
 function startLadder(rung) {
   S.quickKind = 'ladder'; S.ladderRung = rung;
   const name = rungName(rung);
-  seatSingle('quick', { names: [name], skill: Math.min(1, 0.6 + rung * 0.045), venue: 'Heads-up ladder', mat: '#7a3fb0', handsPerLevel: 4, chips: 1000, music: 7 }, `<b>Heads-up</b><br>${name}`);
+  seatSingle('quick', { names: [name], skill: Math.min(1, 0.6 + rung * 0.045), venue: 'Heads-up ladder', kind: 'ladder', mat: '#7a3fb0', handsPerLevel: 4, chips: 1000, music: 7 }, `<b>Heads-up</b><br>${name}`);
 }
 
 // A sit-and-go or ladder match has ended (the game loop calls this for both).

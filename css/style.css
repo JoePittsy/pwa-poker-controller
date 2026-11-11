@@ -49,7 +49,7 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action
 #app.zoom::after { opacity: 1; }
 #mat {
   position: absolute; left: 11%; right: 11%; top: 9.9rem; bottom: 10.2rem;
-  background: var(--mat, var(--blue)); border: .35rem solid var(--ink); border-radius: 2.6rem; transition: background-color .6s;
+  background-color: var(--mat, var(--blue)); border: .35rem solid var(--ink); border-radius: 2.6rem; transition: background-color .6s;
   box-shadow: .7rem .7rem 0 var(--ink); rotate: -.6deg; overflow: hidden;
 }
 #mat::after { /* halftone fading in from the corner */
@@ -628,3 +628,25 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 .flashfx { inset: 0; width: 100%; height: 100%; }
 .confettifx { width: 1rem; height: 1.6rem; margin: -.8rem -.5rem; border: .12rem solid var(--ink); border-radius: .15rem; }
 .gain { font-size: 1.6rem; font-weight: 800; color: var(--mint); margin-top: .8rem; }
+
+/* ---------- the cloth: each place to play has its own print ---------- */
+#mat[data-kind] { box-shadow: .7rem .7rem 0 var(--ink), inset 0 0 0 1rem var(--mat, var(--blue)), inset 0 0 0 1.18rem rgba(255, 255, 255, .28); } /* an inner line, like a printed layout */
+#mat::before { /* the venue's name, printed small in the corner */
+  content: attr(data-name); position: absolute; right: 2.2rem; bottom: 1.6rem; z-index: 1;
+  font-size: 1.5rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: rgba(255, 255, 255, .34); white-space: nowrap;
+}
+.lefty #mat::before { right: auto; left: 2.2rem; }
+#mat[data-kind="kitchen"] { background-image: linear-gradient(90deg, rgba(255, 255, 255, .09) 50%, transparent 50%), linear-gradient(rgba(255, 255, 255, .09) 50%, transparent 50%); background-size: 4.4rem 4.4rem; } /* gingham */
+#mat[data-kind="backroom"] { background-image: repeating-linear-gradient(0deg, rgba(20, 17, 43, .13) 0 .22rem, transparent .22rem 2.3rem); } /* boards */
+#mat[data-kind="club"] { border-radius: 9rem; background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .08) 0 1.3rem, transparent 1.3rem 2.6rem); } /* a racetrack table, striped */
+#mat[data-kind="rollers"] { background-image: repeating-linear-gradient(45deg, rgba(255, 210, 63, .22) 0 .14rem, transparent .14rem 2.6rem), repeating-linear-gradient(-45deg, rgba(255, 210, 63, .22) 0 .14rem, transparent .14rem 2.6rem);
+  box-shadow: .7rem .7rem 0 var(--ink), inset 0 0 0 1rem var(--mat), inset 0 0 0 1.25rem rgba(255, 210, 63, .7); } /* gold lattice and trim */
+#mat[data-kind="vault"] { background-image: repeating-radial-gradient(circle at 50% 50%, rgba(20, 17, 43, .16) 0 .22rem, transparent .22rem 3.2rem); border-radius: 1.2rem; } /* the rings of a vault door, squarer corners */
+#mat[data-kind="boss"] { background-image: radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, .22), transparent 62%); } /* one lamp over the table */
+#mat[data-kind="daily"] { background-image: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, .09) 0 10deg, transparent 10deg 20deg); } /* sunburst */
+#mat[data-kind="cash"] { background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, .08) 0 .16rem, transparent .16rem 1.9rem); border-radius: 9rem; } /* pinstripe, racetrack */
+#mat[data-kind="sng"] { background-image: radial-gradient(circle, rgba(255, 255, 255, .13) 22%, transparent 24%); background-size: 3.2rem 3.2rem; } /* polka dots */
+#mat[data-kind="ladder"] { background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, .07) 0 1.5rem, transparent 1.5rem 3rem); } /* rungs */
+#mat[data-kind="pass"] { background-image: repeating-conic-gradient(rgba(255, 255, 255, .07) 0 25%, transparent 0 50%); background-size: 5.4rem 5.4rem; } /* checkerboard */
+#mat[data-kind="club"]::before, #mat[data-kind="cash"]::before { right: 7rem; } /* clear of the rounded end */
+.lefty #mat[data-kind="club"]::before, .lefty #mat[data-kind="cash"]::before { right: auto; left: 7rem; }

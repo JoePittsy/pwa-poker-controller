@@ -1,3 +1,4 @@
+import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
 import { worstOf } from './coach.js';
 import { adjust, noteGaveUp, notePushed, noteShowdownWon } from './reads.js';
@@ -97,7 +98,7 @@ export function startTable(n, saved) {
     S.game.dealer = saved.dealer;
     S.game.handNo = saved.handNo;
   } else writeSave({ table: n, boss: S.bossMode, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, mem: S.memory });
-  $('app').style.setProperty('--mat', cfg.mat);
+  setTable(cfg.mat, cfg.boss ? 'boss' : kindOf(n - 1), cfg.boss ? cfg.boss.name : cfg.venue);
   audio.setVenue(n - 1);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');

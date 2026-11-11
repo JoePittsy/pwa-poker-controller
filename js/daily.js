@@ -1,3 +1,4 @@
+import { setTable } from './venue.js';
 import { award } from './achievements.js';
 import { bestStreak, board, makeChallenge, medal, streak } from './dailystats.js';
 import * as audio from './audio.js';
@@ -25,7 +26,7 @@ export function dailySeed(hand) { // one number per date and hand
   for (const ch of `${today()}#${hand}`) hsh = Math.imul(hsh ^ ch.charCodeAt(0), 16777619);
   return hsh | 0;
 }
-export const DAILY_CFG = { names: ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'], skill: 0.75, venue: 'The Daily Deal', mat: '#b4551f', handsPerLevel: 4, chips: 1000 };
+export const DAILY_CFG = { names: ['Mav', 'Dot', 'Rex', 'Ivy', 'Gus'], skill: 0.75, venue: 'The Daily Deal', kind: 'daily', mat: '#b4551f', handsPerLevel: 4, chips: 1000 };
 export function dailyCalendar() {
   const d = dailyData();
   const days = [];
@@ -78,7 +79,7 @@ export function seatSingle(kind, cfg, hud, saved) {
     S.game.players.forEach((p, i) => { p.chips = saved.chips[i]; p.out = p.chips <= 0; });
     S.game.dealer = saved.dealer; S.game.handNo = saved.handNo;
   }
-  $('app').style.setProperty('--mat', cfg.mat);
+  setTable(cfg.mat, cfg.kind || 'daily', cfg.venue);
   audio.setVenue(cfg.music ?? 2);
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
