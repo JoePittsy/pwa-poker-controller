@@ -5,7 +5,13 @@
 import { createMusic, barSeconds } from './music.js';
 
 const store = (() => { try { return JSON.parse(localStorage.getItem('padpoker.audio')) || {}; } catch { return {}; } })();
-export const settings = { sfx: store.sfx ?? true, music: store.music ?? true };
+export const settings = { sfx: store.sfx ?? true, music: store.music ?? true, sfxVol: store.sfxVol ?? 1, musicVol: store.musicVol ?? 1 };
+export const VOLUMES = [0, 0.25, 0.5, 0.75, 1];
+/** How loud each is right now, 0 to 1: off counts as 0. */
+export const sfxLevel = () => (settings.sfx ? settings.sfxVol : 0);
+export const musicVolume = () => (settings.music ? settings.musicVol : 0);
+export const volText = (v) => (v ? `${Math.round(v * 100)}%` : 'Off');
+export const nextVolume = (v) => VOLUMES[(VOLUMES.findIndex((x) => x >= v - 0.01) + 1) % VOLUMES.length];
 const save = () => { try { localStorage.setItem('padpoker.audio', JSON.stringify(settings)); } catch { /* private mode */ } };
 
 let ctx, sfxBus, musicBus, musicFilter, verb, noiseBuf, musicTimer;
@@ -40,8 +46,8 @@ function init() {
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -12; comp.ratio.value = 4;
   comp.connect(ctx.destination);
-  sfxBus = ctx.createGain(); sfxBus.gain.value = settings.sfx ? 1 : 0; sfxBus.connect(comp);
-  musicBus = ctx.createGain(); musicBus.gain.value = settings.music ? MUSIC_VOL : 0; musicBus.connect(comp);
+  sfxBus = ctx.createGain(); sfxBus.gain.value = sfxLevel(); sfxBus.connect(comp);
+  musicBus = ctx.createGain(); musicBus.gain.value = musicVolume() * MUSIC_VOL; musicBus.connect(comp);
   // a short, dry room: just enough air to stop things sounding clinical
   const len = Math.floor(ctx.sampleRate * 0.45);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -239,8 +245,8 @@ export const lose = sfx(() => { // a little "wah-wah"
 });
 
 // ---------- settings ----------
-export function setSfx(on) { settings.sfx = on; save(); if (ctx) sfxBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05); }
-export function setMusic(on) { settings.music = on; save(); if (ctx) musicBus.gain.setTargetAtTime(on ? MUSIC_VOL : 0, ctx.currentTime, 0.3); }
+export function setSfxVolume(v) { settings.sfxVol = v || settings.sfxVol; settings.sfx = v > 0; save(); if (ctx) sfxBus.gain.setTargetAtTime(sfxLevel(), ctx.currentTime, 0.05); }
+export function setMusicVolume(v) { settings.musicVol = v || settings.musicVol; settings.music = v > 0; save(); if (ctx) musicBus.gain.setTargetAtTime(musicVolume() * MUSIC_VOL, ctx.currentTime, 0.2); }
 // while an all-in is run out the music sinks underwater
 export function tension(on) { if (musicFilter) musicFilter.frequency.setTargetAtTime(on ? 380 : 8000, ctx.currentTime, on ? 0.3 : 0.8); }
 export function musicLevel(n) { level = n; }

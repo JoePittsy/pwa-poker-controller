@@ -112,6 +112,7 @@ export function exitToMenu() {
     }
   }
   S.runId++; // stops the game loop
+  $('coachtip').hidden = true;
   keepAwake(false);
   S.fast = false; audio.hush(false); audio.tension(false); audio.musicLevel(0);
   S.game = null; S.ME = 0; S.mode = 'run'; S.squeeze = null;
@@ -126,9 +127,11 @@ export function exitToMenu() {
 export function pauseMenu() {
   audio.tick();
   showOverlay({
-    title: TITLE, body: '', closable: true,
+    title: TITLE, body: '', closable: true, compact: true,
     items: [
       ['Resume'],
+      [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
+      [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],
       ...(S.mode === 'net' && S.net?.watch ? [['Take a seat', askSeat]] : []),
       ...(S.mode === 'net' ? [] : [['Hands', () => handsScreen(pauseMenu)]]), // no replays while others are waiting on you
       ['Stats', () => statsScreen(pauseMenu)],
