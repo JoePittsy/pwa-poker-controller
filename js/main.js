@@ -412,7 +412,7 @@ function hostLobby(focus = 0) {
   const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
   showOverlay({
     title: `Room <span>${net.code}</span>`, compact: true,
-    body: `<p>Others join with this code from More games, Online, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>`,
+    body: `<p>Others join with this code from Online on the main menu, or by opening your link. <span class="ver">Version ${ver()}</span></p><p class="who">At the table: <b>${names.join('</b>, <b>')}</b></p><p>${c.seats - people ? `${c.seats - people} computer player${c.seats - people > 1 ? 's' : ''} will fill the other seats.` : 'Every seat is a person.'} ${people > 1 ? '' : 'Waiting for someone to join…'}${watchers().length ? ` ${watchers().length} watching.` : ''}</p>`,
     items: [
       [`${glyph('A')}Start game`, () => (people > 1 ? startOnline() : (toast('Nobody has joined yet'), hostLobby()))],
       ['Share link', async () => {
@@ -807,14 +807,8 @@ async function guestTurn() {
   sendUp({ t: 'act', stamp: game.stamp, a });
 }
 
-function moreGames() {
-  const d = dailyData(), done = d.scores[today()] !== undefined;
-  showOverlay({
-    title: 'More <span>games</span>', closable: true, onClose: startScreen,
-    body: `<p><b>Daily deal:</b> the same ${DAILY_HANDS} hands for everyone, one attempt a day${done ? ' (played today)' : ''}.</p><p><b>Quick table:</b> one six-player table, winner takes all. Nothing is saved and your run is untouched.</p><p><b>Pass &amp; play:</b> two to four people on one device. <b>Online:</b> each on their own.</p>`,
-    items: [['Daily deal', dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu], ['Online', onlineMenu], [`${glyph('B')}Back`, startScreen]],
-  });
-}
+// Every way to play is on the first screen; this name is kept for the many menus that go "back" to it.
+function moreGames() { startScreen(); }
 function dailyDone() {
   const me = game.players[ME], d = dailyData(), t = today();
   d.scores[t] = me.chips; delete d.game; saveDaily(d);
@@ -1419,12 +1413,15 @@ const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 function startScreen() {
   const saved = loadSave();
   const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
+  const d = dailyData(), daily = d.scores[today()] !== undefined ? 'Daily deal \u2713' : 'Daily deal';
+  const run = saved
+    ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)]]
+    : [[`${glyph('A')}Play`, firstPlay]];
   showOverlay({
-    title: TITLE,
-    body: `<p>No-limit Texas Hold'em. Knock out every opponent to clear a table and climb to the next.${record}</p>${CONTROLS}`,
-    items: saved
-      ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', () => startTable(1)], ['More games', moreGames], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]]
-      : [[`${glyph('A')}Play`, firstPlay], ['More games', moreGames], ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
+    title: TITLE, compact: true,
+    body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${CONTROLS}`,
+    items: [...run, ['Online', onlineMenu], [daily, dailyScreen], ['Quick table', quickMenu], ['Pass & play', passMenu],
+      ['Stats', () => statsScreen(startScreen)], ['Settings', () => settingsMenu(startScreen)], ['Help', () => helpMenu(startScreen)]],
   });
 }
 function firstPlay() {
