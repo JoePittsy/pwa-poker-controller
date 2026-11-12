@@ -205,3 +205,16 @@ test('a showdown result is the winner\'s net gain, and a chop says who split it'
   assert.equal(chop.result.text, 'You and Gus split it \u2014 Straight, Ace high');
   assert.ok(!/ pot/.test(win.result.text));
 });
+
+test('levels of up to 6 hands use the rising blind ladder, slower ones the gentle one', async () => {
+  const { RISING_LEVELS, BLIND_LEVELS } = await import('../js/engine.js');
+  const blindsAt = (handsPerLevel, hand) => {
+    const g = new Game({ players: [{ name: 'A' }, { name: 'B' }], chips: 1e6, handsPerLevel });
+    while (g.handNo < hand) { g.startHand(); }
+    return [g.sb, g.bb];
+  };
+  assert.deepEqual(blindsAt(6, 25), RISING_LEVELS[4]); // the 5th level of the table (hands 25-30)
+  assert.deepEqual(blindsAt(7, 29), BLIND_LEVELS[4]);
+  assert.notDeepEqual(RISING_LEVELS[4], BLIND_LEVELS[4]);
+  assert.deepEqual(blindsAt(6, 1), [5, 10]);
+});

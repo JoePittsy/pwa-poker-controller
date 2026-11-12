@@ -1,5 +1,5 @@
 import { newTrip, readTrip, tableMods } from './trip.js';
-import { shop, walkHint } from './tripui.js';
+import { shop, targetChoice, targetNow, walkHint } from './tripui.js';
 import { coachTip } from './tip.js';
 import { kindOf, setTable } from './venue.js';
 import { keepAwake } from './awake.js';
@@ -118,7 +118,7 @@ export function startTable(n, saved, quick = false) {
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;
-  $('hud').innerHTML = S.bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${S.table}</b><br>${cfg.venue}`;
+  $('hud').innerHTML = S.bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${S.table}</b><br>${S.game.players[S.ME].chips.toLocaleString()} / ${targetNow().toLocaleString()}`;
   ui.mode = 'wait'; ui.resolve = null;
   S.lastBB = 0; S.fast = false; audio.hush(false); S.squeeze = null; ui.squeezed = true; $('app').classList.remove('zoom');
   S.runId++; // stop any game loop still running from the previous table
@@ -298,7 +298,7 @@ export async function run() {
       }
     }
     // bonuses are paid by the house, on top of the pot
-    const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, category: Math.floor((me.score || 0) / 13 ** 5) }, S.heat);
+    const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, riverBet: feats.lastAct?.type === 'raise' && feats.lastAct.street === 'river' }, S.heat);
     const pm = S.mode === 'run' ? tableMods(S.trip, S.table).payout : 1;
     if (pm !== 1) { paid.total = Math.round(paid.total * pm); }
     if (!friendly) S.heat = nextHeat(S.heat, { won: me.won, showdown: g.result.showdown, folded: me.folded });
@@ -334,6 +334,9 @@ export async function run() {
         if (out && w) { w.chips += BOUNTY * out; const text = `${w.name}: bounty +${BOUNTY * out}`; fx.banner(text, 'info'); audio.chips(5, 0, 4); netEffect('banner', { text }); render(); }
       }
       continue;
+    }
+    if (S.mode === 'run' && !S.bossMode && me.chips > 0 && S.trip.stayed !== S.table && me.chips >= targetNow() && g.players.some((p, seat) => seat !== S.ME && p.chips > 0)) { // the table is won: move up now, or stay and play on
+      return targetChoice(run);
     }
     if (S.mode === 'run') walkHint();
     if (me.chips === 0) return S.mode === 'daily' ? dailyDone() : S.mode === 'quick' ? quickDone() : S.mode === 'cash' ? cashBust() : busted();

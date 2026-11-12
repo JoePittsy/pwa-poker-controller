@@ -1,4 +1,4 @@
-import { newRun, walkAway, walkOffer, walkWhy } from './tripui.js';
+import { moveUp, moveUpOffer, newRun, walkAway, walkOffer, walkWhy } from './tripui.js';
 import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
@@ -9,8 +9,9 @@ import { loadSave, startTable, writeSave } from './loop.js';
 import { notebookScreen } from './notebook.js';
 import { leaveOnline, onlineMenu, askSeat } from './online.js';
 import { passMenu } from './pass.js';
+import { FREE_RUNS, runFee } from './bank.js';
 import { ui, prefs } from './prefs.js';
-import { bankHtml, cashLeave, settleBank, tablesMenu } from './tables.js';
+import { bankHtml, cashLeave, payRunFee, settleBank, tablesMenu } from './tables.js';
 import { helpMenu, howTo, replayHand, settingsMenu } from './replay.js';
 import { rankCheck, rankHtml, ranksScreen } from './rank.js';
 import { coachReport, reviewScreen } from './review.js';
@@ -80,12 +81,12 @@ export const best = () => { try { return +localStorage.getItem('padpoker.best') 
 export const tables = (n) => `${n} table${n === 1 ? '' : 's'}`;
 export function startScreen() {
   settleBank();
-  const saved = loadSave();
+  const saved = loadSave(), fee = runFee(stats.runs), cost = `<small>${fee ? `costs ${fee.toLocaleString()}` : `first ${FREE_RUNS} runs free`}</small>`;
   const record = best() ? ` Your best run: ${tables(best())} cleared.` : '';
   const d = dailyData(), days = streak(d.scores, today()), daily = `Daily deal${d.scores[today()] !== undefined ? ' \u2713' : ''}${days > 1 ? ` \u00b7 ${days} days` : ''}`;
   const run = saved
-    ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], ['New run', newRun]]
-    : [[`${glyph('A')}Play`, firstPlay]];
+    ? [[`${glyph('A')}Continue \u2013 ${saved.boss ? 'Boss' : `Table ${saved.table}`}`, () => startTable(saved.table, saved)], [`New run${cost}`, newRun]]
+    : [[`${glyph('A')}Play${cost}`, firstPlay]];
   showOverlay({
     title: TITLE, compact: true,
     body: `<p>No-limit Texas Hold'em. <b>Play</b> a run of tables against the computer, go <b>online</b> with friends on their own devices, or <b>pass</b> one device around.${record}</p>${rankHtml()}${bankHtml()}`,
@@ -97,7 +98,7 @@ export function startScreen() {
 export function firstPlay() {
   let seen = true;
   try { seen = !!localStorage.getItem('padpoker.seen'); } catch { /* private mode */ }
-  if (seen) newRun(); else howTo(0, () => startTable(1), true); // a first run is played on the regular deal
+  if (seen) newRun(); else howTo(0, () => { if (payRunFee() >= 0) startTable(1); }, true); // a first run is played on the regular deal
 }
 // Leave the table for the title screen. A run or daily deal is kept exactly where it is,
 // to carry on later; if you walk away in the middle of a hand, that hand counts as folded
@@ -137,11 +138,12 @@ function quitSng() {
 }
 export function pauseMenu() {
   audio.tick();
-  const walk = walkOffer(); // the same number the banner told them about, as it stands now
+  const up = moveUpOffer(), walk = walkOffer(); // the same number the banner told them about, as it stands now
   showOverlay({
     title: TITLE, body: '', closable: true, compact: true,
     items: [
       ['Resume'],
+      ...(up >= 0 ? [[`Move up \u00b7 pocket +${up.toLocaleString()}`, moveUp]] : []),
       ...(walk >= 0 ? [[`<span class="walkitem">Walk away \u00b7 pocket +${walk.toLocaleString()}<small>${walkWhy(true)}</small></span>`, walkAway]] : []),
       [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
       [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],

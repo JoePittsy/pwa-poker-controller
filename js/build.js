@@ -13,7 +13,7 @@ export const PERKS = {
   heater: { name: 'Heater', text: 'Each pot in a row you win adds 10% to all perk payouts, up to five.', family: 'aggro', stack: true },
   rakeback: { name: 'Rakeback', text: 'Every pot you win pays 10% extra.', family: 'value', stack: true },
   showman: { name: 'Showman', text: 'Pots you win at a showdown pay 20% extra.', family: 'value', stack: true },
-  madehand: { name: 'Made Hand', text: 'Winning a showdown with three of a kind or better pays 100.', family: 'value', stack: true },
+  closer: { name: 'Closer', text: 'Winning a showdown after you bet or raised on the river pays 100.', family: 'value', stack: true },
   bigstack: { name: 'Big Stack', text: 'Start every table with 30% more chips.', family: 'guard', stack: true },
   lifeline: { name: 'Lifeline', text: 'The next time you bust, stay in with 30% of a starting stack instead. Used up when it saves you.', family: 'guard', stack: true },
   slowblinds: { name: 'Slow Clock', text: 'Blinds take 2 more hands to rise.', family: 'guard', stack: true },
@@ -31,7 +31,8 @@ export const stackFactor = (perks) => 1 + 0.3 * held(perks, 'bigstack') + (setBo
 export const nextHeat = (heat, { won, showdown, folded }) => (won > 0 ? Math.min(MAX_HEAT, heat + 1) : showdown && !folded ? 0 : heat);
 /**
  * What the perks pay for one hand, on top of the pot.
- * hand: { won: chips you won, showdown: was there one, kos: knock-outs you scored, category: your hand's rank (3 = three of a kind) }
+ * hand: { won: chips you won, showdown: was there one, kos: knock-outs you scored, riverBet: your last move was a bet or raise on the river }
+ * Nothing pays for which hand you made: you always play your best five cards, so that is luck, not a choice.
  * heat: pots won in a row before this hand. Returns { total, parts: [[name, chips]], mult }.
  */
 export function payout(perks, hand, heat = 0) {
@@ -41,7 +42,7 @@ export function payout(perks, hand, heat = 0) {
   if (won && !hand.showdown) add('bully', won * 0.15 * held(perks, 'bully'), 'aggro');
   if (won) add('rakeback', won * 0.1 * held(perks, 'rakeback'), 'value');
   if (won && hand.showdown) add('showman', won * 0.2 * held(perks, 'showman'), 'value');
-  if (won && hand.showdown && hand.category >= 3) add('madehand', 100 * held(perks, 'madehand'), 'value');
+  if (won && hand.showdown && hand.riverBet) add('closer', 100 * held(perks, 'closer'), 'value');
   const mult = 1 + 0.1 * held(perks, 'heater') * Math.max(0, Math.min(MAX_HEAT, heat));
   const out = parts.map(([name, chips]) => [name, Math.round(chips * mult)]);
   return { total: out.reduce((sum, [, c]) => sum + c, 0), parts: out, mult };

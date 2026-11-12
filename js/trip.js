@@ -14,12 +14,17 @@ export const dealOf = (trip) => DEALS[trip?.deal] || DEALS.regular;
 /** The deals in order, each marked locked if your career rank is too low for it. */
 export const dealsFor = (rank) => Object.entries(DEALS).map(([key, d]) => ({ key, ...d, locked: rank < d.rank }));
 /** A fresh trip on a deal. boost, bribe and risky hold the table number they apply to (0: none). */
-export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0 });
+export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0, stayed: 0 });
 /** Makes a saved trip safe to use, whatever state it was saved in. */
 export function readTrip(t) {
   const n = (v) => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : 0);
-  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin), walked: n(t?.walked) };
+  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin), walked: n(t?.walked), stayed: n(t?.stayed) };
 }
+
+// A normal table is won by reaching a chip target: a multiple of the table's ordinary starting stack (not of yours,
+// so a perk, a boost or the deal makes it easier or harder), rounded to 50. Knocking everyone out wins it too.
+export const TARGET = 2;
+export const tableTarget = (ordinaryStack) => Math.round(ordinaryStack * TARGET / 50) * 50;
 
 export const RISKY = { skill: 0.15, oppStack: 1.25, cash: 1.5 }; // the hard way to the next table
 export const BOOST = 1.25;
@@ -29,18 +34,23 @@ export function cashOut(trip, table, finalStack, bonus = 0) {
   const won = Math.max(0, finalStack - (trip.buyin || 0));
   return Math.round(won * (dealOf(trip).cash || 1) * (trip.risky === table ? RISKY.cash : 1) * (1 + bonus) / 10) * 10;
 }
-// Every table ends with you holding all the chips, so the cash-out alone says nothing about how you played.
-// Two things do. Clearing it quickly pays extra: within FAST hands per opponent, half as much again; within
-// QUICK, a quarter. And once half your opponents are out you may walk away with what you have won so far,
-// for no bonus and without the table counting as cleared. Never against a boss.
+// A table is cleared by reaching its chip target (or by taking every chip), so the cash-out alone says little about how
+// you played. Two things do. Moving up quickly pays extra: within FAST hands, 30% more; within QUICK, 15%. (Fixed hand
+// counts: how long a table lasts hardly depends on how many opponents it has, see test/length.test.js.) And once half
+// your opponents are out you may walk away with what you have won so far, for no bonus and without the table counting
+// as cleared. Never against a boss.
 // (What counts as won is measured against the table's ordinary stack: chips a perk or a boost added to your
 // starting stack are yours to bank, so walking away is never worth nothing just because you started big.)
-export const FAST = 7, QUICK = 9; // tables last about 20-30 hands (test/length.test.js)
-export const fastPar = (opponents) => Math.floor(FAST * opponents);
-export const quickPar = (opponents) => Math.floor(QUICK * opponents);
-/** The bonus, as a share of the cash-out, for clearing a table of this many opponents in this many hands. */
+export const FAST = 14, QUICK = 27;
+export const BOSS_FAST = 7, BOSS_QUICK = 9; // a boss is played heads-up to the end, as every table once was: unchanged
+/** The bonus, as a share of the cash-out, for moving up from a table after this many hands. */
 export const SPEED = { fast: 0.3, quick: 0.15 };
-export const speedBonus = (hands, opponents) => (hands <= fastPar(opponents) ? SPEED.fast : hands <= quickPar(opponents) ? SPEED.quick : 0);
+export const speedBonus = (hands, boss = false) => (hands <= (boss ? BOSS_FAST : FAST) ? SPEED.fast : hands <= (boss ? BOSS_QUICK : QUICK) ? SPEED.quick : 0);
+/** What moving up pays at this point: the speed bonus for the hands played so far, and the cash-out with it. */
+export function moveUpPay(trip, table, stack, hands, boss = false) {
+  const bonus = speedBonus(hands, boss);
+  return { bonus, gain: cashOut(trip, table, stack, bonus) };
+}
 /** May you walk away? players: the table as it stands, you in seat `me`. */
 export function canWalk(players, me, boss) {
   if (boss) return false;
@@ -62,8 +72,8 @@ export function spend(trip, cost) {
   trip.pocket -= cost; trip.spent += cost;
   return true;
 }
-export const TAKE_HOME = 0.25;
-/** What goes to your bankroll when the run ends: a quarter of what is left in your pocket. */
+export const TAKE_HOME = 0.5;
+/** What goes to your bankroll when the run ends: half of what is left in your pocket. */
 export const takeHome = (trip) => Math.floor((trip?.pocket || 0) * TAKE_HOME / 10) * 10;
 /** How the deal and route change a table: multipliers for your stack, theirs, their skill, blind speed and perk payouts. */
 export function tableMods(trip, table) {

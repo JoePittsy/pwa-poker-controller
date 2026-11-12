@@ -5,9 +5,8 @@ import { newDeck, scoreHand, describe } from './cards.js';
 
 // Cash games sit at one of these (bank.js STAKES point into it by index) and never rise.
 export const BLIND_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [50, 100], [75, 150], [100, 200], [150, 300], [200, 400]];
-// Tables whose levels are 3 hands or fewer (the run's tables, bosses and turbo) climb this steeper ladder, so that a
-// table lasts about 15-25 hands: the opening 5/10 against 1000 chips is unchanged and the big blind at most doubles
-// per step. Slower tables (sit & go, ladder, daily, pass, online) keep BLIND_LEVELS.
+// Games whose levels are 6 hands or fewer (the run's tables, bosses and turbo) climb this ladder: the opening 5/10
+// against 1000 chips is unchanged and the big blind at most doubles per step. Slower games (levels of 7 or more hands) keep BLIND_LEVELS.
 export const RISING_LEVELS = [[5, 10], [10, 20], [15, 30], [25, 50], [40, 80], [60, 120], [100, 200], [150, 300], [250, 500], [400, 800], [600, 1200], [1000, 2000]];
 
 export class Game {
@@ -46,7 +45,7 @@ export class Game {
     const alive = this.players.filter((p) => !p.out);
     if (alive.length < 2) return false;
     this.handNo++;
-    const levels = this.startLevel === 0 && this.handsPerLevel <= 5 ? RISING_LEVELS : BLIND_LEVELS;
+    const levels = this.startLevel === 0 && this.handsPerLevel <= 6 ? RISING_LEVELS : BLIND_LEVELS;
     const lvl = Math.min(this.startLevel + Math.floor((this.handNo - 1) / this.handsPerLevel), levels.length - 1);
     [this.sb, this.bb] = levels[lvl];
     this.dealer = this.nextSeat(this.dealer, (p) => !p.out);

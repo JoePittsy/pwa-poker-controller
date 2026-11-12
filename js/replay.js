@@ -1,6 +1,7 @@
-import { cashOut, clearedCount, dealOf, speedBonus, takeHome } from './trip.js';
-import { newRun, pocketHtml } from './tripui.js';
-import { addToBank, bank } from './tables.js';
+import { runFee } from './bank.js';
+import { clearedCount, dealOf, moveUpPay, takeHome } from './trip.js';
+import { newRun, pocketHtml, targetNow } from './tripui.js';
+import { addToBank, bank, takeStake } from './tables.js';
 import { rankHtml } from './rank.js';
 import { backupMenu } from './backupmenu.js';
 import { award } from './achievements.js';
@@ -205,7 +206,7 @@ export function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${S.table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up.${stacksEqual() ? '' : ` ${stacksLine()}`}${S.table === 1 ? ' What you win goes in your pocket, to spend at the shop on the way to the next table.' : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${tripLine()}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Turn your ${S.game.players[S.ME].chips.toLocaleString()} into ${targetNow().toLocaleString()} to move up.${stacksEqual() ? '' : ` ${stacksLine()}`}${S.table === 1 ? ' What you win goes in your pocket, to spend at the shop on the way to the next table.' : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${tripLine()}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -237,13 +238,13 @@ export async function tableCleared() {
 const gainHtml = (xp) => `<p class="gain">+${xp} XP</p>${rankHtml()}`;
 // Clearing a table banks what you won there, and the one-table extras you bought for it are used up.
 function bankTable() {
-  const t = S.trip, g = S.game, bonus = speedBonus(g.handNo, g.players.length - 1);
-  const gain = cashOut(t, S.table, g.players[S.ME].chips, bonus);
+  const t = S.trip, g = S.game, { bonus, gain } = moveUpPay(t, S.table, g.players[S.ME].chips, g.handNo, S.bossMode); // the same sum as the offer to move up
   t.pocket += gain; t.banked += gain;
-  for (const k of ['boost', 'bribe', 'risky']) if (t[k] === S.table) t[k] = 0;
+  for (const k of ['boost', 'bribe', 'risky', 'stayed']) if (t[k] === S.table) t[k] = 0;
   return `<p class="gain">Cashed out +${gain.toLocaleString()}${bonus ? ` &middot; includes ${Math.round(bonus * 100)}% for winning in ${g.handNo} hand${g.handNo === 1 ? '' : 's'}` : ''}</p>${pocketHtml()}`;
 }
 export function showCleared() {
+  const remain = S.game.players.some((p, seat) => seat !== S.ME && p.chips + p.total > 0); // moved up at the target, with opponents still sitting
   const banked = bankTable();
   if (S.bossMode) { // beat the boss: on to the next table
     award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(S.table).name]);
@@ -269,15 +270,16 @@ export function showCleared() {
   const next = bossNext ? `a boss: ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `${tableConfig(S.table + 1).venue}, and it's tougher`;
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${S.table} in ${S.game.handNo} hands. Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
+    body: `<p>${remain ? `You hit the target at Table ${S.table} in ${S.game.handNo} hand${S.game.handNo === 1 ? '' : 's'}.` : `You took every chip at Table ${S.table} in ${S.game.handNo} hand${S.game.handNo === 1 ? '' : 's'}.`} Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
     items: [[`${glyph('A')}To the shop`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
   });
 }
-let home = 0; // what the run that just ended sent to the bankroll
+let home = 0, paid = 0; // what the run that just ended sent to the bankroll, and what it cost to start
 export function busted() {
   audio.musicLevel(0);
   audio.lose();
   writeSave(null);
+  paid = takeStake(); // the fee this run cost, now settled
   home = takeHome(S.trip); // a share of what is left in your pocket goes to your bankroll
   if (home) addToBank(home);
   bustSummary();
@@ -287,13 +289,15 @@ export function bustSummary() {
   const r = S.runStats;
   const tile = (v, label) => `<div><b>${v}</b>${label}</div>`;
   const beat = beatLine(S.game);
+  const net = home - paid, now = bank().chips, left = S.trip?.pocket || 0;
+  const account = `${paid ? `This run cost ${paid.toLocaleString()}.` : 'This run was free.'} ${home ? `Half of the ${left.toLocaleString()} left in your pocket, ${home.toLocaleString()}, comes home.` : 'Nothing left in your pocket to bring home.'} <span class="${net < 0 ? 'loss' : ''}">Bankroll: ${(now - home + paid).toLocaleString()} \u2192 ${now.toLocaleString()} (${net < 0 ? '\u2212' : '+'}${Math.abs(net).toLocaleString()}).</span>`;
   const record = cleared > r.startBest ? '<p class="venue">New best run!</p>' : `<p>Best run: ${tables(best())} cleared.</p>`;
   showOverlay({
     title: 'Busted', wide: true,
-    body: `${beat ? `<p class="who">${beat}</p>` : ''}<p>${S.bossMode ? `Beaten by ${bossFor(S.table).name}, ${bossFor(S.table).tag}, after Table ${S.table}.` : `Out at Table ${S.table}, ${tableConfig(S.table).venue}.`}</p>${record}<p class="gain">${S.trip?.banked ? `Banked ${S.trip.banked.toLocaleString()} this run, spent ${S.trip.spent.toLocaleString()}. ` : ''}${home ? `A quarter of the ${S.trip.pocket.toLocaleString()} left in your pocket, ${home.toLocaleString()}, goes home. Your bankroll is now ${bank().chips.toLocaleString()}.` : `Nothing left in your pocket to take home. Your bankroll is untouched at ${bank().chips.toLocaleString()}: a run costs nothing to play.`}</p><div class="stats">
+    body: `${beat ? `<p class="who">${beat}</p>` : ''}<p>${S.bossMode ? `Beaten by ${bossFor(S.table).name}, ${bossFor(S.table).tag}, after Table ${S.table}.` : `Out at Table ${S.table}, ${tableConfig(S.table).venue}.`}</p>${record}<p class="gain">${S.trip?.banked ? `Banked ${S.trip.banked.toLocaleString()} this run, spent ${S.trip.spent.toLocaleString()}. ` : ''}${account}</p><div class="stats">
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.showdowns ? `${r.showdownsWon} of ${r.showdowns}` : '\u2013', 'showdowns won')}${tile(r.biggest.toLocaleString(), 'biggest pot won')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,
-    items: [[`${glyph('A')}Again, same deal`, () => newRun(S.trip?.deal)], ['Change deal', () => newRun()], ['Main menu', startScreen], ...(keyHands(r.seed).length ? [['Review key hands', () => reviewScreen(keyHands(r.seed), 0, bustSummary)]] : []), ['Stats', () => statsScreen(bustSummary)], ['Share', () => share(runCard(), 'pad-poker-run.png'), true]],
+    items: [[`${glyph('A')}Again, same deal \u00b7 ${runFee(stats.runs) ? runFee(stats.runs).toLocaleString() : 'free'}`, () => newRun(S.trip?.deal)], ['Change deal', () => newRun()], ['Main menu', startScreen], ...(keyHands(r.seed).length ? [['Review key hands', () => reviewScreen(keyHands(r.seed), 0, bustSummary)]] : []), ['Stats', () => statsScreen(bustSummary)], ['Share', () => share(runCard(), 'pad-poker-run.png'), true]],
   });
 }
