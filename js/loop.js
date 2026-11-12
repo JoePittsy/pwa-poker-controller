@@ -118,7 +118,7 @@ export function startTable(n, saved, quick = false) {
   buildSeats();
   $('msg').textContent = ''; $('msg').classList.remove('show');
   $('pot').hidden = true;
-  $('hud').innerHTML = S.bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${S.table}</b><br>${S.game.players[S.ME].chips.toLocaleString()} / ${targetNow().toLocaleString()}`;
+  $('hud').innerHTML = S.bossMode ? `<b>Boss</b><br>${cfg.boss.name}` : `Table <b>${S.table}</b><br>Goal <b>${targetNow().toLocaleString()}</b> &middot; you have ${S.game.players[S.ME].chips.toLocaleString()}`;
   ui.mode = 'wait'; ui.resolve = null;
   S.lastBB = 0; S.fast = false; audio.hush(false); S.squeeze = null; ui.squeezed = true; $('app').classList.remove('zoom');
   S.runId++; // stop any game loop still running from the previous table

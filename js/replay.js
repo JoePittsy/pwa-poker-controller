@@ -105,7 +105,7 @@ export const HOWTO = [
     <tr><td>${glyph('X')} Call</td><td>Match the current bet to stay in.</td></tr>
     <tr><td>${glyph('Y')} Bet / Raise</td><td>Put more in, then choose how much.</td></tr></table>
     <p>Two players post small forced bets (the blinds) each hand, so there is always something to win. The blinds grow over time.</p>`],
-  ['The <span>run</span>', `<p>Knock out every opponent to clear a table and move up to a tougher one. Lose all your chips and the run is over.</p>
+  ['The <span>run</span>', `<p>Double your chips at a table to move up to a tougher one. Lose them all and the run is over.</p>
     <p>Not sure what beats what? Hand ranks is in the menu under Help. Coach, in Settings, shows your chance of winning as you play.</p>`],
 ];
 export function howTo(step, done, firstRun = false) {
