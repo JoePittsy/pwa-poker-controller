@@ -3,6 +3,7 @@
 import { award } from './achievements.js';
 import * as audio from './audio.js';
 import { FAMILIES, PERKS, familyCount } from './build.js';
+import { FREE_RUNS, runFee } from './bank.js';
 import { LADDER } from './career.js';
 import { tableConfig } from './config.js';
 import { loadSave, setNextTrip, startTable, writeSave } from './loop.js';
@@ -10,7 +11,9 @@ import { overlayFocus, pauseMenu, showOverlay, startScreen } from './menus.js';
 import { perkSummary, perkTag } from './perks.js';
 import { myRank } from './rank.js';
 import { toast } from './squeeze.js';
+import { bank, payRunFee, settleBank } from './tables.js';
 import { S } from './state.js';
+import { stats } from './stats.js';
 import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, newTrip, spend } from './trip.js';
 import { $, glyph } from './util.js';
 
@@ -18,15 +21,20 @@ const money = (n) => n.toLocaleString();
 // explain: say in a few words what the pocket is, for screens where a new player first meets it
 export const pocketHtml = (explain = false) => `<p class="bank">Pocket <b>${money(S.trip?.pocket || 0)}</b>${explain ? ' <small>this run\u2019s winnings so far, to spend in the shop between tables</small>' : ''}${S.trip && S.trip.deal !== 'regular' ? ` &middot; ${dealOf(S.trip).name}` : ''}</p>`;
 
-// A new run starts by choosing the deal it is played on.
+// A new run starts by choosing the deal it is played on, and costs a buy-in from the bankroll after the free runs.
+const begin = (key, quick = false) => { if (payRunFee() < 0) return toast('Not enough in your bankroll for a run'); setNextTrip(newTrip(key)); startTable(1, undefined, quick); };
 export function newRun(same = '') { // same: a deal to start on straight away, skipping the picker
   const deals = dealsFor(myRank().index);
-  if (same && deals.some((d) => d.key === same && !d.locked)) { setNextTrip(newTrip(same)); return startTable(1, undefined, true); }
+  settleBank(); // a broke player is staked first, so the fee can always be paid
+  if (same && deals.some((d) => d.key === same && !d.locked)) return begin(same, true);
+  const fee = runFee(stats.runs), free = FREE_RUNS - stats.runs;
+  const cost = fee ? `A run costs <b>${money(fee)}</b> from your bankroll of ${money(bank().chips)}. Chips you win go in your <b>pocket</b> to spend in the shop; half of what is left at the end comes home.`
+    : `Your first ${FREE_RUNS} runs are free (${free} left). Chips you win go in your <b>pocket</b> to spend in the shop; half of what is left at the end joins your <b>bankroll</b>.`;
   showOverlay({
     title: 'Pick your <span>deal</span>', perky: true, closable: true, onClose: startScreen,
-    body: '<p>A run costs nothing. Chips you win go in your <b>pocket</b> to spend in the shop; a quarter of what is left at the end joins your <b>bankroll</b>.</p>',
+    body: `<p>${cost}</p>`,
     items: deals.map((d, i) => [`${i === 0 ? glyph('A') : ''}<span>${d.name}<small>${d.locked ? `Unlocks at the rank of ${LADDER[d.rank][1]}` : d.text}</small></span>`,
-      () => { if (d.locked) { toast(`${d.name} unlocks at the rank of ${LADDER[d.rank][1]}`); return newRun(); } setNextTrip(newTrip(d.key)); startTable(1); }, false, d.locked]).concat([[`${glyph('B')}Back`, startScreen]]),
+      () => { if (d.locked) { toast(`${d.name} unlocks at the rank of ${LADDER[d.rank][1]}`); return newRun(); } begin(d.key); }, false, d.locked]).concat([[`${glyph('B')}Back`, startScreen]]),
   });
   $('overlay').querySelector('.dialog').classList.add('tight');
 }

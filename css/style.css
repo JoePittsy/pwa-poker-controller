@@ -693,3 +693,5 @@ b.gold { color: var(--yellow); } b.silver { color: #d9dde6; } b.bronze { color: 
 .notebook .more { grid-column: 1 / -1; margin: .2rem 0 0; font-size: 1rem; color: var(--sky); opacity: .8; }
 /* the walk-away menu item carries a line saying where its number comes from */
 .btn .walkitem small { font-size: 1rem; font-weight: 500; line-height: 1.15; white-space: normal; }
+
+.gain .loss { color: var(--red); }

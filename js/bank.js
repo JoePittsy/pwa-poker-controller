@@ -5,6 +5,10 @@ export const TOPUP = 1000; // what the house hands you when you cannot afford th
 /** @type {{ key: string, name: string, level: number, buyin: number }[]} */
 export const STAKES = [{ key: 'low', name: '5/10', level: 0, buyin: 1000 }, { key: 'mid', name: '25/50', level: 3, buyin: 5000 }, { key: 'high', name: '100/200', level: 6, buyin: 20000 }];
 export const SNG = { buyin: 200, prizes: [600, 360, 240] }; // six players put in 200 each; the top three are paid 50/30/20
+export const RUN_FEE = 500; // what a run of tables costs from the bankroll, once the free runs are used
+export const FREE_RUNS = 3;
+/** The buy-in for a fresh run; runsPlayed is how many runs were started before this one. */
+export const runFee = (runsPlayed) => (runsPlayed < FREE_RUNS ? 0 : RUN_FEE);
 export const LADDER_PRIZE = (rung) => 100 + 50 * rung;
 
 const num = (v, d = 0) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : d);
@@ -12,7 +16,7 @@ const num = (v, d = 0) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : d);
 export function readBank(text) {
   let b = {};
   try { b = JSON.parse(text) || {}; } catch { /* nothing stored yet */ }
-  const out = { chips: num(b.chips, START), rung: num(b.rung, 0) };
+  const out = { chips: num(b.chips, START), rung: num(b.rung, 0), stake: num(b.stake, 0) }; // stake: the fee paid for the run in progress
   if (b.seat !== undefined && b.seat !== null) out.seat = num(b.seat, 0); // chips sitting on a cash table
   return out;
 }
@@ -37,9 +41,9 @@ export function cashOut(bank) {
 }
 /** What a sit-and-go pays for a finishing place (1 = winner). */
 export const prize = (place) => SNG.prizes[place - 1] || 0;
-/** If you cannot afford the smallest game and have nothing on a table, the house tops you up. Returns what it gave. */
+/** If you cannot afford the smallest game or a run, and have nothing on a table, the house tops you up. Returns what it gave. */
 export function restake(bank) {
-  if (bank.seat !== undefined || bank.chips >= SNG.buyin) return 0;
+  if (bank.seat !== undefined || bank.chips >= Math.max(SNG.buyin, RUN_FEE)) return 0;
   const give = TOPUP - bank.chips;
   bank.chips = TOPUP;
   return give;

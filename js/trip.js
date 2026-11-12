@@ -14,12 +14,17 @@ export const dealOf = (trip) => DEALS[trip?.deal] || DEALS.regular;
 /** The deals in order, each marked locked if your career rank is too low for it. */
 export const dealsFor = (rank) => Object.entries(DEALS).map(([key, d]) => ({ key, ...d, locked: rank < d.rank }));
 /** A fresh trip on a deal. boost, bribe and risky hold the table number they apply to (0: none). */
-export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0 });
+export const newTrip = (deal = 'regular') => ({ deal: DEALS[deal] ? deal : 'regular', pocket: DEALS[deal]?.pocket || 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0, stayed: 0 });
 /** Makes a saved trip safe to use, whatever state it was saved in. */
 export function readTrip(t) {
   const n = (v) => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : 0);
-  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin), walked: n(t?.walked) };
+  return { ...newTrip(t?.deal), pocket: n(t?.pocket), banked: n(t?.banked), spent: n(t?.spent), boost: n(t?.boost), bribe: n(t?.bribe), risky: n(t?.risky), buyin: n(t?.buyin), walked: n(t?.walked), stayed: n(t?.stayed) };
 }
+
+// A normal table is won by reaching a chip target: a multiple of the table's ordinary starting stack (not of yours,
+// so a perk, a boost or the deal makes it easier or harder), rounded to 50. Knocking everyone out wins it too.
+export const TARGET = 2.5;
+export const tableTarget = (ordinaryStack) => Math.round(ordinaryStack * TARGET / 50) * 50;
 
 export const RISKY = { skill: 0.15, oppStack: 1.25, cash: 1.5 }; // the hard way to the next table
 export const BOOST = 1.25;

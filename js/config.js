@@ -41,7 +41,7 @@ export function setVariantLook(v) { $('app').classList.toggle('omaha', v === 'om
 export const BOUNTY = 200;
 export const TWISTS = [
   { key: 'bounty', name: 'Bounty', text: `every knock-out you score pays you ${BOUNTY} extra chips.` },
-  { key: 'turbo', name: 'Turbo', text: 'the blinds go up every 2 hands.' },
+  { key: 'turbo', name: 'Turbo', text: 'the blinds go up every 3 hands.' },
   { key: 'short', name: 'Short stacks', text: 'everyone starts with half the usual chips.' },
   { key: 'deep', name: 'Deep stacks', text: 'everyone starts with double the usual chips.' },
 ];
@@ -50,7 +50,7 @@ export function tableConfig(n, boss = false) {
     const b = bossFor(n);
     return {
       names: [b.name], boss: b, skill: 1, venue: `${b.name}, ${b.tag}`, mat: '#3a3355', twist: null,
-      handsPerLevel: b.turbo ? 2 : 3, chips: STACKS[prefs.stack], // the whale's big stack needs the slower blinds
+      handsPerLevel: b.turbo ? 2 : 4, chips: STACKS[prefs.stack], // bosses are played to the end, heads-up, so their blinds rise faster than a normal table's
     };
   }
   let names = n === 1 ? ['Dot', 'Ivy', 'Gus'] : n === 2 ? ['Mav', 'Dot', 'Ivy', 'Gus'] : REGULARS;
@@ -68,7 +68,7 @@ export function tableConfig(n, boss = false) {
   return {
     variant: variantFor(n),
     names, skill: Math.max(0.05, Math.min(1, 0.3 + (n - 1) * 0.175 + DIFFICULTY[prefs.difficulty].skill)), venue: lap > 1 ? `${venue}, round ${lap}` : venue, mat, twist,
-    handsPerLevel: twist?.key === 'turbo' ? 2 : n === 1 ? 3 : 3, // about 20-30 hands a table (see test/length.test.js), with stacks still deep enough to play
+    handsPerLevel: twist?.key === 'turbo' ? 3 : 6, // a table is won by reaching a chip target, not by the clock, so the blinds can be slow (see test/length.test.js)
     chips: Math.round(STACKS[prefs.stack] * (twist?.key === 'short' ? 0.5 : twist?.key === 'deep' ? 2 : 1)),
   };
 }

@@ -1,12 +1,13 @@
 // Tables you play for your bankroll: cash games, sit-and-gos and the heads-up ladder.
 import * as audio from './audio.js';
-import { LADDER_PRIZE, SNG, STAKES, cashOut, pay, prize, readBank, restake, sit } from './bank.js';
+import { LADDER_PRIZE, SNG, STAKES, cashOut, pay, prize, readBank, restake, runFee, sit } from './bank.js';
 import { CHARACTERS, REGULARS, VARIANTS } from './config.js';
 import { seatSingle } from './daily.js';
 import * as fx from './fx.js';
 import { moreGames, showOverlay, startScreen } from './menus.js';
 import { toast } from './squeeze.js';
 import { S } from './state.js';
+import { stats } from './stats.js';
 import { glyph } from './util.js';
 
 const KEY = 'padpoker.bank';
@@ -22,6 +23,17 @@ export function settleBank() {
   if (back) toast(`${back.toLocaleString()} chips came back from the cash table`);
   else if (gift) toast(`Broke! The house stakes you ${gift.toLocaleString()} chips`);
 }
+// A fresh run costs a buy-in (runFee) from the bankroll. Returns what was charged, or -1 if it cannot be paid.
+// The fee is kept in the bank record (stake) so the bust screen can still say what the run cost after a reload.
+export function payRunFee() {
+  settleBank(); // a broke player is staked first, so a run can always be started
+  const b = bank(), fee = runFee(stats.runs);
+  if (!pay(b, fee)) return -1;
+  b.stake = fee; save(b);
+  return fee;
+}
+// The run has ended: forget the fee it cost. Returns it.
+export function takeStake() { const b = bank(), fee = b.stake; b.stake = 0; save(b); return fee; }
 
 export function tablesMenu() {
   settleBank();
