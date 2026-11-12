@@ -298,7 +298,7 @@ export async function run() {
       }
     }
     // bonuses are paid by the house, on top of the pot
-    const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, category: Math.floor((me.score || 0) / 13 ** 5) }, S.heat);
+    const paid = friendly ? { total: 0, parts: [], mult: 1 } : payout(S.perks, { won: me.won, showdown: g.result.showdown, kos, riverBet: feats.lastAct?.type === 'raise' && feats.lastAct.street === 'river' }, S.heat);
     const pm = S.mode === 'run' ? tableMods(S.trip, S.table).payout : 1;
     if (pm !== 1) { paid.total = Math.round(paid.total * pm); }
     if (!friendly) S.heat = nextHeat(S.heat, { won: me.won, showdown: g.result.showdown, folded: me.folded });

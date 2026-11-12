@@ -62,8 +62,8 @@ export function spend(trip, cost) {
   trip.pocket -= cost; trip.spent += cost;
   return true;
 }
-export const TAKE_HOME = 0.25;
-/** What goes to your bankroll when the run ends: a quarter of what is left in your pocket. */
+export const TAKE_HOME = 0.5;
+/** What goes to your bankroll when the run ends: half of what is left in your pocket. */
 export const takeHome = (trip) => Math.floor((trip?.pocket || 0) * TAKE_HOME / 10) * 10;
 /** How the deal and route change a table: multipliers for your stack, theirs, their skill, blind speed and perk payouts. */
 export function tableMods(trip, table) {

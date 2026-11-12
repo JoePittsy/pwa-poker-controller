@@ -36,9 +36,9 @@ test('you cannot spend what you do not have', () => {
   assert.equal(spend(t, 600), true);
   assert.deepEqual([t.pocket, t.spent], [400, 600]);
 });
-test('a quarter of the pocket goes home at the end', () => {
-  assert.equal(takeHome({ pocket: 4000 }), 1000);
-  assert.equal(takeHome({ pocket: 55 }), 10);
+test('half of the pocket goes home at the end', () => {
+  assert.equal(takeHome({ pocket: 4000 }), 2000);
+  assert.equal(takeHome({ pocket: 55 }), 20);
   assert.equal(takeHome(null), 0);
 });
 test('a boost, a bribe and the hard route each apply to one table only', () => {
