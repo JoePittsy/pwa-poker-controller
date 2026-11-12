@@ -23,7 +23,7 @@ export function readTrip(t) {
 
 // A normal table is won by reaching a chip target: a multiple of the table's ordinary starting stack (not of yours,
 // so a perk, a boost or the deal makes it easier or harder), rounded to 50. Knocking everyone out wins it too.
-export const TARGET = 2.5;
+export const TARGET = 2;
 export const tableTarget = (ordinaryStack) => Math.round(ordinaryStack * TARGET / 50) * 50;
 
 export const RISKY = { skill: 0.15, oppStack: 1.25, cash: 1.5 }; // the hard way to the next table
@@ -41,7 +41,7 @@ export function cashOut(trip, table, finalStack, bonus = 0) {
 // as cleared. Never against a boss.
 // (What counts as won is measured against the table's ordinary stack: chips a perk or a boost added to your
 // starting stack are yours to bank, so walking away is never worth nothing just because you started big.)
-export const FAST = 27, QUICK = 38;
+export const FAST = 14, QUICK = 27;
 export const BOSS_FAST = 7, BOSS_QUICK = 9; // a boss is played heads-up to the end, as every table once was: unchanged
 /** The bonus, as a share of the cash-out, for moving up from a table after this many hands. */
 export const SPEED = { fast: 0.3, quick: 0.15 };

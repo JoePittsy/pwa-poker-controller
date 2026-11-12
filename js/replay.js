@@ -270,7 +270,7 @@ export function showCleared() {
   const next = bossNext ? `a boss: ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `${tableConfig(S.table + 1).venue}, and it's tougher`;
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>${remain ? `You hit the target at Table ${S.table} in ${S.game.handNo} hands.` : `You took every chip at Table ${S.table} in ${S.game.handNo} hands.`} Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
+    body: `<p>${remain ? `You hit the target at Table ${S.table} in ${S.game.handNo} hand${S.game.handNo === 1 ? '' : 's'}.` : `You took every chip at Table ${S.table} in ${S.game.handNo} hand${S.game.handNo === 1 ? '' : 's'}.`} Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
     items: [[`${glyph('A')}To the shop`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
   });
 }

@@ -67,10 +67,10 @@ test('moving up pays the same sum however it is asked', () => {
   assert.deepEqual(moveUpPay(t, 1, 2640, QUICK + 1), { bonus: 0, gain: 1640 });
 });
 test('the chip target is a multiple of the ordinary stack, to the nearest 50', () => {
-  assert.equal(TARGET, 2.5);
-  assert.deepEqual([500, 1000, 2000, 1500].map(tableTarget), [1250, 2500, 5000, 3750]);
+  assert.equal(TARGET, 2);
+  assert.deepEqual([500, 1000, 2000, 1500].map(tableTarget), [1000, 2000, 4000, 3000]);
   assert.equal(tableTarget(500) % 50, 0);
-  assert.equal(tableTarget(1010), 2550); // 2525 rounds to the nearest 50
+  assert.equal(tableTarget(1010), 2000); // 2020 rounds to the nearest 50
 });
 test('having stayed at a table survives saving and reading a trip', () => {
   assert.equal(newTrip().stayed, 0);

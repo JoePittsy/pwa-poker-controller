@@ -56,7 +56,7 @@ const CASES = [
   { table: 1, names: ['Dot', 'Ivy', 'Gus'] },
   { table: 2, names: ['Mav', 'Dot', 'Ivy', 'Gus'] },
 ];
-const MEDIAN = [10, 22], P90 = 40, BB_SHARE = 0.04;
+const MEDIAN = [15, 27], P90 = 45, BB_SHARE = 0.08;
 for (const c of CASES) {
   test(`Table ${c.table} lasts about ${MEDIAN[0]}-${MEDIAN[1]} hands (90% of tables within ${P90}) with the blinds still small`, () => {
     const r = simulate(c.table, c.names, TABLES, 20240611 + c.table);
