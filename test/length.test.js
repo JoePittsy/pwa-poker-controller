@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Game } from '../js/engine.js';
 import { decide } from '../js/ai.js';
-import { tableTarget, FAST, QUICK, speedBonus } from '../js/trip.js';
+import { tableTarget } from '../js/trip.js';
 
 // How long does a table last? A competent human (decide() with an ordinary style) against the opponents as the game
 // builds them. A normal table ends when the human has reached the chip target after a hand, or is out, or has knocked
@@ -60,8 +60,7 @@ const MEDIAN = [15, 27], P90 = 45, BB_SHARE = 0.08;
 for (const c of CASES) {
   test(`Table ${c.table} lasts about ${MEDIAN[0]}-${MEDIAN[1]} hands (90% of tables within ${P90}) with the blinds still small`, () => {
     const r = simulate(c.table, c.names, TABLES, 20240611 + c.table);
-    const share = (f) => r.wins.filter((h) => speedBonus(h) >= f).length / Math.max(1, r.wins.length);
-    console.log(`Table ${c.table}: median ${r.median} hands, 90th percentile ${r.p90}, big blind at the median finish ${r.bb}, proxy reaches the target in ${Math.round(r.won * 100)}%; of its wins ${Math.round(share(0.3) * 100)}% fast (<= ${FAST} hands), ${Math.round(share(0.15) * 100)}% quick (<= ${QUICK})`);
+    console.log(`Table ${c.table}: median ${r.median} hands, 90th percentile ${r.p90}, big blind at the median finish ${r.bb}, proxy reaches the target in ${Math.round(r.won * 100)}%`);
     assert.ok(r.median >= MEDIAN[0] - SLACK && r.median <= MEDIAN[1] + SLACK, `median ${r.median} hands, want ${MEDIAN} (+-${SLACK})`);
     assert.ok(r.p90 <= P90 + SLACK, `90th percentile ${r.p90} hands, want <= ${P90} (+${SLACK})`);
     assert.ok(r.bb <= CHIPS * BB_SHARE, `the big blind at the median finish is ${r.bb}, want at most ${CHIPS * BB_SHARE}`);

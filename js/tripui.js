@@ -14,7 +14,7 @@ import { toast } from './squeeze.js';
 import { bank, payRunFee, settleBank } from './tables.js';
 import { S } from './state.js';
 import { stats } from './stats.js';
-import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, moveUpPay, newTrip, spend, tableTarget } from './trip.js';
+import { PRICES, RISKY, SWEEP, canWalk, cashOut, dealOf, dealsFor, moveUpPay, newTrip, spend, tableTarget } from './trip.js';
 import { tableCleared } from './replay.js';
 import { $, glyph } from './util.js';
 
@@ -52,7 +52,7 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
   const canBribe = !boss && t.bribe !== n && tableConfig(n).names.length > 2;
   // Leaving the shop is also choosing the way on: the next table as it comes, or the hard way for a bigger cash-out.
   const go = (risky) => () => { t.risky = risky ? n : 0; writeSave({ ...saved, perks: S.perks, trip: t }); startTable(n, { ...saved, perks: S.perks, trip: t, owed: false }); };
-  const cfg = tableConfig(n, boss), usual = Math.round(cfg.names.length * cfg.chips * (dealOf(t).cash || 1) / 10) * 10; // roughly what winning it banks
+  const cfg = tableConfig(n, boss), usual = Math.round((boss ? cfg.names.length * cfg.chips : tableTarget(cfg.chips) - cfg.chips) * (dealOf(t).cash || 1) / 10) * 10; // roughly what winning it banks: a boss's chips, or the climb to the target
   const hard = Math.round(usual * RISKY.cash / 10) * 10;
   const can = (cost) => (cost > t.pocket ? `<i class="short">You need ${money(cost - t.pocket)} more.</i>` : '');
   const setNote = (k) => { // where buying this perk would leave its family's set
@@ -76,8 +76,8 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
     ...(canBribe ? [[`One fewer opponent \u00b7 ${money(bribe)}`, `<b>One fewer opponent</b><p>Pay one player to stay away from the next table: ${cfg.names.length - 1} to beat, not ${cfg.names.length}. For that table only.</p><p>${can(bribe)}</p>`,
       buy(bribe, () => { t.bribe = n; audio.confirm(); }), bribe > t.pocket]] : []),
     [boss ? 'On to the boss' : 'Next table', boss ? `<b>${cfg.boss.name}, ${cfg.boss.tag}</b><p>One on one. Beat them to carry on; lose and the run is over.</p>`
-      : `<b>Table ${n}: ${cfg.venue}</b><p>${cfg.names.length} opponents, as they come. Winning it banks about <b>${money(usual)}</b>, more if you are quick.</p>`, go(false), false],
-    ...(boss ? [] : [['The hard way', `<b>Table ${n}, the hard way</b><p>The same table with sharper opponents holding ${Math.round((RISKY.oppStack - 1) * 100)}% more chips. Winning it banks about <b>${money(hard)}</b>, against ${money(usual)} the usual way.</p>`, go(true), false]]),
+      : `<b>Table ${n}: ${cfg.venue}</b><p>${cfg.names.length} opponents, as they come. ${boss ? 'Winning it' : 'Reaching the target'} banks about <b>${money(usual)}</b>${boss ? ', more if you are quick' : ', more if you stay and knock everyone out'}.</p>`, go(false), false],
+    ...(boss ? [] : [['The hard way', `<b>Table ${n}, the hard way</b><p>The same table with sharper opponents holding ${Math.round((RISKY.oppStack - 1) * 100)}% more chips. Reaching the target banks about <b>${money(hard)}</b>, against ${money(usual)} the usual way.</p>`, go(true), false]]),
   ];
   const at = Math.min(visit.focus || 0, rows.length - 1);
   showOverlay({
@@ -113,7 +113,7 @@ export function targetChoice(resume) {
   const g = S.game, chips = g.players[S.ME].chips, gain = moveUpPay(S.trip, S.table, chips, g.handNo).gain, target = targetNow();
   showOverlay({
     title: 'Target <span>reached</span>',
-    body: `<p>You have ${money(chips)} of the ${money(target)} you needed.</p><p><b>Move up:</b> cash out +${money(gain)} now.</p><p><b>Stay:</b> play on for more. You can leave from the menu (☰) any time you are still at ${money(target)} or more; drop below it and you must get back there.</p>`,
+    body: `<p>You have ${money(chips)} of the ${money(target)} you needed.</p><p><b>Move up:</b> cash out +${money(gain)} now.</p><p><b>Stay:</b> knock everyone out and the cash-out pays ${Math.round(SWEEP * 100)}% more. You can still leave from the menu (☰) while you have ${money(target)} or more; drop below it and you must get back there.</p>`,
     items: [[`Move up · pocket +${money(gain)}`, () => { S.runId++; tableCleared(); }], ['Stay and play on', () => {
       S.trip.stayed = S.table;
       writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
