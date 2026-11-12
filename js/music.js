@@ -12,7 +12,7 @@ export const BAR = S16 * 16;
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
 
 // name: [bass note, electric-piano voicing]
-const CH = {
+export const CH = {
   Am9: [45, [55, 59, 60, 64]], Fmaj9: [41, [57, 60, 64, 67]], Dm9: [38, [53, 57, 60, 64]],
   Em7: [40, [55, 59, 62, 64]], E7: [40, [56, 59, 62, 64]], G6: [43, [55, 59, 62, 64]], Cmaj7: [36, [55, 59, 60, 64]],
 };
@@ -27,8 +27,8 @@ const P4 = [[0, 0, 81, 3], [0, 4, 79, 2], [0, 8, 76, 2], [0, 12, 72, 3], [1, 0, 
   [2, 0, 76, 3], [2, 4, 79, 4], [2, 10, 76, 2], [2, 12, 72, 3], [3, 0, 71, 4], [3, 6, 74, 2], [3, 8, 76, 8]];
 const ARPS = [[0, 1, 2, 3, 2, 1, 2, 3], [0, 2, 1, 3, 0, 2, 1, 3], [3, 2, 1, 0, 1, 2, 3, 2], [0, 3, 1, 3, 2, 3, 1, 3], [0, 1, 3, 2, 0, 1, 3, 2]];
 // The home theme, and the four-bar progressions the in-between sections draw from.
-const HOME = [[['Am9', 'Fmaj9', 'Dm9', 'Em7'], P1], [['Am9', 'Fmaj9', 'Dm9', 'E7'], P2], [['Fmaj9', 'G6', 'Am9', 'Am9'], P3], [['Fmaj9', 'G6', 'Cmaj7', 'E7'], P4]];
-const PROGS = [
+export const HOME = [[['Am9', 'Fmaj9', 'Dm9', 'Em7'], P1], [['Am9', 'Fmaj9', 'Dm9', 'E7'], P2], [['Fmaj9', 'G6', 'Am9', 'Am9'], P3], [['Fmaj9', 'G6', 'Cmaj7', 'E7'], P4]];
+export const PROGS = [
   ['Am9', 'Fmaj9', 'Dm9', 'Em7'], ['Am9', 'Fmaj9', 'Dm9', 'E7'], ['Fmaj9', 'G6', 'Am9', 'Am9'], ['Fmaj9', 'G6', 'Cmaj7', 'E7'],
   ['Am9', 'Dm9', 'G6', 'Cmaj7'], ['Fmaj9', 'Em7', 'Dm9', 'E7'], ['Am9', 'G6', 'Fmaj9', 'E7'], ['Dm9', 'G6', 'Cmaj7', 'Am9'],
   ['Fmaj9', 'G6', 'Em7', 'Am9'], ['Dm9', 'Em7', 'Fmaj9', 'G6'], ['Am9', 'Am9', 'Fmaj9', 'Em7'], ['Cmaj7', 'G6', 'Am9', 'Fmaj9'],
@@ -39,9 +39,9 @@ const RHYTHMS = [
   [[0, 6], [10, 2], [12, 3]], [[8, 2], [10, 2], [12, 4]], [[0, 2], [3, 2], [6, 4], [12, 2]], [[4, 6], [12, 3]], [],
 ];
 const ENDINGS = [[[0, 4], [6, 2], [8, 8]], [[4, 2], [8, 7]], [[0, 3], [4, 10]], [[2, 2], [4, 2], [8, 8]]];
-const SCALE = [64, 67, 69, 72, 74, 76, 79, 81, 84]; // A minor pentatonic, the melody's range
+export const SCALE = [64, 67, 69, 72, 74, 76, 79, 81, 84]; // A minor pentatonic, the melody's range
 
-function mulberry(seed) {
+export function mulberry(seed) {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -50,9 +50,31 @@ function mulberry(seed) {
   };
 }
 
+const pc = (n) => ((n % 12) + 12) % 12;
+/** Pitch classes of a chord's bass note and voicing. */
+const chordTones = (name) => new Set([CH[name][0], ...CH[name][1]].map(pc));
+/**
+ * True if `note` is not a tone of the chord but sits a semitone from one that is (a pentatonic G over E7's G sharp,
+ * a C over a chord with B): the one clash a pentatonic melody makes over this chord set, and it grates.
+ */
+export function clashes(note, name) {
+  const tones = chordTones(name);
+  return !tones.has(pc(note)) && (tones.has(pc(note + 1)) || tones.has(pc(note - 1)));
+}
+/**
+ * The walking bass for one bar: root, third, fifth, then the seventh (or sixth). Every note is read off the bar's own
+ * chord, so it can never leave the chord or the key. (It used to add fixed semitone offsets to the root, which gave a
+ * major third under minor chords, a flat seventh under major ones and a leading tone in bar four: out-of-key notes.)
+ */
+export function walkLine(name) {
+  const [root, voicing] = CH[name];
+  const above = (lo, hi) => root + voicing.map((n) => pc(n - root)).find((d) => d >= lo && d <= hi);
+  return [root, above(3, 4), root + 7, above(9, 11)];
+}
+
 // A new melody for four bars: a short motif, answered, repeated with a twist, then resolved.
 // It walks the pentatonic scale by step and lands each bar on a note of that bar's chord.
-function writeMelody(prog, rnd) {
+export function writeMelody(prog, rnd) {
   const pick = (a) => a[Math.floor(rnd() * a.length)];
   const a = pick(RHYTHMS.slice(0, 8)), b = pick(RHYTHMS);
   const bars = [a, b, rnd() < 0.6 ? a : pick(RHYTHMS.slice(0, 8)), pick(ENDINGS)];
@@ -68,6 +90,12 @@ function writeMelody(prog, rnd) {
           const j = idx + d;
           if (j >= 0 && j < SCALE.length && tones.has(SCALE[j] % 12)) { idx = j; break; }
         }
+      }
+      // The pentatonic scale has notes a semitone from a chord tone (G over E7's G sharp, C over B in Em7 or G6).
+      // Step to the nearest scale note that does not clash with this bar's chord.
+      for (const d of [0, 1, -1, 2, -2, 3, -3]) {
+        const j = idx + d;
+        if (j >= 0 && j < SCALE.length && !clashes(SCALE[j], prog[bar])) { idx = j; break; }
       }
       notes.push([bar, step, SCALE[idx], len]);
     });
@@ -265,7 +293,7 @@ export function createMusic(ctx, dest, seed = Math.floor(Math.random() * 1e9)) {
       bass(root, at(0), s16 * 7, 0.2);
       bass(root + 7, at(8), s16 * 5, 0.16);
     } else if (plan.bassLine === 2) { // walking in quarter notes up the chord
-      [root, voicing[1] - 24 > root ? voicing[1] - 24 : root + 4, root + 7, root + (inSec === 3 ? 11 : 10)]
+      walkLine(plan.prog[inSec])
         .forEach((n, q) => bass(n, at(q * 4), s16 * 3.2, q ? 0.15 : 0.2));
     } else {
       bass(root, at(0), s16 * 5, 0.2);
