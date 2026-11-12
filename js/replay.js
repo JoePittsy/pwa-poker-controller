@@ -105,7 +105,7 @@ export const HOWTO = [
     <tr><td>${glyph('X')} Call</td><td>Match the current bet to stay in.</td></tr>
     <tr><td>${glyph('Y')} Bet / Raise</td><td>Put more in, then choose how much.</td></tr></table>
     <p>Two players post small forced bets (the blinds) each hand, so there is always something to win. The blinds grow over time.</p>`],
-  ['The <span>run</span>', `<p>Knock out every opponent to clear a table and move up to a tougher one. Lose all your chips and the run is over.</p>
+  ['The <span>run</span>', `<p>Double your chips at a table to move up to a tougher one. Lose them all and the run is over.</p>
     <p>Not sure what beats what? Hand ranks is in the menu under Help. Coach, in Settings, shows your chance of winning as you play.</p>`],
 ];
 export function howTo(step, done, firstRun = false) {
@@ -238,10 +238,11 @@ export async function tableCleared() {
 const gainHtml = (xp) => `<p class="gain">+${xp} XP</p>${rankHtml()}`;
 // Clearing a table banks what you won there, and the one-table extras you bought for it are used up.
 function bankTable() {
-  const t = S.trip, g = S.game, { bonus, gain } = moveUpPay(t, S.table, g.players[S.ME].chips, g.handNo, S.bossMode); // the same sum as the offer to move up
+  const t = S.trip, g = S.game, swept = !g.players.some((p, seat) => seat !== S.ME && p.chips > 0);
+  const { bonus, gain } = moveUpPay(t, S.table, g.players[S.ME].chips, g.handNo, S.bossMode, swept); // the same sum as the offer to move up
   t.pocket += gain; t.banked += gain;
   for (const k of ['boost', 'bribe', 'risky', 'stayed']) if (t[k] === S.table) t[k] = 0;
-  return `<p class="gain">Cashed out +${gain.toLocaleString()}${bonus ? ` &middot; includes ${Math.round(bonus * 100)}% for winning in ${g.handNo} hand${g.handNo === 1 ? '' : 's'}` : ''}</p>${pocketHtml()}`;
+  return `<p class="gain">Cashed out +${gain.toLocaleString()}${bonus ? ` &middot; includes ${Math.round(bonus * 100)}% for ${S.bossMode ? `winning in ${g.handNo} hand${g.handNo === 1 ? '' : 's'}` : 'knocking everyone out'}` : ''}</p>${pocketHtml()}`;
 }
 export function showCleared() {
   const remain = S.game.players.some((p, seat) => seat !== S.ME && p.chips + p.total > 0); // moved up at the target, with opponents still sitting
@@ -294,7 +295,7 @@ export function bustSummary() {
   const record = cleared > r.startBest ? '<p class="venue">New best run!</p>' : `<p>Best run: ${tables(best())} cleared.</p>`;
   showOverlay({
     title: 'Busted', wide: true,
-    body: `${beat ? `<p class="who">${beat}</p>` : ''}<p>${S.bossMode ? `Beaten by ${bossFor(S.table).name}, ${bossFor(S.table).tag}, after Table ${S.table}.` : `Out at Table ${S.table}, ${tableConfig(S.table).venue}.`}</p>${record}<p class="gain">${S.trip?.banked ? `Banked ${S.trip.banked.toLocaleString()} this run, spent ${S.trip.spent.toLocaleString()}. ` : ''}${account}</p><div class="stats">
+    body: `${beat ? `<p class="who">${beat}</p>` : ''}<p>${S.bossMode ? `Beaten by ${bossFor(S.table).name}, ${bossFor(S.table).tag}, after Table ${S.table}.` : `Out at Table ${S.table}, ${tableConfig(S.table).venue}.`}</p>${record}<p class="gain">${S.trip?.banked ? `Won ${S.trip.banked.toLocaleString()} at the tables, spent ${S.trip.spent.toLocaleString()} in the shop. ` : ''}${account}</p><div class="stats">
       ${tile(cleared, 'tables cleared')}${tile(r.knockouts, 'knock-outs')}${tile(r.hands, 'hands played')}
       ${tile(r.showdowns ? `${r.showdownsWon} of ${r.showdowns}` : '\u2013', 'showdowns won')}${tile(r.biggest.toLocaleString(), 'biggest pot won')}${tile(r.bestHand || '\u2013', 'best hand')}
     </div>`,

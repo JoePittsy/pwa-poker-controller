@@ -34,21 +34,20 @@ export function cashOut(trip, table, finalStack, bonus = 0) {
   const won = Math.max(0, finalStack - (trip.buyin || 0));
   return Math.round(won * (dealOf(trip).cash || 1) * (trip.risky === table ? RISKY.cash : 1) * (1 + bonus) / 10) * 10;
 }
-// A table is cleared by reaching its chip target (or by taking every chip), so the cash-out alone says little about how
-// you played. Two things do. Moving up quickly pays extra: within FAST hands, 30% more; within QUICK, 15%. (Fixed hand
-// counts: how long a table lasts hardly depends on how many opponents it has, see test/length.test.js.) And once half
-// your opponents are out you may walk away with what you have won so far, for no bonus and without the table counting
-// as cleared. Never against a boss.
+// A table is cleared by reaching its chip target, or by taking every chip. Reaching the target can be done in one
+// lucky hand, so nothing is paid for doing it quickly. What pays extra is the harder thing: stay after the target and
+// knock everyone out, and the cash-out is half as much again (SWEEP). Once half your opponents are out you may also
+// walk away below the target with what you have won so far, without the table counting as cleared. Never against a boss.
 // (What counts as won is measured against the table's ordinary stack: chips a perk or a boost added to your
 // starting stack are yours to bank, so walking away is never worth nothing just because you started big.)
-export const FAST = 14, QUICK = 27;
-export const BOSS_FAST = 7, BOSS_QUICK = 9; // a boss is played heads-up to the end, as every table once was: unchanged
-/** The bonus, as a share of the cash-out, for moving up from a table after this many hands. */
+export const SWEEP = 0.5;
+export const BOSS_FAST = 7, BOSS_QUICK = 9; // a boss is a duel to the end: beating one quickly still pays extra
+/** The bonus, as a share of the cash-out, for beating a boss in this many hands. */
 export const SPEED = { fast: 0.3, quick: 0.15 };
-export const speedBonus = (hands, boss = false) => (hands <= (boss ? BOSS_FAST : FAST) ? SPEED.fast : hands <= (boss ? BOSS_QUICK : QUICK) ? SPEED.quick : 0);
-/** What moving up pays at this point: the speed bonus for the hands played so far, and the cash-out with it. */
-export function moveUpPay(trip, table, stack, hands, boss = false) {
-  const bonus = speedBonus(hands, boss);
+export const speedBonus = (hands) => (hands <= BOSS_FAST ? SPEED.fast : hands <= BOSS_QUICK ? SPEED.quick : 0);
+/** What moving up pays at this point. swept: no opponent is left. Returns { bonus, gain }. */
+export function moveUpPay(trip, table, stack, hands, boss = false, swept = false) {
+  const bonus = boss ? speedBonus(hands) : swept ? SWEEP : 0;
   return { bonus, gain: cashOut(trip, table, stack, bonus) };
 }
 /** May you walk away? players: the table as it stands, you in seat `me`. */

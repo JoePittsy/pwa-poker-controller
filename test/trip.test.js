@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST, speedBonus, canWalk, clearedCount, FAST, QUICK, BOSS_FAST, BOSS_QUICK, TARGET, tableTarget, moveUpPay } from '../js/trip.js';
+import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST, speedBonus, canWalk, clearedCount, BOSS_FAST, BOSS_QUICK, SWEEP, TARGET, tableTarget, moveUpPay } from '../js/trip.js';
 
 test('a regular trip starts with an empty pocket; Backed starts with money', () => {
   assert.deepEqual(newTrip(), { deal: 'regular', pocket: 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0, stayed: 0 });
@@ -55,16 +55,13 @@ test('a saved trip is made safe to use', () => {
   for (const d of Object.values(DEALS)) assert.ok(d.name && d.text);
 });
 
-test('a quick move up pays more, by the hands played', () => {
-  assert.ok(FAST < QUICK);
-  assert.deepEqual([FAST, FAST + 1, QUICK, QUICK + 1].map((h) => speedBonus(h)), [0.3, 0.15, 0.15, 0]);
-  assert.deepEqual([BOSS_FAST, BOSS_FAST + 1, BOSS_QUICK, BOSS_QUICK + 1].map((h) => speedBonus(h, true)), [0.3, 0.15, 0.15, 0]); // a boss keeps its old pars
+test('beating a boss quickly pays more; sweeping a table pays half as much again; reaching the target fast pays nothing', () => {
+  assert.deepEqual([BOSS_FAST, BOSS_FAST + 1, BOSS_QUICK, BOSS_QUICK + 1].map((h) => speedBonus(h)), [0.3, 0.15, 0.15, 0]);
   assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.3), 3900);
-});
-test('moving up pays the same sum however it is asked', () => {
   const t = { ...newTrip(), buyin: 1000 };
-  assert.deepEqual(moveUpPay(t, 1, 2640, 5), { bonus: 0.3, gain: cashOut(t, 1, 2640, 0.3) });
-  assert.deepEqual(moveUpPay(t, 1, 2640, QUICK + 1), { bonus: 0, gain: 1640 });
+  assert.deepEqual(moveUpPay(t, 1, 2640, 1), { bonus: 0, gain: 1640 }); // one lucky hand earns no extra
+  assert.deepEqual(moveUpPay(t, 1, 4000, 40, false, true), { bonus: SWEEP, gain: 4500 });
+  assert.deepEqual(moveUpPay(t, 3, 2000, 5, true), { bonus: 0.3, gain: 1300 });
 });
 test('the chip target is a multiple of the ordinary stack, to the nearest 50', () => {
   assert.equal(TARGET, 2);

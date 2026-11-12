@@ -249,11 +249,11 @@ export function render() {
   renderActions();
 }
 
-// The HUD of a normal run table: progress to the chip target. Your stack counts what you have in the pot until the result is shown.
+// The HUD of a normal run table: the chip target, and what you have towards it.
 function runHud(g) {
   const me = g.players[S.ME], live = g.stage === 'betting' || g.stage === 'streetEnd', pending = g.stage === 'handOver' && !S.settled;
-  const stack = me.chips + (live ? me.total : pending ? me.total - me.won : 0);
-  return `Table <b>${S.table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>${stack.toLocaleString()} / ${tableTarget(tableConfig(S.table).chips).toLocaleString()}${S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
+  const stack = me.chips + (!live && pending ? me.total - me.won : 0); // what you have behind, as your plate shows it; a result is counted once it is shown
+  return `Table <b>${S.table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Goal <b>${tableTarget(tableConfig(S.table).chips).toLocaleString()}</b> &middot; you have ${stack.toLocaleString()}${S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
 }
 
 // The pot as the table shows it: without the part of the biggest stake that nobody left in could ever match
