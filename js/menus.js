@@ -1,4 +1,4 @@
-import { newRun, walkAway, walkOffer, walkWhy } from './tripui.js';
+import { moveUp, moveUpOffer, newRun, walkAway, walkOffer, walkWhy } from './tripui.js';
 import { keepAwake } from './awake.js';
 import { stickersScreen } from './achievements.js';
 import * as audio from './audio.js';
@@ -138,11 +138,12 @@ function quitSng() {
 }
 export function pauseMenu() {
   audio.tick();
-  const walk = walkOffer(); // the same number the banner told them about, as it stands now
+  const up = moveUpOffer(), walk = walkOffer(); // the same number the banner told them about, as it stands now
   showOverlay({
     title: TITLE, body: '', closable: true, compact: true,
     items: [
       ['Resume'],
+      ...(up >= 0 ? [[`Move up \u00b7 pocket +${up.toLocaleString()}`, moveUp]] : []),
       ...(walk >= 0 ? [[`<span class="walkitem">Walk away \u00b7 pocket +${walk.toLocaleString()}<small>${walkWhy(true)}</small></span>`, walkAway]] : []),
       [() => `Sound: ${audio.volText(audio.sfxLevel())}`, () => { audio.setSfxVolume(audio.nextVolume(audio.sfxLevel())); audio.chips(3, 0, 2); }, true],
       [() => `Music: ${audio.volText(audio.musicVolume())}`, () => audio.setMusicVolume(audio.nextVolume(audio.musicVolume())), true],

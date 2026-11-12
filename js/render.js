@@ -3,7 +3,8 @@ import { cashHud } from './tables.js';
 import { equity } from './ai.js';
 import * as audio from './audio.js';
 import { RANKS, SUITS, bestFiveOf, describe, scoreHand, onBoard } from './cards.js';
-import { VARIANTS } from './config.js';
+import { VARIANTS, tableConfig } from './config.js';
+import { tableTarget } from './trip.js';
 import { DEAL_GAP, REVEAL_GAP, SHUFFLE_MS, mine } from './core.js';
 import { DAILY_HANDS } from './daily.js';
 import { face } from './faces.js';
@@ -240,11 +241,19 @@ export function render() {
     : S.mode === 'pass' ? `<b>Pass &amp; play</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b>`
     : S.mode === 'cash' ? cashHud(g)
     : S.mode === 'quick' ? `<b>${g.variant === 'holdem' ? 'Quick' : VARIANTS[g.variant].name}</b> &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; vs <b>${left}</b>`
+    : S.mode === 'run' && !S.bossMode ? runHud(g)
     : `${S.bossMode ? '<b>Boss</b>' : `Table <b>${S.table}</b>`} &middot; <b>${g.sb}/${g.bb}</b><br>Hand <b>${g.handNo}</b> &middot; vs <b>${left}</b>${S.mode === 'run' && S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
   ui.reveals = reveals;
   if (S.replaying) $('hud').innerHTML = `<b>Replay</b><br>Hand <b>${g.handNo}</b>`;
   if (netOn('host') && S.net.started && !S.replaying && g === S.game) netBroadcast();
   renderActions();
+}
+
+// The HUD of a normal run table: progress to the chip target. Your stack counts what you have in the pot until the result is shown.
+function runHud(g) {
+  const me = g.players[S.ME], live = g.stage === 'betting' || g.stage === 'streetEnd', pending = g.stage === 'handOver' && !S.settled;
+  const stack = me.chips + (live ? me.total : pending ? me.total - me.won : 0);
+  return `Table <b>${S.table}</b> &middot; <b>${g.sb}/${g.bb}</b><br>${stack.toLocaleString()} / ${tableTarget(tableConfig(S.table).chips).toLocaleString()}${S.perks.heater && S.heat > 0 ? ` &middot; <b class="heat">heat ${S.heat}</b>` : ''}`;
 }
 
 // The pot as the table shows it: without the part of the biggest stake that nobody left in could ever match

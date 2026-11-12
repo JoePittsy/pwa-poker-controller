@@ -14,7 +14,8 @@ import { toast } from './squeeze.js';
 import { bank, payRunFee, settleBank } from './tables.js';
 import { S } from './state.js';
 import { stats } from './stats.js';
-import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, newTrip, spend } from './trip.js';
+import { PRICES, RISKY, canWalk, cashOut, dealOf, dealsFor, moveUpPay, newTrip, spend, tableTarget } from './trip.js';
+import { tableCleared } from './replay.js';
 import { $, glyph } from './util.js';
 
 const money = (n) => n.toLocaleString();
@@ -89,11 +90,45 @@ export function shop(n, saved, visit = { offer: null, rerolls: 0 }) {
   S.overlay.focus = at; overlayFocus(0);
 }
 
+// Reaching the chip target: a normal table in a run is won once a hand ends with your stack at or above it (see tableTarget
+// in trip.js). You then choose to move up at once, or to stay and play on and move up later from the menu.
+/** The chip target of the table being played: 0 at a boss table, which is played to the end, and outside a run. */
+export const targetNow = () => (S.mode === 'run' && !S.bossMode && S.game ? tableTarget(tableConfig(S.table).chips) : 0);
+/** What moving up would put in your pocket right now, or -1 if you may not (below the target, all-in, a boss, not a run). */
+export function moveUpOffer() {
+  const g = S.game, target = targetNow();
+  if (!target || !S.trip) return -1;
+  const me = g.players[S.ME];
+  if (!(me.chips >= target) || (me.allIn && ['betting', 'streetEnd'].includes(g.stage))) return -1; // (the all-in mark lingers after the hand)
+  return moveUpPay(S.trip, S.table, me.chips, g.handNo).gain;
+}
+/** Take the cash-out and go on: the table-cleared sequence, with the stack you hold. */
+export function moveUp() {
+  if (moveUpOffer() < 0) return;
+  S.runId++; // stops the game loop
+  tableCleared();
+}
+/** The choice after a hand that ends at or above the target with opponents still sitting. resume: carries on dealing. */
+export function targetChoice(resume) {
+  const g = S.game, chips = g.players[S.ME].chips, gain = moveUpPay(S.trip, S.table, chips, g.handNo).gain, target = targetNow();
+  showOverlay({
+    title: 'Target <span>reached</span>',
+    body: `<p>You have ${money(chips)} of the ${money(target)} you needed.</p><p><b>Move up:</b> cash out +${money(gain)} now.</p><p><b>Stay:</b> play on for more. You can leave from the menu (☰) any time you are still at ${money(target)} or more; drop below it and you must get back there.</p>`,
+    items: [[`Move up · pocket +${money(gain)}`, () => { S.runId++; tableCleared(); }], ['Stay and play on', () => {
+      S.trip.stayed = S.table;
+      writeSave({ table: S.table, boss: S.bossMode, chips: g.players.map((p) => p.chips), dealer: g.dealer, handNo: g.handNo, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: S.trip, mem: S.memory });
+      resume();
+    }]],
+  });
+}
+
 // Walking away: once half your opponents are out you may stand up with what you have won so far.
-// It pays no speed bonus and the table does not count as cleared; a boss must be beaten.
+// It pays no speed bonus and the table does not count as cleared; a boss must be beaten. At or above the
+// chip target you may only move up, never walk away.
 export function walkOffer() {
   const g = S.game;
   if (S.mode !== 'run' || !g || !S.trip) return -1;
+  if (targetNow() && g.players[S.ME].chips >= targetNow()) return -1;
   // mid-hand, chips already in the pot still belong to a player who is in the hand: an all-in opponent is not out
   const live = ['betting', 'streetEnd'].includes(g.stage);
   const seats = g.players.map((p, seat) => (seat === S.ME ? p : { chips: p.chips + (live ? p.total : 0) }));
@@ -124,7 +159,7 @@ export function walkAway() {
       const t = S.trip;
       S.runId++; // stops the game loop
       t.pocket += bank; t.banked += bank; t.walked++;
-      for (const k of ['boost', 'bribe', 'risky']) if (t[k] === S.table) t[k] = 0;
+      for (const k of ['boost', 'bribe', 'risky', 'stayed']) if (t[k] === S.table) t[k] = 0;
       const bossNext = S.table % 3 === 0;
       writeSave({ table: bossNext ? S.table : S.table + 1, boss: bossNext, habits: S.habits, run: S.runStats, perks: S.perks, heat: S.heat, trip: t, mem: S.memory, owed: true });
       audio.musicLevel(0); audio.chips(8, 0, 6);

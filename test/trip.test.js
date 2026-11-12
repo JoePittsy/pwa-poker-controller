@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST, speedBonus, canWalk, clearedCount, fastPar, quickPar } from '../js/trip.js';
+import { DEALS, dealsFor, newTrip, readTrip, cashOut, PRICES, spend, takeHome, tableMods, RISKY, BOOST, speedBonus, canWalk, clearedCount, FAST, QUICK, BOSS_FAST, BOSS_QUICK, TARGET, tableTarget, moveUpPay } from '../js/trip.js';
 
 test('a regular trip starts with an empty pocket; Backed starts with money', () => {
-  assert.deepEqual(newTrip(), { deal: 'regular', pocket: 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0 });
+  assert.deepEqual(newTrip(), { deal: 'regular', pocket: 0, banked: 0, spent: 0, boost: 0, bribe: 0, risky: 0, buyin: 0, walked: 0, stayed: 0 });
   assert.equal(newTrip('backed').pocket, 2000);
   assert.equal(newTrip('nonsense').deal, 'regular');
 });
@@ -55,11 +55,29 @@ test('a saved trip is made safe to use', () => {
   for (const d of Object.values(DEALS)) assert.ok(d.name && d.text);
 });
 
-test('a fast clear pays more, scaled to the size of the table', () => {
-  assert.deepEqual([fastPar(3), quickPar(3)], [21, 27]);
-  assert.deepEqual([21, 22, 27, 28].map((h) => speedBonus(h, 3)), [0.3, 0.15, 0.15, 0]);
-  assert.equal(speedBonus(35, 5), 0.3);
+test('a quick move up pays more, by the hands played', () => {
+  assert.ok(FAST < QUICK);
+  assert.deepEqual([FAST, FAST + 1, QUICK, QUICK + 1].map((h) => speedBonus(h)), [0.3, 0.15, 0.15, 0]);
+  assert.deepEqual([BOSS_FAST, BOSS_FAST + 1, BOSS_QUICK, BOSS_QUICK + 1].map((h) => speedBonus(h, true)), [0.3, 0.15, 0.15, 0]); // a boss keeps its old pars
   assert.equal(cashOut({ ...newTrip(), buyin: 1000 }, 1, 4000, 0.3), 3900);
+});
+test('moving up pays the same sum however it is asked', () => {
+  const t = { ...newTrip(), buyin: 1000 };
+  assert.deepEqual(moveUpPay(t, 1, 2640, 5), { bonus: 0.3, gain: cashOut(t, 1, 2640, 0.3) });
+  assert.deepEqual(moveUpPay(t, 1, 2640, QUICK + 1), { bonus: 0, gain: 1640 });
+});
+test('the chip target is a multiple of the ordinary stack, to the nearest 50', () => {
+  assert.equal(TARGET, 2.5);
+  assert.deepEqual([500, 1000, 2000, 1500].map(tableTarget), [1250, 2500, 5000, 3750]);
+  assert.equal(tableTarget(500) % 50, 0);
+  assert.equal(tableTarget(1010), 2550); // 2525 rounds to the nearest 50
+});
+test('having stayed at a table survives saving and reading a trip', () => {
+  assert.equal(newTrip().stayed, 0);
+  assert.equal(readTrip({ stayed: 3 }).stayed, 3);
+  assert.equal(readTrip(JSON.parse(JSON.stringify({ ...newTrip('backed'), stayed: 2 }))).stayed, 2);
+  assert.equal(readTrip({ stayed: -1 }).stayed, 0);
+  assert.equal(readTrip({ stayed: 'x' }).stayed, 0);
 });
 test('you may walk away once half your opponents are out, but not before, not at the end, and never from a boss', () => {
   const T = (...chips) => chips.map((c) => ({ chips: c }));

@@ -1,6 +1,6 @@
 import { runFee } from './bank.js';
-import { cashOut, clearedCount, dealOf, speedBonus, takeHome } from './trip.js';
-import { newRun, pocketHtml } from './tripui.js';
+import { clearedCount, dealOf, moveUpPay, takeHome } from './trip.js';
+import { newRun, pocketHtml, targetNow } from './tripui.js';
 import { addToBank, bank, takeStake } from './tables.js';
 import { rankHtml } from './rank.js';
 import { backupMenu } from './backupmenu.js';
@@ -206,7 +206,7 @@ export function tableIntro(start) {
   const who = cfg.names.map((n) => `<b>${n}</b> <i>${CHARACTERS[n].tag}</i>`).join(' &middot; ');
   showOverlay({
     title: `Table <span>${S.table}</span>`,
-    body: `<p class="venue">${cfg.venue}</p><p>Knock out all ${cfg.names.length} to move up.${stacksEqual() ? '' : ` ${stacksLine()}`}${S.table === 1 ? ' What you win goes in your pocket, to spend at the shop on the way to the next table.' : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${tripLine()}`,
+    body: `<p class="venue">${cfg.venue}</p><p>Turn your ${S.game.players[S.ME].chips.toLocaleString()} into ${targetNow().toLocaleString()} to move up.${stacksEqual() ? '' : ` ${stacksLine()}`}${S.table === 1 ? ' What you win goes in your pocket, to spend at the shop on the way to the next table.' : ''}</p>${cfg.variant !== 'holdem' ? `<p class="who">This table plays <b>${VARIANTS[cfg.variant].name}</b>. ${VARIANTS[cfg.variant].rules}</p>` : ''}${cfg.twist ? `<p class="who">Twist: <b>${cfg.twist.name}</b> &ndash; ${cfg.twist.text}</p>` : ''}<p class="who">${who}</p>${cfg.names.some(grudge) ? `<p>${cfg.names.filter(grudge).join(' and ')} ${cfg.names.filter(grudge).length > 1 ? 'remember' : 'remembers'} you knocked them out, and will come after you.</p>` : ''}${tripLine()}`,
     items: [[`${glyph('A')}Deal me in`, start]],
   });
 }
@@ -238,13 +238,13 @@ export async function tableCleared() {
 const gainHtml = (xp) => `<p class="gain">+${xp} XP</p>${rankHtml()}`;
 // Clearing a table banks what you won there, and the one-table extras you bought for it are used up.
 function bankTable() {
-  const t = S.trip, g = S.game, bonus = speedBonus(g.handNo, g.players.length - 1);
-  const gain = cashOut(t, S.table, g.players[S.ME].chips, bonus);
+  const t = S.trip, g = S.game, { bonus, gain } = moveUpPay(t, S.table, g.players[S.ME].chips, g.handNo, S.bossMode); // the same sum as the offer to move up
   t.pocket += gain; t.banked += gain;
-  for (const k of ['boost', 'bribe', 'risky']) if (t[k] === S.table) t[k] = 0;
+  for (const k of ['boost', 'bribe', 'risky', 'stayed']) if (t[k] === S.table) t[k] = 0;
   return `<p class="gain">Cashed out +${gain.toLocaleString()}${bonus ? ` &middot; includes ${Math.round(bonus * 100)}% for winning in ${g.handNo} hand${g.handNo === 1 ? '' : 's'}` : ''}</p>${pocketHtml()}`;
 }
 export function showCleared() {
+  const remain = S.game.players.some((p, seat) => seat !== S.ME && p.chips + p.total > 0); // moved up at the target, with opponents still sitting
   const banked = bankTable();
   if (S.bossMode) { // beat the boss: on to the next table
     award({ Vera: 'house_loses', Otto: 'harpooned', Stone: 'rock_breaker' }[bossFor(S.table).name]);
@@ -270,7 +270,7 @@ export function showCleared() {
   const next = bossNext ? `a boss: ${bossFor(S.table).name}, ${bossFor(S.table).tag}` : `${tableConfig(S.table + 1).venue}, and it's tougher`;
   showOverlay({
     title: 'Table <span>cleared!</span>',
-    body: `<p>You took every chip at Table ${S.table} in ${S.game.handNo} hands. Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
+    body: `<p>${remain ? `You hit the target at Table ${S.table} in ${S.game.handNo} hands.` : `You took every chip at Table ${S.table} in ${S.game.handNo} hands.`} Next up: ${next}.</p>${prize ? `<p class="who">New card back unlocked: <b>${prize}</b>. Switch to it in Settings.</p>` : ''}${banked}${gainHtml(40)}`,
     items: [[`${glyph('A')}To the shop`, () => { const sv = loadSave(); startTable(sv.table, sv); }]],
   });
 }
